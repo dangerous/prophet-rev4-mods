@@ -18,6 +18,7 @@ V5_ENTRIES = {
     "hold": 0x20089081, "all_notes_off": 0x20088E83,
     "kbd_scan": 0x20088D53, "button": 0x20088EAB, "init_guard": 0x20088C81,
     "orig_out": 0x20089061, "hold_event": 0x20088F37, "rt_sniff": 0x20088F59,
+    "stock_midi_out": 0x2003BCE1,
 }
 ARP_ENABLED_BYTE = 0x200894D8
 V5_DATA = {
@@ -164,7 +165,8 @@ class BuiltImageTests(unittest.TestCase):
              STOCK_DISPLAY_INT, V5_ENTRIES["hold_event"],
              V5_ENTRIES["rt_sniff"], STOCK_PARSER_STATE, STOCK_DISPLAY3,
              V5_DATA["div"], V5_DATA["tps"], V5_DATA["acc"], V5_DATA["ext_clock"],
-             V5_DATA["clock_loss"], V5_DATA["display_timer"], V5_DATA["a440_used"]]
+             V5_DATA["clock_loss"], V5_DATA["display_timer"], V5_DATA["a440_used"],
+             V5_ENTRIES["stock_midi_out"]]
 
     def test_v5_realtime_trampoline_and_engine_timing_facts(self):
         # V5 trampoline 0x20089094: push {r0-r4,lr}; add r0,r0,#0xf0; mov r1,r4; bl sniff; pop; ldr pc,[pc]; lit

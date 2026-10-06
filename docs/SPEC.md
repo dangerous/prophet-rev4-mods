@@ -178,10 +178,39 @@ V5's window record at `0x20089600`; that layout was verified on hardware.
    clock so withheld clocks never trigger the timeout. While sync is active the (div, tps)
    fields hold V5's (2, 1000).
 
+### Keyboard octave shift `[HW: unverified]`
+
+1. Hold the filter **Keyboard Amount** button (panel id 8) and press **Bank** to shift the
+   keyboard up one octave, **Group** to shift it down; range −2…+2. Pressing Bank and
+   Group together (the second while the first is still down) resets the shift to 0. The
+   display shows the shift (`-2`…`2`) for about a second after each press (also at the
+   ends, unchanged). Power-up: 0. Not saved with patches.
+2. The shift applies to keys played on the keyboard: what the synth plays, what the arp/seq
+   receive (re-latch, recording, triggers), and what is sent to MIDI Out for those keys.
+   MIDI-in notes are not shifted. A key's release always uses the shift that was in force
+   when it was pressed, so changing the shift while holding keys never sticks a note.
+3. A tap of Keyboard Amount (press and release with no Bank/Group press in between) still
+   cycles keyboard tracking as in stock; the setting and its LED change on the release
+   rather than on the press. While it is held with Bank/Group, the tracking setting does
+   not change. Repeat events (value 3) of any of the three buttons are ignored.
+4. Because the shift is applied before the voice engine, a Prophet-10 split point moves
+   with the keyboard. A key whose shifted note would fall outside 0–127 is silent (not
+   reachable from the 61-key range at ±2).
+5. Limits of this version: keys are not shifted in Local-Off mode (keys to MIDI Out only);
+   Keyboard Amount held together with A440 is undefined.
+6. Realisation: the local-note hook shifts the key and records the per-key shift
+   (128-entry table) so the release maps identically; a new `bl` hook on the stock call
+   that sends local keys to MIDI Out (`0x2003BED8`, expecting stock `0x2003BCE1`,
+   `(note, vel)`) applies the same per-key mapping; the button hook swallows id 8 (press,
+   repeats, release), treats Bank/Group presses while it is held as shift commands, and on
+   a release with no shift command replays press+release of id 8 through V5's button entry
+   (which forwards non-arp buttons to stock when A440 is not held).
+
 ### Button id readout `[HW: unverified]`
 
 While A440 is held, pressing a panel button that neither V5 nor the wrapper assigns
-(anything other than Program 1–8, Bank, Group and the GLOBALS modifier id `0x19`) shows
+(anything other than Program 1–8, Bank, Group, Keyboard Amount (id 8) and the GLOBALS
+modifier id `0x19`) shows
 that button's id on the display for about a second and is otherwise ignored. A one-time
 aid for mapping the Prophet-10's extra buttons; V5 passed such presses to stock, where
 they had no defined meaning while A440 was held.

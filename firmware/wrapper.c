@@ -13,6 +13,7 @@
 #include "relatch.c"
 #include "seq.c"
 #include "rate.c"
+#include "oct.c"
 
 const volatile uint32_t v5_iface[IF_COUNT] = {
     [IF_LOCAL_NOTE] = 0x20088C51u,
@@ -40,6 +41,7 @@ const volatile uint32_t v5_iface[IF_COUNT] = {
     [IF_ENGINE_CLKLOSS] = 0x200894FCu,
     [IF_DISPLAY_TIMER] = 0x200895E8u,
     [IF_A440_USED] = 0x20089508u,
+    [IF_STOCK_MIDI_OUT] = 0x2003BCE1u,
 };
 
 typedef void (*note3_fn)(int, int, int);
@@ -57,9 +59,11 @@ typedef void (*disp3_fn)(int, int, int);
 #define RELATCH ((relatch_t *)0x2008B800u)
 #define SEQ     ((seq_t *)0x2008B840u)
 #define RATE    ((rate_t *)0x2008B980u)
+#define OCT     ((oct_t *)0x2008B990u)
 _Static_assert(sizeof(relatch_t) <= 0x40, "relatch state too large");
 _Static_assert(sizeof(seq_t) <= 0x140, "seq state too large");
 _Static_assert(sizeof(rate_t) <= 0x10, "rate state too large");
+_Static_assert(sizeof(oct_t) <= 0xA0, "oct state too large");
 
 /* --- platform ---------------------------------------------------------------------- */
 int plat_arp_enabled(void) { return *IF_PTR(IF_ARP_ENABLED_BYTE, volatile const uint8_t *) != 0; }
@@ -129,10 +133,14 @@ static void note_event(int src, int note, int vel, int *consumed, int *clear_fir
                    == RELATCH_CLEAR_THEN_FORWARD;
 }
 
-/* stock 0x2003BECC: keyboard FIFO consumer -> note_on(1, note, vel) */
+/* stock 0x2003BECC: keyboard FIFO consumer -> note_on(1, note, vel). The octave shift
+ * is applied here, before re-latch/seq/V5 see the key. */
 void hook_local_note(int src, int note, int vel)
 {
     int consumed, clear_first;
+    note = oct_map_key(OCT, note, vel > 0);
+    if (note < 0)
+        return;
     note_event(RELATCH_SRC_LOCAL, note, vel, &consumed, &clear_first);
     if (consumed)
         return;
@@ -172,9 +180,27 @@ int hook_kbd_scan(void *fifo)
     return IF_FN(IF_KBD_SCAN, scan_fn)(fifo);
 }
 
+/* stock 0x2003BED8: keyboard FIFO consumer -> post local key (note, vel) to MIDI Out.
+ * Same per-key mapping as the note hook, so MIDI Out follows the shifted keyboard. */
+void hook_local_midi_out(int note, int vel)
+{
+    note = oct_map_key(OCT, note, vel > 0);
+    if (note < 0)
+        return;
+    IF_FN(IF_STOCK_MIDI_OUT, note2_fn)(note, vel);
+}
+
 /* stock 0x2003C244: panel button (id, value 1 press / 2 release / 3 held) */
 void hook_button(int id, int value)
 {
+    int act = oct_button(OCT, id, value);
+    if (act == OCT_REPLAY_TAP) {        /* Keyboard Amount tapped: give the stock its tap now */
+        plat_v5_button(8, 1);
+        plat_v5_button(8, 2);
+        return;
+    }
+    if (act == OCT_CONSUMED)
+        return;
     if (seq_button(SEQ, id, value))
         return;
     if (rate_button(RATE, SEQ->a440_held, id, value))

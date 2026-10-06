@@ -91,6 +91,23 @@ Manual verification on the instrument. Record results against the spec markers i
       value.
 - [ ] Power cycle: back to `8`.
 
+## Keyboard octave shift (spec "Keyboard octave shift")
+
+- [ ] Tap the filter **Keyboard Amount** button: tracking still cycles off → half → full,
+      LED changing on the *release*.
+- [ ] Hold Keyboard Amount, press Bank: display `1`; keys sound an octave up; the
+      tracking LED did not change. Release Keyboard Amount: nothing else happens.
+- [ ] Bank again: `2`; again: stays `2`. Group ×4: `1 0 -1 -2`; again stays `-2`.
+- [ ] Hold Keyboard Amount, hold Group, press Bank: `0`.
+- [ ] Shift `1`: hold a chord, change the shift to `-1` while holding, release the chord:
+      no stuck notes; the next chord sounds an octave down.
+- [ ] Arp on, shift `1`: arpeggiates an octave up. HOLD + re-latch still work. Seq
+      recording and triggering follow the shifted keys.
+- [ ] DAW recording MIDI from the Prophet: notes arrive shifted. MIDI-in notes played
+      from the DAW are **not** shifted.
+- [ ] Prophet-10 split mode: the split point moves with the shift (expected).
+- [ ] Power cycle: shift back to 0.
+
 ## Button id readout (spec "Button id readout")
 
 - [ ] Hold A440, press the **Keyboard** button: display shows a number — note it down.

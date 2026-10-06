@@ -10,10 +10,15 @@ test-tooling:
 	$(PYTHON) -m unittest discover -s tests/tooling -t .
 
 # Host-side harnesses for the wrapper's portable logic.
-test-firmware: $(BUILD)/test_relatch $(BUILD)/test_seq $(BUILD)/test_rate
+test-firmware: $(BUILD)/test_relatch $(BUILD)/test_seq $(BUILD)/test_rate $(BUILD)/test_oct
 	$(BUILD)/test_relatch
 	$(BUILD)/test_seq
 	$(BUILD)/test_rate
+	$(BUILD)/test_oct
+
+$(BUILD)/test_oct: tests/firmware/test_oct.c firmware/oct.c firmware/oct.h firmware/platform.h
+	@mkdir -p $(BUILD)
+	$(CC) -std=c11 -Wall -Wextra -Werror -Ifirmware -o $@ tests/firmware/test_oct.c firmware/oct.c
 
 $(BUILD)/test_rate: tests/firmware/test_rate.c firmware/rate.c firmware/rate.h firmware/platform.h
 	@mkdir -p $(BUILD)

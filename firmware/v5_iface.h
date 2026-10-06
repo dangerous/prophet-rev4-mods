@@ -33,6 +33,7 @@ enum {
     IF_ENGINE_CLKLOSS,    /* 0x200894FC engine + 0x324: ticks since last MIDI clock (u32) */
     IF_DISPLAY_TIMER,     /* 0x200895E8 V5 hook state + 0x418: display timeout (u16 ticks) */
     IF_A440_USED,         /* 0x20089508 V5 button ctx + 8: A440 hold used as modifier (u8) */
+    IF_STOCK_MIDI_OUT,    /* 0x2003BCE1 stock: post local key (note, vel) to MIDI Out */
     IF_COUNT
 };
 

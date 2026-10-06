@@ -21,7 +21,11 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
   seq, on internal clock and under MIDI sync. Display shows e.g. `16t`, `8d`, `2b`.
   Default 1/8 (V5's behaviour). `[HW: unverified]`
 - **Button id readout** — hold A440 and press any button the arp doesn't use: its id is
-  shown for a second. For mapping the P10's extra buttons. `[HW: unverified]`
+  shown for a second. For mapping the P10's extra buttons. `[HW: verified 2025‑10‑07]`
+- **Keyboard octave shift** — hold the filter Keyboard Amount button, Bank = up, Group =
+  down (±2; both together = 0); shown on the display. Applies to the keys you play,
+  including what goes to MIDI Out; a plain tap still cycles keyboard tracking (LED on
+  release). `[HW: unverified]`
 
 ## Deliverables (`dist/`, checksums in `dist/SHA256SUMS`)
 
