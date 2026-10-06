@@ -146,8 +146,34 @@ Enforced by tests on every built image against its base:
 6. Every hook site lies inside the stock code record and, before patching, is a `BL` to
    the V5 entry point named in the hook list.
 
-### Re-latch under HOLD
-_Not yet specced._
+### Re-latch under HOLD `[HW: unverified]`
+
+Terms: *HOLD active* = the HOLD button is lit, or the sustain pedal is down with Global
+Release/Sustain set to `HLd` (both reach the same stock hold handler). *Keys down* = the
+set of physical keys currently pressed plus MIDI-in notes currently on, counted together
+(the same key number from both sources counts twice). *Latched* = the arp's note set may
+be non-empty.
+
+1. With the arp enabled and HOLD active, the first key pressed after **all keys were
+   released** clears the arp's latched notes before that key is added. The arp restarts
+   with the new key; keys pressed while at least one key is still down are added as before.
+   Example: hold C‑E‑G, release all, play D‑F‑A → the arp plays D‑F‑A, not C‑D‑E‑F‑G‑A.
+2. The clear is never issued while any key is down, never when HOLD is inactive, never
+   when the arp is disabled (stock HOLD sustain is unaffected), and never when nothing is
+   latched (e.g. the first chord after power-up, or after HOLD was switched off).
+3. A MIDI Note On with velocity 0 is a release. Local key releases are seen even while
+   HOLD is active (the stock keyboard scanner reports them regardless of HOLD).
+4. Switching HOLD off makes the arp drop released notes (existing V5 behaviour); from
+   then on only keys still down count as latched.
+5. All note events are forwarded to the arp exactly as before, after any clear.
+6. Realisation: the clear uses the arp's own All‑Notes‑Off path (stock all‑notes‑off
+   followed by the arp's clear event), i.e. the same thing MIDI CC 123 does in V5.
+
+Wrapper facts this depends on (V5 as shipped; each is asserted by a test on the fixture):
+arp‑enabled byte at `0x200894D8`; V5 entry points local‑note `0x20088C51`, MIDI note‑on
+`0x20088CFD`, MIDI note‑off `0x20088D2D`, hold `0x20089081` (reads the new hold state from
+`r4` as left by the stock caller), all‑notes‑off `0x20088E83`. Wrapper state lives at
+`0x20089F00` inside the wrapper window and is zero after every boot.
 
 ### Seq (step-recorded sequence)
 _Not yet specced._

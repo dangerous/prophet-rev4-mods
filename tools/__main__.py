@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import build, records, syx
+from . import build, fw, records, syx
 
 
 def cmd_inspect(args) -> int:
@@ -71,9 +71,21 @@ def cmd_diff(args) -> int:
     return 0
 
 
+def cmd_fwbuild(args) -> int:
+    bin_path, map_path = fw.build_wrapper(args.src, args.out)
+    print("wrote %s and %s" % (bin_path, map_path))
+    print((Path(args.out) / "wrapper.layout").read_text(), end="")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="python3 -m tools")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("fwbuild", help="cross-compile and link the wrapper (wrapper.bin/.map)")
+    p.add_argument("src")
+    p.add_argument("out")
+    p.set_defaults(func=cmd_fwbuild)
 
     p = sub.add_parser("build", help="place the wrapper and retarget hooks in a base OS .syx")
     p.add_argument("--base", required=True)
@@ -106,7 +118,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (syx.SyxError, records.RecordError, build.BuildError, OSError) as e:
+    except (syx.SyxError, records.RecordError, build.BuildError, fw.FirmwareBuildError, OSError) as e:
         print("error: %s" % e, file=sys.stderr)
         return 1
 
