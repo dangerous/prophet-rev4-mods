@@ -40,10 +40,10 @@ Both are re‑latch + seq + note values + readout, built at HEAD with the same w
 Install exactly like V5 (USB, SysEx Librarian). The `_internal` variant keeps wrapper code
 out of the MIDI‑byte path that a USB re‑flash uses; the full variant adds the clock filter.
 
-History: a re‑latch‑only image (commit `5cf3f41`) was installed on a Prophet‑10 on
+History: a re‑latch‑only image (commit `9043f51`) was installed on a Prophet‑10 on
 2025‑10‑06 and proved the loader path, boot, the hook mechanism and the HOLD stub; it had
 a bug (the arp's clear also dropped the arp's own hold flag, so a re‑latched chord did not
-stay latched) which is fixed from commit `ed2cebc`'s successor onward. That file is no
+stay latched) which is fixed from commit `831ec7e`'s successor onward. That file is no
 longer shipped.
 
 In both cases the wrapper code lives in the zero tail of V5's own RAM‑window record at
