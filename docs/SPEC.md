@@ -96,7 +96,55 @@ payload bytes:
   the trailer computed from the decoded payload equals the trailer present in `f`.
 
 ### Image patching (hook chaining, wrapper record)
-_Not yet specced._
+
+The build takes a **base** OS file (the V5 arp mod), a **wrapper binary** with its symbol
+map, and a **hook list**, and produces a new OS file. Nothing is changed that the hook
+list and wrapper placement do not require.
+
+#### Wrapper placement
+
+- V5 loads its arp blob with a single COPY record of `0x2000` bytes at `0x20088000`. The
+  arp's code and state end below `0x20089600`; the rest of that record is zero in V5.
+- The wrapper occupies the **wrapper window** `[0x20089600, 0x2008A000)` (`0xA00` bytes)
+  and is written **into that record's payload** at offset `0x1600`. No record is added or
+  resized, so the loader sees exactly the structure it already accepted for V5.
+- The build fails if the wrapper binary exceeds the window, or if the window bytes in the
+  base record are not all zero.
+
+#### Hook retargeting
+
+- A hook list entry names a `site` (RAM address of a 4-byte Thumb-2 `BL` inside the stock
+  code record, `0x2002EF00..`), the `expect`ed current target (a V5 entry point, Thumb
+  bit set) and the wrapper `symbol` to call instead.
+- The build locates the record containing the site, verifies the instruction there is a
+  `BL` whose target equals `expect`, and rewrites it as a `BL` to the symbol's address
+  from the map. It fails if the site is not such a `BL`, if the symbol is missing, if the
+  site lies outside the stock code record, or if the target is out of `BL` range.
+
+#### CLI
+
+- `python3 -m tools build --base BASE.syx --wrapper W.bin --map W.map --hooks hooks.json
+  -o OUT.syx` — performs the above and writes `OUT.syx` (trailer and header recomputed).
+  The map is `nm`-style text: `<hex address> <symbol>` per line.
+- `python3 -m tools diff A.syx B.syx` — prints every differing byte span of the decoded
+  payloads as `image <n> record @0x<offset> ram 0x<lo>..0x<hi>: <n> bytes`, so a reviewer
+  can see exactly what a build changed. Record-structure differences are reported as such.
+
+### Safety invariants
+
+Enforced by tests on every built image against its base:
+
+1. The output decodes with `trailer: ok`, target `main`.
+2. The SHARC image (`AC`) is byte-identical to the base.
+3. The main-CPU image has the same record sequence as the base: same count, types, load
+   addresses, lengths and EXEC entry/declared length.
+4. Payload bytes differ from the base only within the 4-byte `BL` at each hook site (a
+   retarget may leave the first halfword unchanged) and inside the wrapper window of the
+   RAM-window record.
+5. The stock startup record (COPY `0x2002E000`, `0xEDC` bytes) is byte-identical to the
+   base; no wrapper code runs at boot — the wrapper is entered only through the hooks.
+6. Every hook site lies inside the stock code record and, before patching, is a `BL` to
+   the V5 entry point named in the hook list.
 
 ### Re-latch under HOLD
 _Not yet specced._
