@@ -38,9 +38,10 @@ typedef void (*button_fn)(int, int);
 typedef void (*out_fn)(int, int, int, int, int);
 typedef void (*int_fn)(int);
 
-/* --- wrapper state: top of the wrapper window, zero after every boot --- */
-#define RELATCH ((relatch_t *)0x20089E80u)
-#define SEQ     ((seq_t *)0x20089EC0u)
+/* --- wrapper state: top 2 KB of the wrapper record (0x2008B800..0x2008C000), zero after
+ * every boot --- */
+#define RELATCH ((relatch_t *)0x2008B800u)
+#define SEQ     ((seq_t *)0x2008B840u)
 _Static_assert(sizeof(relatch_t) <= 0x40, "relatch state too large");
 _Static_assert(sizeof(seq_t) <= 0x140, "seq state too large");
 

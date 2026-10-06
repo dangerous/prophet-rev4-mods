@@ -13,21 +13,26 @@ from tools import build, records, syx, thumb
 ROOT = Path(__file__).resolve().parents[2]
 V5 = ROOT / "fixtures" / "V5_prophet5_main_2.1.0_arp_MIDI_SYNC.syx"
 
-WINDOW_LO, WINDOW_HI = 0x20089600, 0x2008A000
+REC_BASE, REC_SIZE = 0x2008A000, 0x2000
 STUB_SYMBOLS = {
-    "hook_local_note": 0x20089601,
-    "hook_midi_note_on": 0x20089611,
-    "hook_midi_note_off": 0x20089621,
-    "hook_hold": 0x20089631,
+    "hook_local_note": 0x2008A001,
+    "hook_midi_note_on": 0x2008A011,
+    "hook_midi_note_off": 0x2008A021,
+    "hook_hold": 0x2008A031,
+    "stub_tramp": 0x2008A041,
 }
-# four 16-byte "functions": recognisable filler ending in bx lr (70 47)
-STUB_BIN = b"".join(bytes([0x00, 0xBF]) * 7 + bytes([0x70, 0x47]) for _ in range(4))
+# five 16-byte "functions": recognisable filler ending in bx lr (70 47)
+STUB_BIN = b"".join(bytes([0x00, 0xBF]) * 7 + bytes([0x70, 0x47]) for _ in range(5))
 HOOKS = [
     {"site": "0x2003BECC", "expect": "0x20088C51", "symbol": "hook_local_note"},
     {"site": "0x2003B07A", "expect": "0x20088CFD", "symbol": "hook_midi_note_on"},
     {"site": "0x2003B032", "expect": "0x20088D2D", "symbol": "hook_midi_note_off"},
     {"site": "0x200396CA", "expect": "0x20089081", "symbol": "hook_hold"},
+    # V5's MIDI-parser table entry 1 (of 0,2 stock / 1,3,4,5 V5): a word, not a BL
+    {"kind": "word", "site": "0x200343D8", "expect": "0x20089095", "symbol": "stub_tramp"},
 ]
+BL_SITES = [int(h["site"], 16) for h in HOOKS if h.get("kind", "bl") == "bl"]
+WORD_SITES = [int(h["site"], 16) for h in HOOKS if h.get("kind") == "word"]
 
 
 def _write_inputs(d: Path, binary=STUB_BIN, symbols=STUB_SYMBOLS, hooks=HOOKS, base=None):
@@ -80,59 +85,74 @@ class BuildTests(unittest.TestCase):
         build.build_image(self.base, self.wbin, self.wmap, self.hooks, self.out)
         return syx.decode(self.base.read_bytes()).payload, syx.decode(self.out.read_bytes()).payload
 
-    def test_output_decodes_with_valid_trailer_and_same_structure(self):
+    def test_output_is_base_structure_plus_one_appended_record(self):
         base, out = self._build()
         c = syx.decode(self.out.read_bytes())  # raises on bad trailer
         self.assertEqual(c.target, "main")
         bi, oi = records.parse_images(base), records.parse_images(out)
         self.assertEqual(len(bi), len(oi))
-        for b, o in zip(bi, oi):
-            self.assertEqual((b.family, b.entry, b.declared_len), (o.family, o.entry, o.declared_len))
-            self.assertEqual([(r.type, r.w1, r.w2, r.w3) for r in b.records],
-                             [(r.type, r.w1, r.w2, r.w3) for r in o.records])
-
-    def test_sharc_image_and_startup_record_are_identical(self):
-        base, out = self._build()
-        bi, oi = records.parse_images(base), records.parse_images(out)
+        a_b, a_o = bi[0], oi[0]
+        self.assertEqual(len(a_o.records), len(a_b.records) + 1)
+        self.assertEqual([(r.type, r.w1, r.w2, r.w3) for r in a_b.records[1:]],
+                         [(r.type, r.w1, r.w2, r.w3) for r in a_o.records[1:-1]])
+        extra = a_o.records[-1]
+        self.assertEqual((extra.type, extra.w1, extra.w2, extra.w3), (records.COPY, REC_BASE, REC_SIZE, 0))
+        self.assertEqual((a_o.entry, a_o.declared_len), (a_b.entry, a_b.declared_len + 16 + REC_SIZE))
         self.assertEqual(records.serialize_images([bi[1]]), records.serialize_images([oi[1]]))
-        startup_b = next(r for r in bi[0].records if r.type == records.COPY and r.w1 == 0x2002E000)
-        startup_o = next(r for r in oi[0].records if r.type == records.COPY and r.w1 == 0x2002E000)
-        self.assertEqual((startup_b.w2, startup_b.payload), (0xEDC, startup_o.payload))
 
-    def test_hook_sites_now_branch_to_wrapper_symbols(self):
+    def test_startup_record_and_v5_window_are_identical(self):
+        base, out = self._build()
+        self.assertEqual(build.read_ram(base, 0x2002E000, 0xEDC), build.read_ram(out, 0x2002E000, 0xEDC))
+        self.assertEqual(build.read_ram(base, 0x20088000, 0x2000), build.read_ram(out, 0x20088000, 0x2000))
+
+    def test_bl_sites_branch_to_wrapper_symbols(self):
         base, out = self._build()
         for h in HOOKS:
+            if h.get("kind", "bl") != "bl":
+                continue
             site = int(h["site"], 16)
-            before = build.read_ram(base, site, 4)
-            after = build.read_ram(out, site, 4)
-            self.assertEqual(thumb.decode_bl(site, before), int(h["expect"], 16) & ~1)
-            self.assertEqual(thumb.decode_bl(site, after), STUB_SYMBOLS[h["symbol"]] & ~1)
+            self.assertEqual(thumb.decode_bl(site, build.read_ram(base, site, 4)), int(h["expect"], 16) & ~1)
+            self.assertEqual(thumb.decode_bl(site, build.read_ram(out, site, 4)), STUB_SYMBOLS[h["symbol"]] & ~1)
 
-    def test_wrapper_bytes_land_in_window_and_nothing_else_changes(self):
+    def test_word_sites_hold_wrapper_symbol_addresses(self):
         base, out = self._build()
-        self.assertEqual(build.read_ram(out, WINDOW_LO, len(STUB_BIN)), STUB_BIN)
+        import struct
+        for h in HOOKS:
+            if h.get("kind") != "word":
+                continue
+            site = int(h["site"], 16)
+            self.assertEqual(struct.unpack("<I", build.read_ram(base, site, 4))[0], int(h["expect"], 16))
+            self.assertEqual(struct.unpack("<I", build.read_ram(out, site, 4))[0], STUB_SYMBOLS[h["symbol"]])
+
+    def test_wrapper_lands_in_the_new_record_and_nothing_else_changes(self):
+        base, out = self._build()
+        self.assertEqual(build.read_ram(out, REC_BASE, len(STUB_BIN)), STUB_BIN)
+        self.assertEqual(build.read_ram(out, REC_BASE + len(STUB_BIN), REC_SIZE - len(STUB_BIN)),
+                         bytes(REC_SIZE - len(STUB_BIN)))
         spans = build.image_diff(base, out)
         self.assertTrue(all(s.image == 0 for s in spans))
-        sites = [int(h["site"], 16) for h in HOOKS]
-        window_spans = [s for s in spans if WINDOW_LO <= s.ram_lo and s.ram_hi <= WINDOW_HI]
-        site_spans = [s for s in spans if s not in window_spans]
-        # every non-window change lies within the 4-byte BL of some hook site ...
-        for s in site_spans:
-            self.assertTrue(any(site <= s.ram_lo and s.ram_hi <= site + 4 for site in sites), s)
-        # ... every site changed (our stub targets differ from the V5 targets) ...
-        for site in sites:
-            self.assertTrue(any(site <= s.ram_lo and s.ram_hi <= site + 4 for s in site_spans), hex(site))
-        # ... and the window change is exactly the stub
-        self.assertEqual([(s.ram_lo, s.ram_hi) for s in window_spans],
-                         [(WINDOW_LO, WINDOW_LO + len(STUB_BIN))])
+        appended = [s for s in spans if s.appended]
+        self.assertEqual([(s.ram_lo, s.ram_hi) for s in appended], [(REC_BASE, REC_BASE + REC_SIZE)])
+        for s in spans:
+            if s.appended:
+                continue
+            self.assertTrue(any(site <= s.ram_lo and s.ram_hi <= site + 4 for site in BL_SITES + WORD_SITES), s)
+        for site in BL_SITES + WORD_SITES:
+            self.assertTrue(any(not s.appended and site <= s.ram_lo and s.ram_hi <= site + 4 for s in spans), hex(site))
 
-    def test_build_fails_when_site_is_not_a_bl_to_expected_target(self):
+    def test_build_fails_when_site_is_not_what_the_hook_list_says(self):
         hooks = json.loads(self.hooks.read_text())
         hooks[0]["expect"] = "0x20088C01"
         self.hooks.write_text(json.dumps(hooks))
         with self.assertRaisesRegex(build.BuildError, "expected"):
             self._build()
         self.assertFalse(self.out.exists())
+        hooks = json.loads(self.hooks.read_text())
+        hooks[0]["expect"] = "0x20088C51"
+        hooks[4]["expect"] = "0x20089094"
+        self.hooks.write_text(json.dumps(hooks))
+        with self.assertRaisesRegex(build.BuildError, "expected"):
+            self._build()
 
     def test_build_fails_when_site_outside_stock_code_record(self):
         hooks = json.loads(self.hooks.read_text())
@@ -142,21 +162,19 @@ class BuildTests(unittest.TestCase):
             self._build()
 
     def test_build_fails_when_symbol_missing(self):
-        self.wmap.write_text("20089601 something_else\n")
+        self.wmap.write_text("2008a001 something_else\n")
         with self.assertRaisesRegex(build.BuildError, "symbol"):
             self._build()
 
-    def test_build_fails_when_wrapper_too_big_or_window_not_free(self):
-        self.wbin.write_bytes(b"\x00" * (WINDOW_HI - WINDOW_LO + 1))
-        with self.assertRaisesRegex(build.BuildError, "window"):
+    def test_build_fails_when_wrapper_too_big_or_record_already_present(self):
+        self.wbin.write_bytes(b"\x00" * (REC_SIZE + 1))
+        with self.assertRaisesRegex(build.BuildError, "exceeds"):
             self._build()
         self.wbin.write_bytes(STUB_BIN)
-        # dirty the window in the base
-        payload = bytearray(syx.decode(V5.read_bytes()).payload)
-        off = build.ram_to_payload_offset(bytes(payload), WINDOW_LO + 0x100)
-        payload[off] = 0x5A
-        self.base.write_bytes(syx.encode(bytes(payload), "main"))
-        with self.assertRaisesRegex(build.BuildError, "not free"):
+        self._build()                      # a built image as base: record already present
+        self.base.write_bytes(self.out.read_bytes())
+        self.out.unlink()
+        with self.assertRaisesRegex(build.BuildError, "already"):
             self._build()
 
 
@@ -173,10 +191,9 @@ class CliTests(unittest.TestCase):
             r = _cli("diff", base, out)
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertIn("ram 0x2003BECC..0x2003BED0: 4 bytes", r.stdout)
-            # the HOLD site keeps its first halfword (same imm10), so only 2 bytes change
-            self.assertIn("ram 0x200396CC..0x200396CE: 2 bytes", r.stdout)
-            self.assertIn("ram 0x20089600..0x20089640: 64 bytes", r.stdout)
-            self.assertEqual(r.stdout.count("\n"), 5)  # 4 sites + window, nothing else
+            self.assertIn("ram 0x200343D8..0x200343DA: 2 bytes", r.stdout)
+            self.assertIn("appended record ram 0x2008A000..0x2008C000: 8192 bytes", r.stdout)
+            self.assertEqual(r.stdout.count("\n"), 6)  # 4 BL sites + 1 word + appended record
 
     def test_build_cli_reports_error_and_writes_nothing(self):
         with tempfile.TemporaryDirectory() as t:

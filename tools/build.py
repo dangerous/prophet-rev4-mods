@@ -1,8 +1,9 @@
-"""Image patching: place the wrapper in V5's RAM-window record and retarget hook sites
+"""Image patching: append the wrapper record to image A and retarget hook sites
 (docs/SPEC.md: "Image patching" and "Safety invariants")."""
 from __future__ import annotations
 
 import json
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
@@ -10,10 +11,8 @@ from typing import Dict, List
 from . import records, syx, thumb
 
 STOCK_CODE_BASE = 0x2002EF00      # the big stock code COPY record
-V5_WINDOW_BASE = 0x20088000       # V5's arp blob COPY record
-V5_WINDOW_SIZE = 0x2000
-WRAPPER_LO = 0x20089600           # wrapper window inside the V5 record
-WRAPPER_HI = 0x2008A000
+WRAPPER_REC_BASE = 0x2008A000     # the appended wrapper COPY record
+WRAPPER_REC_SIZE = 0x2000
 DIFF_MERGE_GAP = 8                # bytes of unchanged data that still join two spans
 
 
@@ -27,6 +26,7 @@ class DiffSpan:
     record_offset: int
     ram_lo: int
     ram_hi: int
+    appended: bool = False
 
     @property
     def size(self) -> int:
@@ -60,36 +60,10 @@ def parse_map(text: str) -> Dict[str, int]:
     return symbols
 
 
-def build_payload(base_payload: bytes, wrapper: bytes, symbols: Dict[str, int],
-                  hooks: List[dict]) -> bytes:
-    images = records.parse_images(base_payload)
-    image_a = images[0]
-    out = bytearray(base_payload)
-
-    # --- wrapper placement
-    window = next((r for r in image_a.records
-                   if r.type == records.COPY and r.w1 == V5_WINDOW_BASE and r.w2 == V5_WINDOW_SIZE),
-                  None)
-    if window is None:
-        raise BuildError("base has no V5 RAM-window record (COPY 0x%X bytes at 0x%08X)"
-                         % (V5_WINDOW_SIZE, V5_WINDOW_BASE))
-    if len(wrapper) > WRAPPER_HI - WRAPPER_LO:
-        raise BuildError("wrapper binary (%d bytes) exceeds the wrapper window (0x%X bytes)"
-                         % (len(wrapper), WRAPPER_HI - WRAPPER_LO))
-    win_off = window.offset + records.RECORD_SIZE + (WRAPPER_LO - window.w1)
-    win_len = WRAPPER_HI - WRAPPER_LO
-    dirty = next((i for i, b in enumerate(base_payload[win_off:win_off + win_len]) if b), None)
-    if dirty is not None:
-        raise BuildError("wrapper window is not free in base: non-zero byte at 0x%08X"
-                         % (WRAPPER_LO + dirty))
-    out[win_off:win_off + len(wrapper)] = wrapper
-
-    # --- hook retargeting
-    code = next((r for r in image_a.records if r.type == records.COPY and r.w1 == STOCK_CODE_BASE),
-                None)
-    if code is None:
-        raise BuildError("base has no stock code record at 0x%08X" % STOCK_CODE_BASE)
+def _patch_code_record(code: records.Record, symbols: Dict[str, int], hooks: List[dict]) -> bytes:
+    data = bytearray(code.payload)
     for hook in hooks:
+        kind = hook.get("kind", "bl")
         site = int(str(hook["site"]), 16)
         expect = int(str(hook["expect"]), 16)
         symbol = hook["symbol"]
@@ -97,18 +71,56 @@ def build_payload(base_payload: bytes, wrapper: bytes, symbols: Dict[str, int],
             raise BuildError("hook symbol '%s' is not in the wrapper map" % symbol)
         if not code.w1 <= site <= code.w1 + code.w2 - 4:
             raise BuildError("hook site 0x%08X is not inside the stock code record" % site)
-        off = code.offset + records.RECORD_SIZE + (site - code.w1)
-        current = thumb.decode_bl(site, base_payload[off:off + 4])
-        if current is None or current != (expect & ~1):
-            found = "BL to 0x%08X" % current if current is not None else \
-                "bytes %s" % base_payload[off:off + 4].hex(" ")
-            raise BuildError("hook site 0x%08X: expected BL to 0x%08X, found %s"
-                             % (site, expect, found))
-        try:
-            out[off:off + 4] = thumb.encode_bl(site, symbols[symbol])
-        except thumb.RangeError as e:
-            raise BuildError(str(e))
-    return bytes(out)
+        off = site - code.w1
+        current = bytes(code.payload[off:off + 4])
+        if kind == "bl":
+            target = thumb.decode_bl(site, current)
+            if target is None or target != (expect & ~1):
+                found = "BL to 0x%08X" % target if target is not None else "bytes %s" % current.hex(" ")
+                raise BuildError("hook site 0x%08X: expected BL to 0x%08X, found %s" % (site, expect, found))
+            try:
+                data[off:off + 4] = thumb.encode_bl(site, symbols[symbol])
+            except thumb.RangeError as e:
+                raise BuildError(str(e))
+        elif kind == "word":
+            word = struct.unpack("<I", current)[0]
+            if word != expect:
+                raise BuildError("hook site 0x%08X: expected word 0x%08X, found 0x%08X" % (site, expect, word))
+            data[off:off + 4] = struct.pack("<I", symbols[symbol])
+        else:
+            raise BuildError("hook site 0x%08X: unknown kind '%s'" % (site, kind))
+    return bytes(data)
+
+
+def build_payload(base_payload: bytes, wrapper: bytes, symbols: Dict[str, int],
+                  hooks: List[dict]) -> bytes:
+    images = records.parse_images(base_payload)
+    image_a = images[0]
+
+    if len(wrapper) > WRAPPER_REC_SIZE:
+        raise BuildError("wrapper binary (%d bytes) exceeds the wrapper record (0x%X bytes)"
+                         % (len(wrapper), WRAPPER_REC_SIZE))
+    for rec in image_a.records:
+        if rec.type in (records.COPY, records.FILL) and rec.w1 < WRAPPER_REC_BASE + WRAPPER_REC_SIZE \
+                and rec.w1 + rec.w2 > WRAPPER_REC_BASE:
+            raise BuildError("base already has a record covering 0x%08X (at 0x%08X, %d bytes)"
+                             % (WRAPPER_REC_BASE, rec.w1, rec.w2))
+    code = next((r for r in image_a.records if r.type == records.COPY and r.w1 == STOCK_CODE_BASE), None)
+    if code is None:
+        raise BuildError("base has no stock code record at 0x%08X" % STOCK_CODE_BASE)
+
+    patched_code = _patch_code_record(code, symbols, hooks)
+    head = image_a.records[0]
+    new_records = [records.Record(head.type, head.family, head.w1, head.w2,
+                                  head.w3 + records.RECORD_SIZE + WRAPPER_REC_SIZE, b"", head.offset)]
+    for rec in image_a.records[1:]:
+        if rec is code:
+            rec = records.Record(rec.type, rec.family, rec.w1, rec.w2, rec.w3, patched_code, rec.offset)
+        new_records.append(rec)
+    new_records.append(records.Record(records.COPY, image_a.family, WRAPPER_REC_BASE, WRAPPER_REC_SIZE, 0,
+                                      wrapper + bytes(WRAPPER_REC_SIZE - len(wrapper))))
+    new_a = records.Image(image_a.family, image_a.entry, new_records[0].w3, image_a.offset, new_records)
+    return records.serialize_images([new_a] + images[1:])
 
 
 def build_image(base: Path, wrapper: Path, map_path: Path, hooks_path: Path, out: Path) -> None:
@@ -123,14 +135,22 @@ def build_image(base: Path, wrapper: Path, map_path: Path, hooks_path: Path, out
 
 
 def image_diff(base_payload: bytes, out_payload: bytes) -> List[DiffSpan]:
+    """Byte spans by which `out` differs from `base`. The output's image A may carry one
+    extra trailing COPY record (the wrapper); it is reported as an `appended` span."""
     bi, oi = records.parse_images(base_payload), records.parse_images(out_payload)
     if len(bi) != len(oi):
         raise BuildError("record structure differs: %d vs %d images" % (len(bi), len(oi)))
     spans: List[DiffSpan] = []
     for idx, (b, o) in enumerate(zip(bi, oi)):
-        if [(r.type, r.w1, r.w2, r.w3) for r in b.records] != [(r.type, r.w1, r.w2, r.w3) for r in o.records]:
+        o_records = o.records
+        extra = None
+        if len(o_records) == len(b.records) + 1 and o_records[-1].type == records.COPY:
+            extra = o_records[-1]
+            o_records = o_records[:-1]
+        shape = lambda recs: [(r.type, r.w1, r.w2, r.w3) for r in recs[1:]]  # EXEC length may differ
+        if shape(b.records) != shape(o_records) or (b.records[0].type, b.records[0].w1) != (o_records[0].type, o_records[0].w1):
             raise BuildError("record structure differs in image %d" % idx)
-        for rb, ro in zip(b.records, o.records):
+        for rb, ro in zip(b.records, o_records):
             if rb.type != records.COPY or rb.payload == ro.payload:
                 continue
             cur = None
@@ -144,9 +164,18 @@ def image_diff(base_payload: bytes, out_payload: bytes) -> List[DiffSpan]:
                         cur = [hw, hw + 2]
             if cur is not None:
                 spans.append(DiffSpan(idx, rb.offset, rb.w1 + cur[0], rb.w1 + cur[1]))
+        if extra is not None:
+            spans.append(DiffSpan(idx, extra.offset, extra.w1, extra.w1 + extra.w2, appended=True))
     return spans
 
 
 def format_diff(spans: List[DiffSpan]) -> str:
-    return "".join("image %d record @0x%08X ram 0x%08X..0x%08X: %d bytes\n"
-                   % (s.image, s.record_offset, s.ram_lo, s.ram_hi, s.size) for s in spans)
+    out = []
+    for s in spans:
+        if s.appended:
+            out.append("image %d appended record ram 0x%08X..0x%08X: %d bytes\n"
+                       % (s.image, s.ram_lo, s.ram_hi, s.size))
+        else:
+            out.append("image %d record @0x%08X ram 0x%08X..0x%08X: %d bytes\n"
+                       % (s.image, s.record_offset, s.ram_lo, s.ram_hi, s.size))
+    return "".join(out)

@@ -101,15 +101,29 @@ The build takes a **base** OS file (the V5 arp mod), a **wrapper binary** with i
 map, and a **hook list**, and produces a new OS file. Nothing is changed that the hook
 list and wrapper placement do not require.
 
-#### Wrapper placement
+#### Wrapper record
 
-- V5 loads its arp blob with a single COPY record of `0x2000` bytes at `0x20088000`. The
-  arp's code and state end below `0x20089600`; the rest of that record is zero in V5.
-- The wrapper occupies the **wrapper window** `[0x20089600, 0x2008A000)` (`0xA00` bytes)
-  and is written **into that record's payload** at offset `0x1600`. No record is added or
-  resized, so the loader sees exactly the structure it already accepted for V5.
-- The build fails if the wrapper binary exceeds the window, or if the window bytes in the
-  base record are not all zero.
+- The wrapper is loaded by **one COPY record appended to image A** after V5's last record:
+  load address `0x2008A000`, length `0x2000`. Image A's EXEC declared length grows by
+  `0x2010` (record + payload) and its check byte is recomputed. This is exactly the
+  mechanism V5 used to add itself to stock.
+- Why that address: the stock startup's MMU region table maps `0x20020000–0x2008FFFF` as
+  one RAM region (same attributes as V5's own blob); stock uses nothing above
+  `0x200874CC`, V5 nothing above `0x2008A000`. The region is physically contiguous L2
+  SRAM. `[HW: unverified for 0x2008A000+; the first wrapper ran at 0x20089600]`
+- Code occupies `[0x2008A000, 0x2008B800)`, state `[0x2008B800, 0x2008C000)`; state is
+  zero after every boot. The build fails if code+rodata exceed `0x1800` bytes.
+- V5's own RAM-window record is left byte-identical (its zero tail is no longer used).
+
+History: versions up to `e61b2c4` placed a ≤0xA00-byte wrapper inside the zero tail of
+V5's window record at `0x20089600`; that layout was verified on hardware.
+
+#### Patch kinds
+
+- `bl` — retarget a 4-byte Thumb-2 `BL` (below).
+- `word` — replace a 32-bit word at a RAM address inside the stock code record with a
+  wrapper symbol's address, after verifying the word currently holds the `expect`ed value.
+  Used for the stock MIDI-parser dispatch-table entries that V5 points at its trampoline.
 
 #### Hook retargeting
 
@@ -125,10 +139,48 @@ list and wrapper placement do not require.
 
 - `python3 -m tools build --base BASE.syx --wrapper W.bin --map W.map --hooks hooks.json
   -o OUT.syx` — performs the above and writes `OUT.syx` (trailer and header recomputed).
-  The map is `nm`-style text: `<hex address> <symbol>` per line.
+  The map is `nm`-style text: `<hex address> <symbol>` per line. Each hook entry has an
+  optional `"kind": "bl" | "word"` (default `bl`).
 - `python3 -m tools diff A.syx B.syx` — prints every differing byte span of the decoded
   payloads as `image <n> record @0x<offset> ram 0x<lo>..0x<hi>: <n> bytes`, so a reviewer
   can see exactly what a build changed. Record-structure differences are reported as such.
+
+### Note value (arp/seq step length) `[HW: unverified]`
+
+1. The step length is one of 13 values, shortest to longest: 1/32, 1/16T, 1/16, 1/8T,
+   1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1 (whole), 2 bars, 4 bars (a bar is four beats).
+   Power-up default is 1/8, which is exactly V5's behaviour. Not saved with patches.
+2. A440 + **Program 7** selects the next shorter value, A440 + **Program 8** the next
+   longer; the ends do not wrap. The display shows the new value for about a second:
+   `32`, `16t`, `16`, `8t`, `16d`, `8`, `8d`, `4`, `4d`, `2`, `1`, `2b`, `4b`
+   (right-aligned; glyphs as the panel font allows).
+3. Internal clock: the step period is the note value at the current BPM (Glide pot, as in
+   V5); the note is released half-way through the step, as V5 does.
+4. MIDI sync: steps follow the incoming clock at the selected value — 3, 4, 6, 8, 9, 12,
+   18, 24, 36, 48, 96, 192 or 384 clocks per step for the list above. Step boundaries fall
+   exactly on clocks. Start/Stop/Continue behave as in V5; the clock-loss timeout (≈1 s)
+   is unchanged for every value.
+5. A change takes effect from the next step. Applies to the arp and to seq alike.
+6. Realisation: internal — the engine's divisions-per-beat (engine + 0x30a) and
+   ticks-per-second (engine + 0x30c) fields are set to a (div, tps) pair per value
+   (1/32 → 8,1000; 1/16T → 12,1000; 1/16 → 4,1000; 1/8T → 6,1000; 1/16d → 8,3000;
+   1/8 → 2,1000; 1/8d → 4,3000; 1/4 → 1,1000; 1/4d → 2,3000; 1/2 → 1,2000; 1 → 1,4000;
+   2b → 1,8000; 4b → 1,16000) and the step accumulator (engine + 0x310) is zeroed on
+   change. Sync — the engine steps every 12 clocks it sees (hard-coded), so the wrapper's
+   trampoline, installed at the four MIDI-parser table entries V5 uses, hands V5's sniff
+   a filtered stream: per real clock it forwards 4, 3, 2, 3/2, 4/3, 1, 2/3, 1/2, 1/3, 1/4,
+   1/8, 1/16 or 1/32 clocks (fractions as exact repeating patterns), forwards FA/FB/FC
+   unchanged, and zeroes the engine's clock-loss counter (engine + 0x324) on every real
+   clock so withheld clocks never trigger the timeout. While sync is active the (div, tps)
+   fields hold V5's (2, 1000).
+
+### Button id readout `[HW: unverified]`
+
+While A440 is held, pressing a panel button that neither V5 nor the wrapper assigns
+(anything other than Program 1–8, Bank, Group and the GLOBALS modifier id `0x19`) shows
+that button's id on the display for about a second and is otherwise ignored. A one-time
+aid for mapping the Prophet-10's extra buttons; V5 passed such presses to stock, where
+they had no defined meaning while A440 was held.
 
 ### Safety invariants
 
@@ -136,15 +188,16 @@ Enforced by tests on every built image against its base:
 
 1. The output decodes with `trailer: ok`, target `main`.
 2. The SHARC image (`AC`) is byte-identical to the base.
-3. The main-CPU image has the same record sequence as the base: same count, types, load
-   addresses, lengths and EXEC entry/declared length.
-4. Payload bytes differ from the base only within the 4-byte `BL` at each hook site (a
-   retarget may leave the first halfword unchanged) and inside the wrapper window of the
-   RAM-window record.
+3. The main-CPU image has the base's record sequence (same count, types, load addresses,
+   lengths, EXEC entry) **plus exactly one appended COPY record** (`0x2008A000`, `0x2000`);
+   the EXEC declared length is the base's plus `0x2010`.
+4. Payload bytes of the base's records differ only within the 4-byte `BL` at each `bl`
+   hook site (a retarget may leave the first halfword unchanged) and within the 4-byte
+   word at each `word` site.
 5. The stock startup record (COPY `0x2002E000`, `0xEDC` bytes) is byte-identical to the
    base; no wrapper code runs at boot — the wrapper is entered only through the hooks.
-6. Every hook site lies inside the stock code record and, before patching, is a `BL` to
-   the V5 entry point named in the hook list.
+6. Every hook site lies inside the stock code record and, before patching, holds exactly
+   what the hook list says it holds (a `BL` to the named V5 entry, or the named word).
 
 ### Re-latch under HOLD `[HW: unverified]`
 

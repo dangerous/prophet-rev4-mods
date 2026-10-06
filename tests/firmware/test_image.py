@@ -24,8 +24,10 @@ V5_DATA = {
     "octaves": 0x200894DF, "out_ptr": 0x200894F0, "globals_flag": 0x200895E5,
 }
 STOCK_DISPLAY_INT = 0x20037FF7
-STATE_BASE = 0x20089E80
-WINDOW_LO, WINDOW_HI = 0x20089600, 0x2008A000
+CODE_BASE = 0x2008A000          # appended wrapper record
+STATE_BASE = 0x2008B800
+RECORD_HI = 0x2008C000
+V5_WINDOW_LO, V5_WINDOW_HI = 0x20088000, 0x2008A000
 
 
 class V5FactTests(unittest.TestCase):
@@ -78,9 +80,14 @@ class V5FactTests(unittest.TestCase):
         self.assertEqual((thumb.movw_imm16(hw[0], hw[1]), thumb.movw_imm16(hw[2], hw[3])),
                          (0x91D0, 0x2008))
 
-    def test_window_tail_is_zero_in_v5(self):
-        self.assertEqual(build.read_ram(self.payload, WINDOW_LO, WINDOW_HI - WINDOW_LO),
-                         bytes(WINDOW_HI - WINDOW_LO))
+    def test_mmu_region_table_maps_the_wrapper_record_range(self):
+        # stock .data: (start, end, attrs) rows; 0x20020000-0x2008FFFF shares V5's attributes
+        stock = syx.decode((ROOT / "fixtures" / "prophet5_main_2.1.0.syx").read_bytes()).payload
+        rows = struct.unpack("<9I", build.read_ram(stock, 0x2004DD38, 36))
+        self.assertEqual(rows[0:3], (0x20010000, 0x2001FFFF, 0x00001C00))
+        self.assertEqual(rows[3:6], (0x20020000, 0x2008FFFF, 0x00005C04))
+        self.assertEqual(rows[6:9], (0x20090000, 0x200FFFFF, 0x0000DC04))
+        self.assertTrue(0x20020000 <= CODE_BASE and RECORD_HI - 1 <= 0x2008FFFF)
 
 
 class BuiltImageTests(unittest.TestCase):
@@ -100,34 +107,42 @@ class BuiltImageTests(unittest.TestCase):
         self.assertEqual(c.target, "main")
         self.assertEqual(syx.trailer_for(c.payload), c.trailer)
 
-    def test_invariants_sharc_identical_structure_identical_startup_identical(self):
+    def test_invariants_sharc_identical_structure_plus_one_record_startup_identical(self):
         bi, oi = records.parse_images(self.base), records.parse_images(self.img)
         self.assertEqual(records.serialize_images([bi[1]]), records.serialize_images([oi[1]]))
-        self.assertEqual([(r.type, r.w1, r.w2, r.w3) for r in bi[0].records],
-                         [(r.type, r.w1, r.w2, r.w3) for r in oi[0].records])
-        self.assertEqual(bi[0].entry, oi[0].entry)
+        self.assertEqual([(r.type, r.w1, r.w2, r.w3) for r in bi[0].records[1:]],
+                         [(r.type, r.w1, r.w2, r.w3) for r in oi[0].records[1:-1]])
+        extra = oi[0].records[-1]
+        self.assertEqual((extra.type, extra.w1, extra.w2), (records.COPY, CODE_BASE, RECORD_HI - CODE_BASE))
+        self.assertEqual((bi[0].entry, bi[0].declared_len + 16 + extra.w2), (oi[0].entry, oi[0].declared_len))
         self.assertEqual(build.read_ram(self.base, 0x2002E000, 0xEDC),
                          build.read_ram(self.img, 0x2002E000, 0xEDC))
+        self.assertEqual(build.read_ram(self.base, V5_WINDOW_LO, V5_WINDOW_HI - V5_WINDOW_LO),
+                         build.read_ram(self.img, V5_WINDOW_LO, V5_WINDOW_HI - V5_WINDOW_LO))
 
-    def test_only_hook_sites_and_window_differ(self):
+    def test_only_hook_sites_and_the_appended_record_differ(self):
         sites = [int(h["site"], 16) for h in json.loads(HOOKS.read_text())]
         for s in build.image_diff(self.base, self.img):
-            in_site = any(site <= s.ram_lo and s.ram_hi <= site + 4 for site in sites)
-            in_window = WINDOW_LO <= s.ram_lo and s.ram_hi <= WINDOW_HI
-            self.assertTrue(in_site or in_window, s)
+            if s.appended:
+                self.assertEqual((s.ram_lo, s.ram_hi), (CODE_BASE, RECORD_HI))
+                continue
+            self.assertTrue(any(site <= s.ram_lo and s.ram_hi <= site + 4 for site in sites), s)
 
-    def test_hooks_land_on_wrapper_symbols_inside_the_window(self):
+    def test_hooks_land_on_wrapper_symbols_inside_the_record(self):
         for h in json.loads(HOOKS.read_text()):
             site = int(h["site"], 16)
-            target = thumb.decode_bl(site, build.read_ram(self.img, site, 4))
+            if h.get("kind", "bl") == "word":
+                target = struct.unpack("<I", build.read_ram(self.img, site, 4))[0] & ~1
+            else:
+                target = thumb.decode_bl(site, build.read_ram(self.img, site, 4))
             self.assertEqual(target, self.symbols[h["symbol"]] & ~1)
-            self.assertTrue(WINDOW_LO <= target < STATE_BASE)
+            self.assertTrue(CODE_BASE <= target < STATE_BASE)
 
     def test_wrapper_fits_below_its_state_and_is_placed_verbatim(self):
-        self.assertLessEqual(WINDOW_LO + len(self.wrapper), STATE_BASE)
-        self.assertEqual(build.read_ram(self.img, WINDOW_LO, len(self.wrapper)), self.wrapper)
-        self.assertEqual(build.read_ram(self.img, STATE_BASE, WINDOW_HI - STATE_BASE),
-                         bytes(WINDOW_HI - STATE_BASE))
+        self.assertLessEqual(CODE_BASE + len(self.wrapper), STATE_BASE)
+        self.assertEqual(build.read_ram(self.img, CODE_BASE, len(self.wrapper)), self.wrapper)
+        self.assertEqual(build.read_ram(self.img, STATE_BASE, RECORD_HI - STATE_BASE),
+                         bytes(RECORD_HI - STATE_BASE))
 
     # firmware/v5_iface.h order
     IFACE = [V5_ENTRIES["local_note"], V5_ENTRIES["midi_note_on"], V5_ENTRIES["midi_note_off"],
@@ -138,18 +153,18 @@ class BuiltImageTests(unittest.TestCase):
 
     def test_interface_table_is_exactly_the_known_addresses(self):
         table = self.symbols["v5_iface"] & ~1
-        self.assertTrue(WINDOW_LO <= table < STATE_BASE)
-        words = struct.unpack_from("<%dI" % len(self.IFACE), self.wrapper, table - WINDOW_LO)
+        self.assertTrue(CODE_BASE <= table < STATE_BASE)
+        words = struct.unpack_from("<%dI" % len(self.IFACE), self.wrapper, table - CODE_BASE)
         self.assertEqual([hex(w) for w in words], [hex(a) for a in self.IFACE])
         # and the word after the table is not another address into V5/stock (table is complete)
-        after = struct.unpack_from("<I", self.wrapper + b"\0" * 4, table - WINDOW_LO + 4 * len(self.IFACE))[0]
+        after = struct.unpack_from("<I", self.wrapper + b"\0" * 4, table - CODE_BASE + 4 * len(self.IFACE))[0]
         self.assertNotIn(after, set(self.IFACE))
 
     def test_wrapper_materialises_no_unknown_addresses(self):
-        refs = thumb.find_absolute_addresses(self.wrapper, WINDOW_LO)
+        refs = thumb.find_absolute_addresses(self.wrapper, CODE_BASE)
         allowed = set(self.IFACE)
-        allowed |= set(range(STATE_BASE, WINDOW_HI))      # its own state
-        allowed |= set(range(WINDOW_LO, STATE_BASE))      # its own code and table
+        allowed |= set(range(STATE_BASE, RECORD_HI))      # its own state
+        allowed |= set(range(CODE_BASE, STATE_BASE))      # its own code and table
         unknown = sorted(a for a in refs if a not in allowed)
         self.assertEqual(unknown, [], [hex(a) for a in unknown])
         self.assertIn(self.symbols["v5_iface"] & ~1, refs)   # the table itself is referenced
