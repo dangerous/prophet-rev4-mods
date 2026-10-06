@@ -11,7 +11,7 @@ static int failures, checks;
     printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
 
 /* ---- fake platform ------------------------------------------------------------------ */
-enum { EV_NOTE, EV_CLEAR, EV_BUTTON, EV_DISPLAY, EV_OUT, EV_HOLD };
+enum { EV_NOTE, EV_CLEAR, EV_BUTTON, EV_DISPLAY, EV_OUT, EV_HOLD, EV_D3, EV_DHOLD, EV_USED };
 typedef struct { int type, a, b, c, d; } ev_t;
 static ev_t log_[4096];
 static int nlog;
@@ -28,6 +28,9 @@ void plat_v5_button(int id, int value) { push(EV_BUTTON, id, value, 0, 0); }
 int  plat_v5_octaves(void) { return fake_v5_octaves; }
 int  plat_globals_active(void) { return fake_globals; }
 void plat_display_int(int v) { push(EV_DISPLAY, v, 0, 0, 0); }
+void plat_display3(int c0, int c1, int c2) { push(EV_D3, c0, c1, c2, 0); }
+void plat_display_hold(void) { push(EV_DHOLD, 0, 0, 0, 0); }
+void plat_a440_mark_used(void) { push(EV_USED, 0, 0, 0, 0); }
 void plat_orig_out(int ctx, int src, int on, int note, int vel) { push(EV_OUT, src, on, note, vel); (void)ctx; }
 
 static int count_type(int t) { int n = 0; for (int i = 0; i < nlog; i++) n += log_[i].type == t; return n; }
@@ -50,10 +53,16 @@ static int has_out(int on, int note) {
     for (int i = 0; i < nlog; i++) if (log_[i].type == EV_OUT && log_[i].b == on && log_[i].c == note) return 1;
     return 0;
 }
+static int has_d3(int c0, int c1, int c2) {
+    for (int i = 0; i < nlog; i++)
+        if (log_[i].type == EV_D3 && log_[i].a == c0 && log_[i].b == c1 && log_[i].c == c2) return 1;
+    return 0;
+}
 static void clear_log(void) { nlog = 0; }
 
 /* ---- helpers ------------------------------------------------------------------------- */
-enum { LOCAL = 1, MIDI = 2, A440 = 0x0F, PROGRAM1 = 0, PROGRAM2 = 1, PROGRAM6 = 5, PRESS = 1, RELEASE = 2 };
+enum { LOCAL = 1, MIDI = 2, A440 = 0x0F, PROGRAM1 = 0, PROGRAM2 = 1, PROGRAM3 = 2, PROGRAM4 = 3, PROGRAM6 = 5,
+       PRESS = 1, RELEASE = 2, REPEAT = 3, CH_O = 0x24, BLANK = 0x25 };
 static seq_t s;
 
 static void reset(void) {
@@ -79,7 +88,7 @@ static void test_recording_enters_seq_mode_and_marks_a440_used(void) {
     fake_v5_octaves = 3;
     record_ceg();
     CHECK(s.active == 1 && s.count == 3 && s.root == 60);
-    CHECK(s.octaves == 3 && s.saved_v5_octaves == 3);          /* setting in force applies */
+    CHECK(s.octaves == 3);                                    /* the setting in force applies */
     /* first recorded key: V5 is told "Program 1" (octave 1 + marks A440 as used) */
     CHECK(has_button(PROGRAM1, PRESS) && has_button(PROGRAM1, RELEASE));
     /* step count displayed after each step */
@@ -98,6 +107,7 @@ static void test_a440_tap_without_keys_is_untouched(void) {
     seq_button(&s, A440, PRESS);
     CHECK(seq_button(&s, PROGRAM2, PRESS) == 0);
     CHECK(seq_button(&s, PROGRAM6, PRESS) == 0);
+    CHECK(count_type(EV_D3) == 0 && count_type(EV_USED) == 0 && count_type(EV_DISPLAY) == 0);
     seq_button(&s, A440, RELEASE);
 }
 
@@ -215,7 +225,9 @@ static void test_octave_change_while_playing_is_consumed_and_applied(void) {
     seq_button(&s, A440, PRESS);
     CHECK(seq_button(&s, PROGRAM2, PRESS) == 1);              /* consumed: V5 stays at o 1 */
     CHECK(seq_button(&s, PROGRAM2, RELEASE) == 1);
-    CHECK(last_of(EV_DISPLAY) && last_of(EV_DISPLAY)->a == 2);
+    CHECK(has_d3(CH_O, BLANK, 2) && count_type(EV_DHOLD) == 1);   /* 'o 2', as V5 shows it */
+    CHECK(count_type(EV_USED) == 1);                          /* V5 never sees the press: no toggle on release */
+    CHECK(count_type(EV_DISPLAY) == 0);                       /* not a bare digit */
     drain(1);
     CHECK(has_note(3, 100) && has_note(4, 90) && has_note(5, 80) && count_notes(1) == 3);
     clear_log();
@@ -471,6 +483,80 @@ static void test_button_repeat_values_do_not_change_held_state(void) {
     seq_button(&s, A440, RELEASE);
 }
 
+static void test_octave_change_in_seq_mode_is_shown_as_o_n_once_per_press(void) {
+    reset();
+    record_ceg();
+    clear_log();
+    seq_button(&s, A440, PRESS);
+    CHECK(seq_button(&s, PROGRAM3, PRESS) == 1);
+    CHECK(s.octaves == 3);
+    CHECK(count_type(EV_D3) == 1 && has_d3(CH_O, BLANK, 3));
+    CHECK(count_type(EV_DHOLD) == 1 && count_type(EV_USED) == 1);
+    CHECK(seq_button(&s, PROGRAM3, REPEAT) == 1);             /* held repeats and the release: nothing more */
+    CHECK(seq_button(&s, PROGRAM3, RELEASE) == 1);
+    CHECK(count_type(EV_D3) == 1 && count_type(EV_DHOLD) == 1 && count_type(EV_USED) == 1);
+    CHECK(count_type(EV_BUTTON) == 0);                        /* V5 stays at one octave */
+    seq_button(&s, A440, RELEASE);
+    CHECK(s.active == 1 && s.octaves == 3);
+}
+
+static void test_octave_change_while_recording_applies_to_the_sequence(void) {
+    reset();
+    seq_button(&s, A440, PRESS);
+    seq_note(&s, LOCAL, 60, 100); seq_note(&s, LOCAL, 60, 0);
+    clear_log();
+    CHECK(seq_button(&s, PROGRAM2, PRESS) == 1);
+    CHECK(has_d3(CH_O, BLANK, 2) && count_type(EV_USED) == 1);
+    seq_button(&s, PROGRAM2, RELEASE);
+    seq_note(&s, LOCAL, 64, 90); seq_note(&s, LOCAL, 64, 0);
+    CHECK(last_of(EV_DISPLAY) && last_of(EV_DISPLAY)->a == 2);   /* step count still shown */
+    seq_button(&s, A440, RELEASE);
+    CHECK(s.active == 1 && s.count == 2 && s.octaves == 2);
+    clear_log();
+    seq_note(&s, LOCAL, 60, 100);
+    drain(1);
+    CHECK(count_notes(1) == 4);                               /* 2 steps x 2 octaves */
+}
+
+static void test_program6_hands_the_current_octave_setting_back_to_the_arp(void) {
+    reset();
+    fake_v5_octaves = 3;
+    record_ceg();                                             /* shared setting on entry: o 3 */
+    seq_button(&s, A440, PRESS);
+    seq_button(&s, PROGRAM2, PRESS);                          /* o 2 selected in seq mode */
+    seq_button(&s, PROGRAM2, RELEASE);
+    seq_button(&s, A440, RELEASE);
+    clear_log();
+    seq_button(&s, A440, PRESS);
+    CHECK(seq_button(&s, PROGRAM6, PRESS) == 0);
+    CHECK(has_button(PROGRAM2, PRESS) && has_button(PROGRAM2, RELEASE));   /* the arp gets o 2 ... */
+    CHECK(!has_button(PROGRAM3, PRESS) && count_type(EV_BUTTON) == 2);     /* ... not the o 3 of entry */
+    seq_button(&s, A440, RELEASE);
+    fake_v5_octaves = 4;
+    record_ceg();                                             /* fresh entry: o 4 taken over */
+    CHECK(s.octaves == 4);
+    seq_button(&s, A440, PRESS);
+    seq_button(&s, PROGRAM1, PRESS);                          /* back to one octave in seq mode */
+    seq_button(&s, A440, RELEASE);
+    clear_log();
+    seq_button(&s, A440, PRESS);
+    seq_button(&s, PROGRAM6, PRESS);
+    CHECK(has_button(PROGRAM1, PRESS) && count_type(EV_BUTTON) == 2);      /* the arp gets o 1 */
+    seq_button(&s, A440, RELEASE);
+}
+
+static void test_octave_change_with_arp_off_in_seq_mode(void) {
+    reset();
+    record_ceg();
+    fake_arp_enabled = 0;
+    clear_log();
+    seq_button(&s, A440, PRESS);
+    CHECK(seq_button(&s, PROGRAM4, PRESS) == 1);
+    CHECK(s.octaves == 4 && has_d3(CH_O, BLANK, 4) && count_type(EV_USED) == 1);
+    seq_button(&s, A440, RELEASE);
+    CHECK(s.active == 1);
+}
+
 static void test_state_fits_and_is_zero_initialised(void) {
     seq_t z;
     memset(&z, 0, sizeof z);
@@ -505,6 +591,10 @@ int main(void) {
     test_clears_reassert_hold_to_the_arp();
     test_clears_do_not_touch_hold_when_inactive();
     test_button_repeat_values_do_not_change_held_state();
+    test_octave_change_in_seq_mode_is_shown_as_o_n_once_per_press();
+    test_octave_change_while_recording_applies_to_the_sequence();
+    test_program6_hands_the_current_octave_setting_back_to_the_arp();
+    test_octave_change_with_arp_off_in_seq_mode();
     test_state_fits_and_is_zero_initialised();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

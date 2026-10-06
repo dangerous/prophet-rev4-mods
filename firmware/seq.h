@@ -16,8 +16,8 @@ typedef struct {
     uint8_t  active;                /* a sequence exists */
     uint8_t  count;                 /* steps recorded */
     uint8_t  root;                  /* first recorded pitch */
-    uint8_t  octaves;               /* 1..4, spans the whole sequence */
-    uint8_t  saved_v5_octaves;      /* V5's setting when seq mode was entered */
+    uint8_t  octaves;               /* the shared octave setting 1..4 while a sequence exists;
+                                       spans the whole sequence, handed back to V5 on clear */
     uint8_t  hold;
     /* playback */
     uint8_t  playing;               /* dummies are (being) fed */

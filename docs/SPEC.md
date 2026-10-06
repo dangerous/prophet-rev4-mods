@@ -273,13 +273,19 @@ A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and 
 
 #### Octaves
 
-10. In seq mode the octave setting (A440 + Program 1–4; the setting in force when seq mode
-    was entered applies initially) spans the whole sequence: with `o 2` the sequence plays
-    once as recorded, then once an octave up; direction modes apply across the expanded
-    pattern. Changing it while playing takes effect immediately. The display shows the
-    new count as a number.
-11. Leaving seq mode restores the arp's own octave setting to the value in force when seq
-    mode was entered.
+10. There is one octave setting, shared by the arp and seq, changed with A440 + Program
+    1–4 at any time and shown as `o N` for about a second, as in V5. Entering seq mode
+    takes over the setting in force. While a sequence exists (recording or active, arp on
+    or off) the setting spans the whole sequence: with `o 2` the sequence plays once as
+    recorded, then once an octave up; direction modes apply across the expanded pattern;
+    changes take effect immediately. The arp's own expansion is held at one octave while a
+    sequence exists — the wrapper expands instead — and a Program 1–4 press in seq mode
+    counts as using the A440 hold, so releasing A440 afterwards does not toggle the arp.
+    `[HW: bug seen 2025-10-06 — consumed presses left V5's "used" flag clear, so the A440
+    release toggled the arp; fixed]`
+11. Leaving seq mode (Program 6) hands the current setting back to the arp: whatever `o N`
+    was last selected — before, during or after recording — is what the arp plays with
+    afterwards, and `o N` is shown if the arp's value changes.
 
 #### Clear
 
@@ -299,6 +305,13 @@ A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and 
   most 16 per tick (32-entry ring; an overflow makes V5 disable the arp).
 - Every clear the wrapper issues (restart, end of recording, Program 6) is followed by a
   hold re‑assert when HOLD is active, for the same reason as in "Re-latch under HOLD".
+- V5 draws `o N` from its keyboard-scan hook whenever the octave byte changed during the
+  engine tick: stock 3-character display `0x20037F25` with codes `0x24` ('o'), `0x25`
+  (blank), N, then display timeout `0x4B0` ticks at `0x200895E8`; the wrapper draws the
+  seq-mode value the same way. V5's engine sets its "A440 used" byte (`0x20089508`, button
+  ctx + 8) only for Program/Bank/Group presses it receives and otherwise toggles the arp on
+  the A440 release (engine `0x200889BA`), so a Program 1–4 press the wrapper consumes sets
+  that byte itself.
 - Octave setting byte `0x200894DF` (engine + 0x307); Program ids 0–3 = octaves 1–4;
   id 5 = Program 6. Any Program press while A440 is held marks the A440 hold as "used",
   which suppresses the toggle on release; ids 5–7 are otherwise no-ops in V5.

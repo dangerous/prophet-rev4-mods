@@ -2,6 +2,7 @@
 #include "platform.h"
 
 enum { ID_A440 = 0x0F, ID_PROGRAM1 = 0, ID_PROGRAM4 = 3, ID_PROGRAM6 = 5, PRESS = 1, RELEASE = 2 };
+enum { CH_O = 0x24, CH_BLANK = 0x25 };   /* panel character codes: V5 shows octaves as 'o N' */
 enum { SRC_LOCAL = 1, SRC_MIDI = 2 };
 #define SILENT 0xFF                      /* sounding[]: dummy fed but out of range */
 
@@ -91,10 +92,9 @@ static void synth_button(int id)
 
 static void start_recording(seq_t *s)
 {
-    if (!s->active) {
+    if (!s->active) {                    /* entering seq mode: take over the setting in force */
         int o = plat_v5_octaves();
-        s->saved_v5_octaves = (uint8_t)(o < 1 ? 1 : o > 4 ? 4 : o);
-        s->octaves = s->saved_v5_octaves;
+        s->octaves = (uint8_t)(o < 1 ? 1 : o > 4 ? 4 : o);
     }
     stop_playback(s);                    /* old dummies are released by the ticks */
     s->recording = 1;
@@ -194,18 +194,21 @@ int seq_button(seq_t *s, int id, int value)
             clear_v5(s);
             s->active = 0;
             s->count = 0;
-            synth_button(s->saved_v5_octaves - 1);   /* restore the arp's own octave setting */
+            synth_button(s->octaves - 1);        /* hand the shared octave setting back to the arp */
         }
         return 0;                                 /* V5 marks A440 as used */
     }
     if (id >= ID_PROGRAM1 && id <= ID_PROGRAM4 && (s->active || s->recording)) {
         if (value == PRESS) {
             s->octaves = (uint8_t)(id + 1);
-            plat_display_int(s->octaves);
+            plat_display3(CH_O, CH_BLANK, s->octaves);   /* 'o N' for ~1 s, exactly as V5 shows it */
+            plat_display_hold();
+            plat_a440_mark_used();                /* V5 never sees this press: keep the A440
+                                                     release from toggling the arp */
             if (s->playing)
                 set_desired_all(s);
         }
-        return 1;                                 /* V5 stays at one octave */
+        return 1;                                 /* V5 stays at one octave; we expand instead */
     }
     return 0;
 }
