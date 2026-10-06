@@ -38,6 +38,8 @@ Manual verification on the instrument. Record results against the spec markers i
 
 - [ ] Arp on, HOLD on. Play C‑E‑G, release all. Arp keeps playing C‑E‑G.
 - [ ] Play D‑F‑A. Arp plays **D‑F‑A only** (not C‑D‑E‑F‑G‑A).
+- [ ] Release D‑F‑A: the arp **keeps playing** D‑F‑A (hold still latches after a re‑latch).
+      Repeat with a third chord.
 - [ ] Arp on, HOLD on. Play C‑E‑G, release C and E only (G held), play D: arp plays
       D‑E‑G… i.e. **adds** (C and E were released under hold, so C‑D‑E‑G).
 - [ ] Arp on, HOLD **off**. Play C‑E‑G, release all, play D: arp plays D only (as before).

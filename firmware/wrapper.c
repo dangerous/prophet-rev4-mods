@@ -27,6 +27,7 @@ const volatile uint32_t v5_iface[IF_COUNT] = {
     [IF_OUT_PTR] = 0x200894F0u,
     [IF_GLOBALS_FLAG] = 0x200895E5u,
     [IF_DISPLAY_INT] = 0x20037FF7u,
+    [IF_HOLD_EVENT] = 0x20088F37u,
 };
 
 typedef void (*note3_fn)(int, int, int);
@@ -53,6 +54,15 @@ void plat_v5_note(int src, int note, int vel)
         IF_FN(IF_LOCAL_NOTE, note3_fn)(1, note, vel);
 }
 void plat_v5_clear(void) { IF_FN(IF_ALL_NOTES_OFF, void_fn)(); }
+void plat_v5_hold(int on) { IF_FN(IF_HOLD_EVENT, int_fn)(on); }
+
+/* The arp's clear event also resets its own hold flag (engine + 0x302), so a clear issued
+ * while HOLD is active must be followed by "hold on" again (queue order: clear, hold). */
+static void relatch_clear(void)
+{
+    plat_v5_clear();
+    plat_v5_hold(1);                    /* re-latch only ever clears while HOLD is active */
+}
 void plat_v5_button(int id, int value) { IF_FN(IF_BUTTON, button_fn)(id, value); }
 int plat_v5_octaves(void) { return *IF_PTR(IF_OCTAVES_BYTE, volatile const uint8_t *); }
 int plat_globals_active(void) { return *IF_PTR(IF_GLOBALS_FLAG, volatile const uint8_t *) != 0; }
@@ -95,7 +105,7 @@ void hook_local_note(int src, int note, int vel)
     if (consumed)
         return;
     if (clear_first)
-        plat_v5_clear();
+        relatch_clear();
     IF_FN(IF_LOCAL_NOTE, note3_fn)(src, note, vel);
 }
 
@@ -107,7 +117,7 @@ void hook_midi_note_on(int src, int note, int vel)
     if (consumed)
         return;
     if (clear_first)
-        plat_v5_clear();
+        relatch_clear();
     IF_FN(IF_MIDI_NOTE_ON, note3_fn)(src, note, vel);
 }
 

@@ -70,10 +70,13 @@ static void start_playback(seq_t *s)
     s->playing = 1;
 }
 
-/* V5 forgets everything it holds; so must we. */
+/* V5 forgets everything it holds; so must we. Its clear also drops its own hold flag
+ * (engine + 0x302), so hold is re-asserted while HOLD is active. */
 static void clear_v5(seq_t *s)
 {
     plat_v5_clear();
+    if (s->hold)
+        plat_v5_hold(1);
     zero(s->fed, sizeof s->fed);
     stop_playback(s);
 }

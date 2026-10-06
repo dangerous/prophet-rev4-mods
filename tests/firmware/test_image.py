@@ -17,7 +17,7 @@ V5_ENTRIES = {
     "local_note": 0x20088C51, "midi_note_on": 0x20088CFD, "midi_note_off": 0x20088D2D,
     "hold": 0x20089081, "all_notes_off": 0x20088E83,
     "kbd_scan": 0x20088D53, "button": 0x20088EAB, "init_guard": 0x20088C81,
-    "orig_out": 0x20089061,
+    "orig_out": 0x20089061, "hold_event": 0x20088F37,
 }
 ARP_ENABLED_BYTE = 0x200894D8
 V5_DATA = {
@@ -47,6 +47,13 @@ class V5FactTests(unittest.TestCase):
                 continue
             self.assertTrue((hw & 0xFE00) == 0xB400 or hw == 0xE92D,   # push / push.w
                             "%s @0x%08X: %04x" % (name, addr, hw))
+
+    def test_arp_hold_flag_is_reset_by_its_clear(self):
+        # hold handler: strb.w r1, [r0, #0x302]; clear handler: strh.w r9(=0), [r4, #0x301]
+        self.assertEqual(build.read_ram(self.payload, 0x2008863C, 4), bytes.fromhex("80f80213"))
+        self.assertEqual(build.read_ram(self.payload, 0x200886BC, 4), bytes.fromhex("a4f80193"))
+        # the hold-event entry: push {r4, lr}; mov r4, r0; bl guard; ... enqueues event 5
+        self.assertEqual(build.read_ram(self.payload, 0x20088F36, 4), bytes.fromhex("10b50446"))
 
     def test_hold_hook_forwards_r4_and_calls_stock_post(self):
         code = build.read_ram(self.payload, 0x20089080, 0x14)
@@ -121,7 +128,7 @@ class BuiltImageTests(unittest.TestCase):
              V5_ENTRIES["all_notes_off"], V5_ENTRIES["kbd_scan"], V5_ENTRIES["button"],
              V5_ENTRIES["init_guard"], V5_ENTRIES["orig_out"], 0x20089081,
              ARP_ENABLED_BYTE, V5_DATA["octaves"], V5_DATA["out_ptr"], V5_DATA["globals_flag"],
-             STOCK_DISPLAY_INT]
+             STOCK_DISPLAY_INT, V5_ENTRIES["hold_event"]]
 
     def test_interface_table_is_exactly_the_known_addresses(self):
         table = self.symbols["v5_iface"] & ~1

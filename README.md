@@ -17,15 +17,16 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
   latches it; the first key after all‑up restarts it. A440 + Program 6 clears it.
   `[HW: unverified]`
 
-## Deliverables (`dist/`, checksums in `dist/SHA256SUMS`)
+## Deliverable (`dist/`, checksum in `dist/SHA256SUMS`)
 
-| File | Contents | Changes vs V5 |
-|---|---|---|
-| `prophet10_v5_relatch.syx` | re‑latch only (built from commit `5cf3f41`) | 4 `BL` retargets, 726 B wrapper |
-| `prophet10_v5_relatch_seq.syx` | re‑latch + seq (`make image` at HEAD) | 7 `BL` retargets, ~2.1 KB wrapper |
+`prophet10_v5_relatch_seq.syx` — re‑latch + seq, `make image` at HEAD: 7 `BL` retargets
+and a ~2.1 KB wrapper. Install exactly like V5 (USB, SysEx Librarian).
 
-Install exactly like V5 (USB, SysEx Librarian). The conservative path is the re‑latch‑only
-image first, then the combined one.
+History: a re‑latch‑only image (commit `5cf3f41`) was installed on a Prophet‑10 on
+2025‑10‑06 and proved the loader path, boot, the hook mechanism and the HOLD stub; it had
+a bug (the arp's clear also dropped the arp's own hold flag, so a re‑latched chord did not
+stay latched) which is fixed from commit `ed2cebc`'s successor onward. That file is no
+longer shipped.
 
 In both cases the wrapper code lives in the zero tail of V5's own RAM‑window record at
 `0x20089600–0x2008A000`; the SHARC image, the stock startup code and every other byte are

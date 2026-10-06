@@ -22,6 +22,7 @@ enum {
     IF_OUT_PTR,           /* 0x200894F0 engine + 0x318: note output function pointer */
     IF_GLOBALS_FLAG,      /* 0x200895E5 V5 hook state + 0x415 */
     IF_DISPLAY_INT,       /* 0x20037FF7 stock 3-digit integer display */
+    IF_HOLD_EVENT,        /* 0x20088F37 V5 hold-event entry: (state) -> enqueue hold on/off */
     IF_COUNT
 };
 

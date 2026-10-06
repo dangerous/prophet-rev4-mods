@@ -11,7 +11,7 @@ static int failures, checks;
     printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
 
 /* ---- fake platform ------------------------------------------------------------------ */
-enum { EV_NOTE, EV_CLEAR, EV_BUTTON, EV_DISPLAY, EV_OUT };
+enum { EV_NOTE, EV_CLEAR, EV_BUTTON, EV_DISPLAY, EV_OUT, EV_HOLD };
 typedef struct { int type, a, b, c, d; } ev_t;
 static ev_t log_[4096];
 static int nlog;
@@ -23,6 +23,7 @@ static void push(int t, int a, int b, int c, int d) {
 int  plat_arp_enabled(void) { return fake_arp_enabled; }
 void plat_v5_note(int src, int note, int vel) { push(EV_NOTE, src, note, vel, 0); }
 void plat_v5_clear(void) { push(EV_CLEAR, 0, 0, 0, 0); }
+void plat_v5_hold(int on) { push(EV_HOLD, on, 0, 0, 0); }
 void plat_v5_button(int id, int value) { push(EV_BUTTON, id, value, 0, 0); }
 int  plat_v5_octaves(void) { return fake_v5_octaves; }
 int  plat_globals_active(void) { return fake_globals; }
@@ -402,6 +403,49 @@ static void test_fed_dummy_with_no_steps_cannot_hang(void) {
     CHECK(count_type(EV_OUT) == 0);
 }
 
+static int hold_reasserted_after_clear(void) {
+    /* exactly one EV_CLEAR, followed (later in the log) by exactly one EV_HOLD(1) */
+    int clears = 0, holds = 0, clear_at = -1, hold_at = -1;
+    for (int i = 0; i < nlog; i++) {
+        if (log_[i].type == EV_CLEAR) { clears++; clear_at = i; }
+        if (log_[i].type == EV_HOLD) { holds++; hold_at = i; if (log_[i].a != 1) return 0; }
+    }
+    return clears == 1 && holds == 1 && hold_at > clear_at;
+}
+
+static void test_clears_reassert_hold_to_the_arp(void) {
+    /* the arp's clear event also resets its own hold flag (V5 CC123 semantics) */
+    reset();
+    record_ceg();
+    seq_hold(&s, 1);
+    seq_note(&s, LOCAL, 62, 100); drain(1); seq_note(&s, LOCAL, 62, 0);
+    clear_log();
+    seq_note(&s, LOCAL, 65, 100);                             /* restart under hold */
+    CHECK(hold_reasserted_after_clear());
+
+    clear_log();
+    seq_button(&s, A440, PRESS);
+    seq_button(&s, PROGRAM6, PRESS);                          /* clear via Program 6 under hold */
+    CHECK(hold_reasserted_after_clear());
+    seq_button(&s, A440, RELEASE);
+
+    clear_log();
+    seq_button(&s, A440, PRESS);
+    seq_note(&s, LOCAL, 60, 100); seq_note(&s, LOCAL, 60, 0);
+    seq_button(&s, A440, RELEASE);                            /* end of recording under hold */
+    CHECK(hold_reasserted_after_clear());
+}
+
+static void test_clears_do_not_touch_hold_when_inactive(void) {
+    reset();
+    record_ceg();                                             /* hold off: clear at end of recording */
+    CHECK(count_type(EV_CLEAR) == 1 && count_type(EV_HOLD) == 0);
+    seq_button(&s, A440, PRESS);
+    seq_button(&s, PROGRAM6, PRESS);
+    seq_button(&s, A440, RELEASE);
+    CHECK(count_type(EV_CLEAR) == 2 && count_type(EV_HOLD) == 0);
+}
+
 static void test_state_fits_and_is_zero_initialised(void) {
     seq_t z;
     memset(&z, 0, sizeof z);
@@ -433,6 +477,8 @@ int main(void) {
     test_globals_active_suppresses_synthetic_buttons();
     test_stale_dummy_events_while_stopping_are_silent();
     test_fed_dummy_with_no_steps_cannot_hang();
+    test_clears_reassert_hold_to_the_arp();
+    test_clears_do_not_touch_hold_when_inactive();
     test_state_fits_and_is_zero_initialised();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

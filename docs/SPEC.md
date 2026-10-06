@@ -167,7 +167,11 @@ be non-empty.
    then on only keys still down count as latched.
 5. All note events are forwarded to the arp exactly as before, after any clear.
 6. Realisation: the clear uses the arp's own All‑Notes‑Off path (stock all‑notes‑off
-   followed by the arp's clear event), i.e. the same thing MIDI CC 123 does in V5.
+   followed by the arp's clear event), i.e. the same thing MIDI CC 123 does in V5. That
+   clear also resets the arp's **own hold flag** (engine + 0x302; CC 123 semantics), so
+   immediately after it the wrapper re‑asserts "hold on" through V5's hold‑event entry
+   (`0x20088F37`, what its HOLD hook calls). Queue order: clear, hold on, new notes. The
+   re‑latched chord therefore stays latched. `[HW: bug seen 2025-10-06 before this fix]`
 
 Wrapper facts this depends on (V5 as shipped; each is asserted by a test on the fixture):
 arp‑enabled byte at `0x200894D8`; V5 entry points local‑note `0x20088C51`, MIDI note‑on
@@ -236,6 +240,8 @@ A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and 
   real notes pass through unchanged.
 - Dummies are fed through the V5 local-note entry and drained via the V5 event queue, at
   most 16 per tick (32-entry ring; an overflow makes V5 disable the arp).
+- Every clear the wrapper issues (restart, end of recording, Program 6) is followed by a
+  hold re‑assert when HOLD is active, for the same reason as in "Re-latch under HOLD".
 - Octave setting byte `0x200894DF` (engine + 0x307); Program ids 0–3 = octaves 1–4;
   id 5 = Program 6. Any Program press while A440 is held marks the A440 hold as "used",
   which suppresses the toggle on release; ids 5–7 are otherwise no-ops in V5.
