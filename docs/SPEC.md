@@ -172,11 +172,76 @@ be non-empty.
 Wrapper facts this depends on (V5 as shipped; each is asserted by a test on the fixture):
 arp‑enabled byte at `0x200894D8`; V5 entry points local‑note `0x20088C51`, MIDI note‑on
 `0x20088CFD`, MIDI note‑off `0x20088D2D`, hold `0x20089081` (reads the new hold state from
-`r4` as left by the stock caller), all‑notes‑off `0x20088E83`. Wrapper state lives at
-`0x20089F00` inside the wrapper window and is zero after every boot.
+`r4` as left by the stock caller), all‑notes‑off `0x20088E83`. Wrapper state lives in
+`0x20089E80–0x2008A000` inside the wrapper window and is zero after every boot.
 
-### Seq (step-recorded sequence)
-_Not yet specced._
+### Seq (step-recorded sequence) `[HW: unverified]`
+
+A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and playing.
+*Seq mode* is active exactly when a sequence exists. *Keys*, *HOLD active* and
+*keys down* are as in "Re-latch under HOLD" (local keys and MIDI-in notes count alike).
+
+#### Recording
+
+1. The first note-on while A440 is held starts a new recording, discarding any existing
+   sequence (and stopping its playback). Each further note-on while A440 stays held
+   appends a step; after 32 steps further note-ons are ignored. Key releases are ignored
+   while recording. The display shows the step count after each recorded step.
+2. Notes played while recording sound as they would have without this wrapper (they reach
+   the arp normally) and their later releases are forwarded, so nothing sticks.
+3. Releasing A440 ends the recording. If at least one step was recorded, seq mode becomes
+   active and **that A440 release does not toggle the arp**. If nothing was recorded,
+   A440 behaves exactly as in V5 (a tap toggles the arp; held + buttons = settings).
+4. Buttons keep working while A440 is held during recording (mode, clock source).
+
+#### Playback (seq mode active, arp enabled)
+
+5. The sequence plays while at least one key is down and, with HOLD active, after all
+   keys are released until the next key — the re-latch rule: the first key after all keys
+   were released restarts the sequence from step 1. Each step sounds the recorded pitch
+   transposed by *(trigger key − first recorded pitch)*, at the recorded velocity. The
+   trigger key is the most recently pressed key; a new trigger takes effect from the next
+   step and stays in effect even if that key is released while others remain down.
+6. A step whose transposed pitch falls outside 0–127 is silent.
+7. Direction, tempo, clock source and MIDI sync are the arp's: `UP` plays the steps in
+   recorded order, `dn` reversed, `Ud` forward then back, `rnd` shuffled; one step per arp
+   step.
+8. With the arp disabled, keys play normally (no sequence runs). With HOLD inactive,
+   releasing all keys stops the sequence; switching HOLD off with no keys down stops it.
+9. MIDI CC 123 (All Notes Off) stops the sequence; the next key starts it again.
+
+#### Octaves
+
+10. In seq mode the octave setting (A440 + Program 1–4; the setting in force when seq mode
+    was entered applies initially) spans the whole sequence: with `o 2` the sequence plays
+    once as recorded, then once an octave up; direction modes apply across the expanded
+    pattern. Changing it while playing takes effect immediately. The display shows the
+    new count as a number.
+11. Leaving seq mode restores the arp's own octave setting to the value in force when seq
+    mode was entered.
+
+#### Clear
+
+12. A440 + Program 6 clears the sequence and leaves seq mode: normal arp behaviour
+    (including re-latch) resumes; the A440 release afterwards does not toggle the arp.
+13. Power-up: no sequence.
+
+#### Realisation (V5 facts asserted by tests)
+
+- The engine emits every step and every pass-through note through a function pointer at
+  `0x200894F0` (context word `0x200894F4`) with `(ctx, src, on, note, velocity)`; V5
+  installs `0x20089061` there during its lazy init (`0x20088C81`). The wrapper installs
+  its own output function after that init, from the keyboard-scan tick, and substitutes
+  **dummy notes** `k + N·m` (step `k`, octave `m`, `N` = step count) for recorded pitches;
+  real notes pass through unchanged.
+- Dummies are fed through the V5 local-note entry and drained via the V5 event queue, at
+  most 16 per tick (32-entry ring; an overflow makes V5 disable the arp).
+- Octave setting byte `0x200894DF` (engine + 0x307); Program ids 0–3 = octaves 1–4;
+  id 5 = Program 6. Any Program press while A440 is held marks the A440 hold as "used",
+  which suppresses the toggle on release; ids 5–7 are otherwise no-ops in V5.
+- Hooks: keyboard-scan tick `0x2003BE9C → 0x20088D53`, panel buttons `0x2003C244 →
+  0x20088EAB` `(id, value)`, CC 123 `0x2003B294 → 0x20088E83`, in addition to the
+  re-latch hooks. Wrapper state occupies `0x20089E80–0x2008A000`.
 
 ### Safety invariants
 _Not yet specced._

@@ -16,9 +16,15 @@ OUT = ROOT / "build" / "test-image"
 V5_ENTRIES = {
     "local_note": 0x20088C51, "midi_note_on": 0x20088CFD, "midi_note_off": 0x20088D2D,
     "hold": 0x20089081, "all_notes_off": 0x20088E83,
+    "kbd_scan": 0x20088D53, "button": 0x20088EAB, "init_guard": 0x20088C81,
+    "orig_out": 0x20089061,
 }
 ARP_ENABLED_BYTE = 0x200894D8
-STATE_BASE = 0x20089F00
+V5_DATA = {
+    "octaves": 0x200894DF, "out_ptr": 0x200894F0, "globals_flag": 0x200895E5,
+}
+STOCK_DISPLAY_INT = 0x20037FF7
+STATE_BASE = 0x20089E80
 WINDOW_LO, WINDOW_HI = 0x20089600, 0x2008A000
 
 
@@ -36,7 +42,11 @@ class V5FactTests(unittest.TestCase):
     def test_v5_entry_points_start_with_a_push(self):
         for name, addr in V5_ENTRIES.items():
             hw = struct.unpack("<H", build.read_ram(self.payload, addr & ~1, 2))[0]
-            self.assertEqual(hw & 0xFE00, 0xB400, "%s @0x%08X: %04x" % (name, addr, hw))
+            if name == "orig_out":   # a bare trampoline: movw r12, #0xe95d
+                self.assertTrue(thumb.is_movw(hw), "%s @0x%08X: %04x" % (name, addr, hw))
+                continue
+            self.assertTrue((hw & 0xFE00) == 0xB400 or hw == 0xE92D,   # push / push.w
+                            "%s @0x%08X: %04x" % (name, addr, hw))
 
     def test_hold_hook_forwards_r4_and_calls_stock_post(self):
         code = build.read_ram(self.payload, 0x20089080, 0x14)
@@ -106,17 +116,41 @@ class BuiltImageTests(unittest.TestCase):
         self.assertEqual(build.read_ram(self.img, STATE_BASE, WINDOW_HI - STATE_BASE),
                          bytes(WINDOW_HI - STATE_BASE))
 
-    def test_wrapper_references_only_known_addresses(self):
+    # firmware/v5_iface.h order
+    IFACE = [V5_ENTRIES["local_note"], V5_ENTRIES["midi_note_on"], V5_ENTRIES["midi_note_off"],
+             V5_ENTRIES["all_notes_off"], V5_ENTRIES["kbd_scan"], V5_ENTRIES["button"],
+             V5_ENTRIES["init_guard"], V5_ENTRIES["orig_out"], 0x20089081,
+             ARP_ENABLED_BYTE, V5_DATA["octaves"], V5_DATA["out_ptr"], V5_DATA["globals_flag"],
+             STOCK_DISPLAY_INT]
+
+    def test_interface_table_is_exactly_the_known_addresses(self):
+        table = self.symbols["v5_iface"] & ~1
+        self.assertTrue(WINDOW_LO <= table < STATE_BASE)
+        words = struct.unpack_from("<%dI" % len(self.IFACE), self.wrapper, table - WINDOW_LO)
+        self.assertEqual([hex(w) for w in words], [hex(a) for a in self.IFACE])
+        # and the word after the table is not another address into V5/stock (table is complete)
+        after = struct.unpack_from("<I", self.wrapper + b"\0" * 4, table - WINDOW_LO + 4 * len(self.IFACE))[0]
+        self.assertNotIn(after, set(self.IFACE))
+
+    def test_wrapper_materialises_no_unknown_addresses(self):
         refs = thumb.find_absolute_addresses(self.wrapper, WINDOW_LO)
-        allowed = set(V5_ENTRIES.values()) | {ARP_ENABLED_BYTE}
+        allowed = set(self.IFACE)
         allowed |= set(range(STATE_BASE, WINDOW_HI))      # its own state
-        allowed |= set(range(WINDOW_LO, STATE_BASE))      # its own code
+        allowed |= set(range(WINDOW_LO, STATE_BASE))      # its own code and table
         unknown = sorted(a for a in refs if a not in allowed)
         self.assertEqual(unknown, [], [hex(a) for a in unknown])
-        for a in (V5_ENTRIES["local_note"], V5_ENTRIES["midi_note_on"],
-                  V5_ENTRIES["midi_note_off"], V5_ENTRIES["hold"],
-                  V5_ENTRIES["all_notes_off"], ARP_ENABLED_BYTE):
-            self.assertIn(a, refs, hex(a))
+        self.assertIn(self.symbols["v5_iface"] & ~1, refs)   # the table itself is referenced
+
+    def test_v5_output_pointer_facts(self):
+        # init stores the output fn (movw/movt #0x9061/#0x2008 into r1) and the engine is
+        # state+8, so the pointer lives at engine+0x318 and its ctx at engine+0x31c.
+        code = build.read_ram(self.base, 0x20088CA4, 8)
+        hw = struct.unpack("<4H", code)
+        self.assertEqual((thumb.movw_imm16(hw[0], hw[1]), thumb.movw_imm16(hw[2], hw[3])), (0x9061, 0x2008))
+        self.assertEqual(V5_DATA["out_ptr"], 0x200891D0 + 8 + 0x318)
+        self.assertEqual(V5_DATA["octaves"], 0x200891D0 + 8 + 0x307)
+        # octave handler stores its argument at engine+0x307: strb.w r1, [r4, #0x307]
+        self.assertEqual(build.read_ram(self.base, 0x2008826E, 4), bytes.fromhex("84f80713"))
 
     def test_wrapper_has_no_data_sections_and_contains_no_privileged_instructions(self):
         info = fw.inspect_object(OUT / "wrapper.o")

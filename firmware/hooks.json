@@ -6,5 +6,11 @@
   {"site": "0x2003B032", "expect": "0x20088D2D", "symbol": "hook_midi_note_off",
    "note": "stock MIDI parser 0x80: note_off(src=2, note) -> V5 MIDI note-off hook"},
   {"site": "0x200396CA", "expect": "0x20089081", "symbol": "hook_hold",
-   "note": "stock HOLD handler: post(msg) with r4 = new hold state -> V5 hold hook"}
+   "note": "stock HOLD handler: post(msg) with r4 = new hold state -> V5 hold hook"},
+  {"site": "0x2003BE9C", "expect": "0x20088D53", "symbol": "hook_kbd_scan",
+   "note": "stock keyboard FIFO poll (1 kHz): count = fifo_count(fifo) -> V5 tick hook"},
+  {"site": "0x2003C244", "expect": "0x20088EAB", "symbol": "hook_button",
+   "note": "stock panel button handler: (id, value 1=press 2=release) -> V5 button hook"},
+  {"site": "0x2003B294", "expect": "0x20088E83", "symbol": "hook_cc123",
+   "note": "stock MIDI CC 123 All Notes Off -> V5 all-notes-off hook"}
 ]

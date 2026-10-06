@@ -50,6 +50,25 @@ Manual verification on the instrument. Record results against the spec markers i
       play a key → fresh start.
 - [ ] HOLD on → off → on with nothing held, then play: no glitch, chord starts normally.
 
+## Seq (spec "Seq") — combined image only
+
+- [ ] Arp on, HOLD off. Hold A440; play C, E, G, E (one at a time, any timing); display
+      counts `1 2 3 4`; the notes sound as you play them. Release A440 — the arp does
+      **not** toggle.
+- [ ] Press and hold C: hear C E G E repeating at the arp tempo. Release: stops.
+- [ ] Press D: D F# A F#. While holding D press F: from the next step the pattern is
+      transposed to F. Release F (D still down): stays on F.
+- [ ] HOLD on. Press C, release: keeps playing. Press G: restarts from step 1 on G.
+- [ ] A440 + Bank / Group: `dn` plays E G E C, `rnd` shuffles, `Ud` bounces.
+- [ ] A440 + Program 2: display `2`; the pattern plays C E G E then an octave up.
+      A440 + Program 1 back to one octave.
+- [ ] Glide Rate still sets tempo; `Syn` follows DAW clock; start/stop as with the arp.
+- [ ] A440 + Program 6: sequence gone; keys play the normal arp again; octave setting back
+      to what it was before recording (A440 + Program 1–4 shows `o N` as in V5).
+- [ ] Hold A440, play 3 notes, release: a new sequence replaces the old one.
+- [ ] Arp off, sequence exists: keys play normally (no sequence). Tap A440: sequence plays.
+- [ ] Record from MIDI-in (DAW notes) while holding A440; trigger from the keyboard.
+
 ## If something is wrong
 
 - The wrapper only runs inside the arp's hook paths. If a hook misbehaves, the synth still

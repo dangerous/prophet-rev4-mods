@@ -11,12 +11,13 @@ from typing import Dict, Tuple
 from . import fwlink
 
 WRAPPER_BASE = 0x20089600
-STATE_BASE = 0x20089F00          # code+rodata must end at or below this
-REQUIRED_SYMBOLS = ("hook_local_note", "hook_midi_note_on", "hook_midi_note_off", "hook_hold")
+STATE_BASE = 0x20089E80          # code+rodata must end at or below this
+REQUIRED_SYMBOLS = ("hook_local_note", "hook_midi_note_on", "hook_midi_note_off", "hook_hold",
+                    "hook_kbd_scan", "hook_button", "hook_cc123", "wrapper_output")
 
 CFLAGS = [
     "-target", "thumbv7a-none-eabi", "-mcpu=cortex-a5", "-mthumb", "-mfloat-abi=soft",
-    "-O2", "-ffreestanding", "-fno-builtin", "-nostdlib", "-fno-exceptions",
+    "-Oz", "-ffreestanding", "-fno-builtin", "-nostdlib", "-fno-exceptions",
     "-fno-unwind-tables", "-fno-asynchronous-unwind-tables", "-fno-stack-protector",
     "-fomit-frame-pointer", "-std=c11", "-Wall", "-Wextra", "-Werror",
 ]
