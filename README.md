@@ -1,4 +1,4 @@
-# prophet-arp-mods
+# prophet-rev4-mods
 
 Wrapper firmware for the Sequential Prophet‑5/10 Rev4, layered on the third‑party
 **Arp Mod V5** (an unofficial patch of Main OS 2.1.0), plus the tooling that unpacks,
@@ -17,18 +17,18 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
 
 - **Re‑latch under HOLD** — with the arp on and HOLD active, the first key you play after
   releasing all keys starts a fresh chord instead of adding to the latched one.
-  `[HW: verified 2025‑10‑06]`
+  `[HW: verified 2026‑10‑06]`
 - **Seq** — hold A440 and play to record up to 32 steps (releases ignored, so timing is
   free). Then play a key: the sequence runs at the arp's tempo/sync, transposed from the
   first recorded note, in the arp's direction mode, over the arp's octave range. HOLD
   latches it; the first key after all‑up restarts it. A440 + Program 6 clears it.
-  `[HW: verified 2025‑10‑06]`
+  `[HW: verified 2026‑10‑06]`
 - **Note value** — A440 + Program 7 (shorter) / Program 8 (longer) steps through 1/32,
   1/16T, 1/16, 1/8T, 1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1, 2 bars, 4 bars for the arp and
   seq, on internal clock and under MIDI sync. Display shows e.g. `16t`, `8d`, `2b`.
   Default 1/8 (V5's behaviour). `[HW: unverified]`
 - **Button id readout** — hold A440 and press any button the arp doesn't use: its id is
-  shown for a second. For mapping panel button ids. `[HW: verified 2025‑10‑07]`
+  shown for a second. For mapping panel button ids. `[HW: verified 2026‑10‑07]`
 - **Keyboard octave shift** — hold the filter Keyboard Amount button, Bank = up, Group =
   down (±2; both together = 0); shown on the display. Applies to the keys you play,
   including what goes to MIDI Out; a plain tap still cycles keyboard tracking (LED on
@@ -58,7 +58,7 @@ out of the MIDI‑byte path that a USB re‑flash uses; the full variant adds th
 and has not been installed on hardware yet. [`dist/README.md`](dist/README.md) explains the
 checksums.
 
-History: a re‑latch‑only image was installed on a Prophet‑10 Rev4 on 2025‑10‑06 and proved
+History: a re‑latch‑only image was installed on a Prophet‑10 Rev4 on 2026‑10‑06 and proved
 the loader path, boot, the hook mechanism and the HOLD stub; it had a bug (the arp's clear
 also dropped the arp's own hold flag, so a re‑latched chord did not stay latched), fixed by
 "Re‑assert hold to the arp after every clear". The `_internal` image has been installed

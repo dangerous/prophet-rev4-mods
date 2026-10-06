@@ -1,4 +1,4 @@
-# prophet-arp-mods — Spec
+# prophet-rev4-mods — Spec
 
 ## Overview
 
@@ -246,7 +246,7 @@ Enforced by tests on every built image against its base:
 6. Every hook site lies inside the stock code record and, before patching, holds exactly
    what the hook list says it holds (a `BL` to the named V5 entry, or the named word).
 
-### Re-latch under HOLD `[HW: verified 2025-10-06, Prophet-10 Rev4 — incl. the hold re-assert fix]`
+### Re-latch under HOLD `[HW: verified 2026-10-06, Prophet-10 Rev4 — incl. the hold re-assert fix]`
 
 Terms: *HOLD active* = the HOLD button is lit, or the sustain pedal is down with Global
 Release/Sustain set to `HLd` (both reach the same stock hold handler). *Keys down* = the
@@ -271,7 +271,7 @@ be non-empty.
    clear also resets the arp's **own hold flag** (engine + 0x302; CC 123 semantics), so
    immediately after it the wrapper re‑asserts "hold on" through V5's hold‑event entry
    (`0x20088F37`, what its HOLD hook calls). Queue order: clear, hold on, new notes. The
-   re‑latched chord therefore stays latched. `[HW: bug seen 2025-10-06 before this fix]`
+   re‑latched chord therefore stays latched. `[HW: bug seen 2026-10-06 before this fix]`
 
 Wrapper facts this depends on (V5 as shipped; each is asserted by a test on the fixture):
 arp‑enabled byte at `0x200894D8`; V5 entry points local‑note `0x20088C51`, MIDI note‑on
@@ -279,7 +279,7 @@ arp‑enabled byte at `0x200894D8`; V5 entry points local‑note `0x20088C51`, M
 `r4` as left by the stock caller), all‑notes‑off `0x20088E83`. Wrapper state lives in
 `0x20089E80–0x2008A000` inside the wrapper window and is zero after every boot.
 
-### Seq (step-recorded sequence) `[HW: verified 2025-10-06, Prophet-10 Rev4 — record, transposed playback, clear; octaves and MIDI-in recording not yet exercised]`
+### Seq (step-recorded sequence) `[HW: verified 2026-10-06, Prophet-10 Rev4 — record, transposed playback, clear; octaves and MIDI-in recording not yet exercised]`
 
 A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and playing.
 *Seq mode* is active exactly when a sequence exists. *Keys*, *HOLD active* and
@@ -324,7 +324,7 @@ A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and 
     changes take effect immediately. The arp's own expansion is held at one octave while a
     sequence exists — the wrapper expands instead — and a Program 1–4 press in seq mode
     counts as using the A440 hold, so releasing A440 afterwards does not toggle the arp.
-    `[HW: bug seen 2025-10-06 — consumed presses left V5's "used" flag clear, so the A440
+    `[HW: bug seen 2026-10-06 — consumed presses left V5's "used" flag clear, so the A440
     release toggled the arp; fixed]`
 11. Leaving seq mode (Program 6) hands the current setting back to the arp: whatever `o N`
     was last selected — before, during or after recording — is what the arp plays with
@@ -361,7 +361,7 @@ A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and 
 - Panel button events arrive as `(id, value)` with value 1 = press, 2 = release and
   **3 = still held** (the stock gate `0x20036114` passes 1–3; repeats arrive while a
   button is down). Only 1 and 2 change wrapper state, as in V5.
-  `[HW: bug seen 2025-10-06 — a repeat reset the A440-held flag; fixed]`
+  `[HW: bug seen 2026-10-06 — a repeat reset the A440-held flag; fixed]`
 - Hooks: keyboard-scan tick `0x2003BE9C → 0x20088D53`, panel buttons `0x2003C244 →
   0x20088EAB` `(id, value)`, CC 123 `0x2003B294 → 0x20088E83`, in addition to the
   re-latch hooks. Wrapper state occupies `0x20089E80–0x2008A000`.

@@ -5,7 +5,7 @@ behavioural source of truth; this file is the engineering context around it.
 
 ## Where things are
 
-- Repo `~/git/prophet-arp-mods`, branch `main` fast-forwarded from the worktree branch
+- Repo `github.com/dangerous/prophet-rev4-mods` (local folder `~/git/prophet-arp-mods`), branch `main` fast-forwarded from the worktree branch
   `relatch-seq` at `.claude/worktrees/relatch-seq` (all work happens there; `main` is merged
   with plain `git merge` from the root). An agent worktree
   `.claude/worktrees/agent-a8014a76fdbbe9479` holds the already-integrated octave fix; safe
