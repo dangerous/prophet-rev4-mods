@@ -110,8 +110,8 @@ Manual verification on the instrument. Record results against the spec markers i
 
 ## Button id readout (spec "Button id readout")
 
-- [ ] Hold A440, press the **Keyboard** button: display shows a number — note it down.
-      Also try Hold, Preset, Record, Unison and any P10‑only buttons and note each id.
+- [ ] Hold A440, press a button the arp doesn't use (e.g. Osc B Keyboard = 36, Hold,
+      Preset, Record, Unison): display shows its id — note it down.
 - [ ] Release A440: the arp does not toggle; the buttons do nothing else while A440 is held.
 
 ## If something is wrong

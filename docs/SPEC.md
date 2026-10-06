@@ -211,9 +211,9 @@ V5's window record at `0x20089600`; that layout was verified on hardware.
 While A440 is held, pressing a panel button that neither V5 nor the wrapper assigns
 (anything other than Program 1–8, Bank, Group, Keyboard Amount (id 8) and the GLOBALS
 modifier id `0x19`) shows
-that button's id on the display for about a second and is otherwise ignored. A one-time
-aid for mapping the Prophet-10's extra buttons; V5 passed such presses to stock, where
-they had no defined meaning while A440 was held.
+that button's id on the display for about a second and is otherwise ignored. An aid for
+mapping panel button ids when designing new combinations; V5 passed such presses to
+stock, where they had no defined meaning while A440 was held.
 
 ### Safety invariants
 

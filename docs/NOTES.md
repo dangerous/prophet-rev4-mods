@@ -52,8 +52,9 @@ behavioural source of truth; this file is the engineering context around it.
   `0x20088000–0x2008A000`; wrapper record `0x2008A000–0x2008C000`.
 - Button events `(id, value)`: 1 press, 2 release, **3 held-repeat** (gate `0x20036114`
   passes 1–3). Known ids: Program 1–8 = 0–7, A440 = 0x0F, GLOBALS(?) = 0x19, Group = 0x20,
-  Bank = 0x28, **Keyboard (P10, has stock Group/Bank combos) = 36 (0x24)**, **filter
-  Keyboard Amount = 8** (cycles off/half/full on press; LED follows).
+  Bank = 0x28, **Osc B Keyboard (key follow; has stock Group/Bank combos) = 36 (0x24)**,
+  **filter Keyboard Amount = 8** (cycles off/half/full on press; LED follows). The P10's
+  panel is the same as the P5's — no extra buttons.
 - Display: `0x20037F25(c0,c1,c2)` 3 chars; `0x20037FF7(int)` integer (negatives shown).
   Codes: digits 0–9 = 0–9, A=0x0A b=0x0B d=0x0D E=0x0E F=0x0F i=0x12 L=0x15 n=0x17 O=0x18
   P=0x19 r=0x1B S=0x1C t=0x1D U=0x1E y=0x22 o=0x24 blank=0x25 '-'=0x26.
