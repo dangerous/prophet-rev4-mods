@@ -3,3 +3,7 @@
 build/
 __pycache__/
 .claude/worktrees/
+fixtures/*.syx
+fixtures/*.pdf
+fixtures/*.txt
+dist/*.syx

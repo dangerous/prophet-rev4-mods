@@ -10,11 +10,12 @@ Thumb-2, RAM-loaded) layered on the third-party Arp Mod V5, plus a Python CLI th
 unpacks, patches and re-packs the OS SysEx image.
 
 ## Layout
-- `fixtures/` — official Main OS 2.1.0, Panel OS 1.1.3 and the V5 arp mod `.syx` files as
-  received. Never modified; tests read them.
+- `fixtures/` — the official Main OS 2.1.0, Panel OS 1.1.3 and V5 arp mod `.syx` files go here;
+  they are copyrighted and not committed (see `fixtures/README.md`, `fixtures/SHA256SUMS`).
+  Tests read them and skip, with a warning, when they are missing.
 - `tools/` — Python packing/patching CLI (`python3 -m tools ...`).
 - `firmware/` — wrapper C sources, built freestanding for `thumbv7a` at a fixed address.
-- `tests/` — `pytest` suites for the tooling and the built image; host-side C harness for
+- `tests/` — `unittest` suites for the tooling and the built image; host-side C harness for
   the wrapper behaviour.
 - `docs/` — spec, reverse-engineering notes, hardware test checklist.
 
@@ -35,6 +36,6 @@ unpacks, patches and re-packs the OS SysEx image.
   markers.
 
 ## Conventions
-- Python: stdlib only, 3.9+, `pytest`. C: C11, no libc dependence in firmware sources.
+- Python: stdlib only, 3.9+, `unittest`. C: C11, no libc dependence in firmware sources.
 - Never commit anything under `build/`. Never edit `fixtures/`.
 - Flashing is a human step; the tools only produce files.

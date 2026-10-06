@@ -13,7 +13,8 @@ behavioural source of truth; this file is the engineering context around it.
 - `dist/` holds the two installable images + `SHA256SUMS` (written from inside `dist/`, so
   verify with `cd dist && shasum -a 256 -c SHA256SUMS`). **Never delete dist files.**
 - Original inputs in `~/git/prophet` (stock 2.1.0, Panel 1.1.3, V5 arp mod, its PDF guide,
-  an 800 MB Overview.MOV); copies of the `.syx`/guide in `fixtures/`.
+  an 800 MB Overview.MOV); copies of the `.syx`/guide in `fixtures/` (git-ignored — the
+  repo ships only `fixtures/README.md` + `SHA256SUMS`; history was rewritten to drop them).
 - Scratchpad (session-only, may be gone): decoded images and full disassembly listings
   (`orig.asm`, `hack.asm`, `blob.asm`); regenerate with `python3 -m tools unpack` + the ELF
   wrapper trick (write a minimal ELF around a flat binary and run Apple's

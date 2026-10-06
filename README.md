@@ -10,7 +10,7 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
 
 - **Re‑latch under HOLD** — with the arp on and HOLD active, the first key you play after
   releasing all keys starts a fresh chord instead of adding to the latched one.
-  `[HW: unverified]`
+  `[HW: verified 2025‑10‑06]`
 - **Seq** — hold A440 and play to record up to 32 steps (releases ignored, so timing is
   free). Then play a key: the sequence runs at the arp's tempo/sync, transposed from the
   first recorded note, in the arp's direction mode, over the arp's octave range. HOLD
@@ -27,47 +27,59 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
   including what goes to MIDI Out; a plain tap still cycles keyboard tracking (LED on
   release). `[HW: unverified]`
 
-## Deliverables (`dist/`, checksums in `dist/SHA256SUMS`)
+## Inputs you must supply
 
-Both are re‑latch + seq + note values + readout, built at HEAD with the same wrapper
-(one appended 8 KB record at `0x2008A000`, ~2.9 KB code) and 7 `BL` retargets:
+Sequential's OS files and the V5 image are copyrighted and are **not in this repository**.
+Drop them into `fixtures/` — [`fixtures/README.md`](fixtures/README.md) lists the three
+files, where they come from and their SHA‑256 (`fixtures/SHA256SUMS`). Tests that need a
+missing file skip with a warning; `make image` stops with the same message.
 
-| File | Extra change | Note values under MIDI sync |
-|---|---|---|
-| `prophet10_v5_relatch_seq_internal.syx` (`make image-internal`) | none — MIDI‑parser table as V5 | no (eighths, as V5) |
-| `prophet10_v5_relatch_seq.syx` (`make image`) | 4 MIDI‑parser table words → wrapper trampoline | yes |
+## Images (`dist/` — build them; hashes in `dist/SHA256SUMS`)
+
+The built images are derived from those inputs, so they aren't distributed either. Both
+targets below produce re‑latch + seq + note values + readout + octave shift from the same
+wrapper (one appended 8 KB record at `0x2008A000`: code in the first 6 KB, state in the last
+2 KB) and the `BL`/word retargets listed in `firmware/hooks*.json`:
+
+| Target | Output in `build/` | Extra change | Note values under MIDI sync |
+|---|---|---|---|
+| `make image-internal` | `prophet10_v5_relatch_seq_internal.syx` | none — MIDI‑parser table as V5 | no (eighths, as V5) |
+| `make image` | `prophet10_v5_relatch_seq.syx` | 4 MIDI‑parser table words → wrapper trampoline | yes |
 
 Install exactly like V5 (USB, SysEx Librarian). The `_internal` variant keeps wrapper code
-out of the MIDI‑byte path that a USB re‑flash uses; the full variant adds the clock filter.
+out of the MIDI‑byte path that a USB re‑flash uses; the full variant adds the clock filter
+and has not been installed on hardware yet. [`dist/README.md`](dist/README.md) explains the
+checksums.
 
-History: a re‑latch‑only image (commit `9043f51`) was installed on a Prophet‑10 on
-2025‑10‑06 and proved the loader path, boot, the hook mechanism and the HOLD stub; it had
-a bug (the arp's clear also dropped the arp's own hold flag, so a re‑latched chord did not
-stay latched) which is fixed from commit `831ec7e`'s successor onward. That file is no
-longer shipped.
+History: a re‑latch‑only image was installed on a Prophet‑10 Rev4 on 2025‑10‑06 and proved
+the loader path, boot, the hook mechanism and the HOLD stub; it had a bug (the arp's clear
+also dropped the arp's own hold flag, so a re‑latched chord did not stay latched), fixed by
+"Re‑assert hold to the arp after every clear". The `_internal` image has been installed
+since, through the seq and note‑value work.
 
-In both cases the wrapper code lives in the zero tail of V5's own RAM‑window record at
-`0x20089600–0x2008A000`; the SHARC image, the stock startup code and every other byte are
-identical to V5 (`python3 -m tools diff fixtures/V5_… dist/…` lists exactly the changed
+In both variants the wrapper lives in a record appended to the image at
+`0x2008A000–0x2008C000`; the SHARC image, the stock startup code and every other byte are
+identical to V5 (`python3 -m tools diff fixtures/V5_… build/…` lists exactly the changed
 spans). The wrapper runs only when the hooked stock calls fire — never at boot — so a
 misbehaving hook leaves the synth bootable and re‑flashable over USB. All memory it
-touches is its own state inside that window plus V5/stock entry points listed in
+touches is its own state inside that record plus V5/stock entry points listed in
 `firmware/v5_iface.h`, which the tests read back from the built binary.
 
 ## Layout
 
-- `fixtures/` — official Main 2.1.0 / Panel 1.1.3 and the V5 `.syx` as received.
+- `fixtures/` — where the official Main 2.1.0 / Panel 1.1.3 and the V5 `.syx` go (git‑ignored; see above).
 - `tools/` — Python 3.9+ stdlib‑only CLI: `inspect`, `unpack`, `pack`, `diff`, `fwbuild`, `build`.
-- `firmware/` — wrapper C sources (`relatch.c` portable logic, `wrapper.c` hook glue,
-  `hooks.json` the patched call sites).
-- `tests/` — `unittest` suites (tooling, built‑image invariants) and a host C harness.
-- `docs/` — spec, hardware checklist.
+- `firmware/` — wrapper C sources (`relatch.c`, `seq.c`, `rate.c`, `oct.c` portable logic,
+  `wrapper.c` hook glue, `hooks.json` / `hooks_internal.json` the patched call sites).
+- `tests/` — `unittest` suites (tooling, built‑image invariants) and host C harnesses.
+- `docs/` — spec, working notes, hardware checklist.
 
 ## Build and test
 
 ```
-make test     # tooling tests, host harnesses, cross-build + image invariants
-make image    # build/prophet10_v5_relatch_seq.syx
+make test            # tooling tests, host harnesses, cross-build + image invariants
+make image-internal  # build/prophet10_v5_relatch_seq_internal.syx
+make image           # build/prophet10_v5_relatch_seq.syx
 ```
 
 Requires Apple clang (Xcode command line tools) for the Thumb‑2 cross build; no other

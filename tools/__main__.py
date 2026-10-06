@@ -118,6 +118,10 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
+    except FileNotFoundError as e:
+        print("error: input file not found: %s -- see fixtures/README.md for the files this "
+              "project needs and where to get them" % e.filename, file=sys.stderr)
+        return 1
     except (syx.SyxError, records.RecordError, build.BuildError, fw.FirmwareBuildError, OSError) as e:
         print("error: %s" % e, file=sys.stderr)
         return 1

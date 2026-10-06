@@ -95,6 +95,20 @@ payload bytes:
 - **Round-trip invariant:** for each fixture `f`, `pack(unpack(f)) == f` byte for byte, and
   the trailer computed from the decoded payload equals the trailer present in `f`.
 
+#### Required input files `[HW: n/a]`
+
+- The stock, Panel and V5 `.syx` files are copyrighted and are not part of the repository.
+  They live in `fixtures/`; `fixtures/SHA256SUMS` is the authoritative list of the files
+  the tools and tests need, with their SHA-256 (`<hash>  <name>` per line, `shasum -c`
+  format); `fixtures/README.md` says where each comes from.
+- Any `python3 -m tools` command given an input file that does not exist stops before
+  writing anything, with exit status 1 and a one-line message on stderr naming the missing
+  path and pointing at `fixtures/README.md` - not a traceback.
+- A test module that needs a fixture which is missing, or whose SHA-256 differs from
+  `fixtures/SHA256SUMS`, is **skipped** (not failed), and a warning naming the file, the
+  expected hash and `fixtures/README.md` is printed on stderr once per test process. Tests
+  that need no fixture (the host C harnesses) still run.
+
 ### Image patching (hook chaining, wrapper record)
 
 The build takes a **base** OS file (the V5 arp mod), a **wrapper binary** with its symbol

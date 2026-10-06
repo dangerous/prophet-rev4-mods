@@ -8,10 +8,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests import fixture_check
 from tools import build, records, syx, thumb
 
 ROOT = Path(__file__).resolve().parents[2]
 V5 = ROOT / "fixtures" / "V5_prophet5_main_2.1.0_arp_MIDI_SYNC.syx"
+
+
+def setUpModule():
+    fixture_check.require([V5.name])
 
 REC_BASE, REC_SIZE = 0x2008A000, 0x2000
 STUB_SYMBOLS = {

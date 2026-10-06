@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests import fixture_check
 from tools import records, syx
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -14,6 +15,10 @@ FIXTURES = ROOT / "fixtures"
 MAIN = FIXTURES / "prophet5_main_2.1.0.syx"
 V5 = FIXTURES / "V5_prophet5_main_2.1.0_arp_MIDI_SYNC.syx"
 PANEL = FIXTURES / "prophet5Panel_v1.1.3.syx"
+
+
+def setUpModule():
+    fixture_check.require([MAIN.name, V5.name, PANEL.name])
 
 # (path, target, groups, tail) — spec "Fixture facts"
 FIXTURE_FACTS = [

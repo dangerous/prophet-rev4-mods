@@ -11,13 +11,14 @@ Manual verification on the instrument. Record results against the spec markers i
       file is complete — but it has only been reasoned about as a V5 successor).
 - [ ] Back up patches (Globals → Pgm Dump → ALL → RECORD) if not done recently. The update
       does not touch patch storage, but it is cheap insurance.
-- [ ] `sha256sum dist/prophet10_v5_relatch.syx` matches `dist/SHA256SUMS`.
+- [ ] `make image-internal`, then `shasum -a 256 build/prophet10_v5_relatch_seq_internal.syx`
+      matches the line in `dist/SHA256SUMS` (images are built, not shipped — `dist/README.md`).
 - [ ] Globals → Program 6 (MIDI SysEx) set to `USB`; SysEx Librarian output = the Prophet;
       no other MIDI apps running, nothing else routed to the Prophet.
 
 ## Installing
 
-1. Send `dist/prophet10_v5_relatch.syx`. The display counts `000`→`100` (transfer), then
+1. Send `build/prophet10_v5_relatch_seq_internal.syx`. The display counts `000`→`100` (transfer), then
    `10`→`0` (writing). If the transfer is rejected the display shows an error and nothing
    is written — the loader verifies the checksum before the write phase.
 2. Do not power off during the write countdown. When it finishes, power cycle.

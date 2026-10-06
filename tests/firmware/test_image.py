@@ -6,10 +6,16 @@ import struct
 import unittest
 from pathlib import Path
 
+from tests import fixture_check
 from tools import build, fw, records, syx, thumb
 
 ROOT = Path(__file__).resolve().parents[2]
 V5 = ROOT / "fixtures" / "V5_prophet5_main_2.1.0_arp_MIDI_SYNC.syx"
+STOCK = ROOT / "fixtures" / "prophet5_main_2.1.0.syx"
+
+
+def setUpModule():
+    fixture_check.require([V5.name, STOCK.name])
 HOOKS = ROOT / "firmware" / "hooks.json"
 OUT = ROOT / "build" / "test-image"
 
@@ -91,7 +97,7 @@ class V5FactTests(unittest.TestCase):
 
     def test_mmu_region_table_maps_the_wrapper_record_range(self):
         # stock .data: (start, end, attrs) rows; 0x20020000-0x2008FFFF shares V5's attributes
-        stock = syx.decode((ROOT / "fixtures" / "prophet5_main_2.1.0.syx").read_bytes()).payload
+        stock = syx.decode(STOCK.read_bytes()).payload
         rows = struct.unpack("<9I", build.read_ram(stock, 0x2004DD38, 36))
         self.assertEqual(rows[0:3], (0x20010000, 0x2001FFFF, 0x00001C00))
         self.assertEqual(rows[3:6], (0x20020000, 0x2008FFFF, 0x00005C04))
