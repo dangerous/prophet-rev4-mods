@@ -199,7 +199,7 @@ Enforced by tests on every built image against its base:
 6. Every hook site lies inside the stock code record and, before patching, holds exactly
    what the hook list says it holds (a `BL` to the named V5 entry, or the named word).
 
-### Re-latch under HOLD `[HW: unverified]`
+### Re-latch under HOLD `[HW: verified 2025-10-06, Prophet-10 Rev4 — incl. the hold re-assert fix]`
 
 Terms: *HOLD active* = the HOLD button is lit, or the sustain pedal is down with Global
 Release/Sustain set to `HLd` (both reach the same stock hold handler). *Keys down* = the
@@ -232,7 +232,7 @@ arp‑enabled byte at `0x200894D8`; V5 entry points local‑note `0x20088C51`, M
 `r4` as left by the stock caller), all‑notes‑off `0x20088E83`. Wrapper state lives in
 `0x20089E80–0x2008A000` inside the wrapper window and is zero after every boot.
 
-### Seq (step-recorded sequence) `[HW: unverified]`
+### Seq (step-recorded sequence) `[HW: verified 2025-10-06, Prophet-10 Rev4 — record, transposed playback, clear; octaves and MIDI-in recording not yet exercised]`
 
 A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and playing.
 *Seq mode* is active exactly when a sequence exists. *Keys*, *HOLD active* and

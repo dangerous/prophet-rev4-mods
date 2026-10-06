@@ -23,6 +23,16 @@ enum {
     IF_GLOBALS_FLAG,      /* 0x200895E5 V5 hook state + 0x415 */
     IF_DISPLAY_INT,       /* 0x20037FF7 stock 3-digit integer display */
     IF_HOLD_EVENT,        /* 0x20088F37 V5 hold-event entry: (state) -> enqueue hold on/off */
+    IF_RT_SNIFF,          /* 0x20088F59 V5 realtime sniff: (byte, port) -> enqueue F8/FA/FB/FC */
+    IF_PARSER_STATE,      /* 0x20034343 stock MIDI byte-parser state handler the trampoline continues to */
+    IF_DISPLAY3,          /* 0x20037F25 stock 3-character display: (c0, c1, c2) panel codes */
+    IF_ENGINE_DIV,        /* 0x200894E2 engine + 0x30a: divisions per beat (u16) */
+    IF_ENGINE_TPS,        /* 0x200894E4 engine + 0x30c: ticks per second (u32) */
+    IF_ENGINE_ACC,        /* 0x200894E8 engine + 0x310: internal step accumulator (u32) */
+    IF_ENGINE_EXTCLK,     /* 0x200894F8 engine + 0x320: clock source (0 int, else MIDI) */
+    IF_ENGINE_CLKLOSS,    /* 0x200894FC engine + 0x324: ticks since last MIDI clock (u32) */
+    IF_DISPLAY_TIMER,     /* 0x200895E8 V5 hook state + 0x418: display timeout (u16 ticks) */
+    IF_A440_USED,         /* 0x20089508 V5 button ctx + 8: A440 hold used as modifier (u8) */
     IF_COUNT
 };
 

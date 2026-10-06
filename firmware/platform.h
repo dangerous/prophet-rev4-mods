@@ -11,6 +11,10 @@ void plat_v5_button(int id, int value);           /* V5 panel-button hook (1 = p
 int  plat_v5_octaves(void);                       /* V5 octave setting byte (1..4) */
 int  plat_globals_active(void);                   /* V5 "GLOBALS held/active" flag */
 void plat_display_int(int value);                 /* stock 3-digit integer display */
+void plat_display3(int c0, int c1, int c2);       /* stock 3-character display (panel codes) */
+void plat_display_hold(void);                     /* start V5's display timeout (home view after ~1 s) */
+void plat_a440_mark_used(void);                   /* V5: this A440 hold was a modifier, not a tap */
+void plat_engine_reset_acc(void);                 /* V5 engine: restart the internal step accumulator */
 void plat_orig_out(int ctx, int src, int on, int note, int vel);  /* V5's original note output */
 
 #endif

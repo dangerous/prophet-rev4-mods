@@ -71,6 +71,28 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] Arp off, sequence exists: keys play normally (no sequence). Tap A440: sequence plays.
 - [ ] Record from MIDI-in (DAW notes) while holding A440; trigger from the keyboard.
 
+## Note value (spec "Note value")
+
+- [ ] Arp on, internal clock, hold a chord. Hold A440, press Program 7: display `16d`,
+      pattern noticeably faster; again: `8t`, `16`, `16t`, `32`; once more: stays `32`.
+- [ ] A440 + Program 8 back up through `16t … 8 … 8d 4 4d 2 1 2b 4b`; stays at `4b`.
+      Each change takes effect from the next step; the display returns to BPM after ~1 s.
+- [ ] Release A440 after changing the value: the arp does **not** toggle.
+- [ ] Glide Rate still changes tempo at every value; `o 2` and modes still work.
+- [ ] Seq: record a sequence, hold a key, change the value: the sequence follows.
+- [ ] MIDI sync (`Syn`, DAW clock running): at `8` the arp plays eighths as in V5. Select
+      `16`: sixteenths locked to the DAW grid; `4`: quarters; `8d`: dotted eighths, with
+      step boundaries staying on the DAW grid (every 18 clocks). Stop/Start/Continue as
+      before. Pull the USB/MIDI cable with clock running: notes stop after ~1 s at every
+      value.
+- [ ] Power cycle: back to `8`.
+
+## Button id readout (spec "Button id readout")
+
+- [ ] Hold A440, press the **Keyboard** button: display shows a number — note it down.
+      Also try Hold, Preset, Record, Unison and any P10‑only buttons and note each id.
+- [ ] Release A440: the arp does not toggle; the buttons do nothing else while A440 is held.
+
 ## If something is wrong
 
 - The wrapper only runs inside the arp's hook paths. If a hook misbehaves, the synth still

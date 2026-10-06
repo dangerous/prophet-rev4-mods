@@ -15,12 +15,20 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
   free). Then play a key: the sequence runs at the arp's tempo/sync, transposed from the
   first recorded note, in the arp's direction mode, over the arp's octave range. HOLD
   latches it; the first key after all‑up restarts it. A440 + Program 6 clears it.
-  `[HW: unverified]`
+  `[HW: verified 2025‑10‑06]`
+- **Note value** — A440 + Program 7 (shorter) / Program 8 (longer) steps through 1/32,
+  1/16T, 1/16, 1/8T, 1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1, 2 bars, 4 bars for the arp and
+  seq, on internal clock and under MIDI sync. Display shows e.g. `16t`, `8d`, `2b`.
+  Default 1/8 (V5's behaviour). `[HW: unverified]`
+- **Button id readout** — hold A440 and press any button the arp doesn't use: its id is
+  shown for a second. For mapping the P10's extra buttons. `[HW: unverified]`
 
 ## Deliverable (`dist/`, checksum in `dist/SHA256SUMS`)
 
-`prophet10_v5_relatch_seq.syx` — re‑latch + seq, `make image` at HEAD: 7 `BL` retargets
-and a ~2.1 KB wrapper. Install exactly like V5 (USB, SysEx Librarian).
+`prophet10_v5_relatch_seq.syx` — re‑latch + seq + note values + readout, `make image` at
+HEAD: 7 `BL` retargets, 4 MIDI‑parser table words, and one appended 8 KB record at
+`0x2008A000` holding the wrapper (~2.9 KB code). Install exactly like V5 (USB, SysEx
+Librarian).
 
 History: a re‑latch‑only image (commit `5cf3f41`) was installed on a Prophet‑10 on
 2025‑10‑06 and proved the loader path, boot, the hook mechanism and the HOLD stub; it had

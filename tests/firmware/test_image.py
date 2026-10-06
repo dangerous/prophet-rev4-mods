@@ -17,13 +17,17 @@ V5_ENTRIES = {
     "local_note": 0x20088C51, "midi_note_on": 0x20088CFD, "midi_note_off": 0x20088D2D,
     "hold": 0x20089081, "all_notes_off": 0x20088E83,
     "kbd_scan": 0x20088D53, "button": 0x20088EAB, "init_guard": 0x20088C81,
-    "orig_out": 0x20089061, "hold_event": 0x20088F37,
+    "orig_out": 0x20089061, "hold_event": 0x20088F37, "rt_sniff": 0x20088F59,
 }
 ARP_ENABLED_BYTE = 0x200894D8
 V5_DATA = {
     "octaves": 0x200894DF, "out_ptr": 0x200894F0, "globals_flag": 0x200895E5,
+    "div": 0x200894E2, "tps": 0x200894E4, "acc": 0x200894E8, "ext_clock": 0x200894F8,
+    "clock_loss": 0x200894FC, "display_timer": 0x200895E8, "a440_used": 0x20089508,
 }
 STOCK_DISPLAY_INT = 0x20037FF7
+STOCK_DISPLAY3 = 0x20037F25
+STOCK_PARSER_STATE = 0x20034343
 CODE_BASE = 0x2008A000          # appended wrapper record
 STATE_BASE = 0x2008B800
 RECORD_HI = 0x2008C000
@@ -36,10 +40,14 @@ class V5FactTests(unittest.TestCase):
     def setUp(self):
         self.payload = syx.decode(V5.read_bytes()).payload
 
-    def test_hook_sites_branch_to_the_v5_entry_points(self):
+    def test_hook_sites_hold_the_v5_entry_points(self):
         for h in json.loads(HOOKS.read_text()):
             site, expect = int(h["site"], 16), int(h["expect"], 16)
-            self.assertEqual(thumb.decode_bl(site, build.read_ram(self.payload, site, 4)), expect & ~1)
+            raw = build.read_ram(self.payload, site, 4)
+            if h.get("kind", "bl") == "word":
+                self.assertEqual(struct.unpack("<I", raw)[0], expect)
+            else:
+                self.assertEqual(thumb.decode_bl(site, raw), expect & ~1)
 
     def test_v5_entry_points_start_with_a_push(self):
         for name, addr in V5_ENTRIES.items():
@@ -122,11 +130,15 @@ class BuiltImageTests(unittest.TestCase):
 
     def test_only_hook_sites_and_the_appended_record_differ(self):
         sites = [int(h["site"], 16) for h in json.loads(HOOKS.read_text())]
-        for s in build.image_diff(self.base, self.img):
-            if s.appended:
-                self.assertEqual((s.ram_lo, s.ram_hi), (CODE_BASE, RECORD_HI))
+        allowed = {site + k for site in sites for k in range(4)}
+        bi, oi = records.parse_images(self.base), records.parse_images(self.img)
+        for rb, ro in zip(bi[0].records, oi[0].records[:-1]):   # the last output record is the wrapper
+            if rb.type != records.COPY:
                 continue
-            self.assertTrue(any(site <= s.ram_lo and s.ram_hi <= site + 4 for site in sites), s)
+            changed = {rb.w1 + i for i in range(len(rb.payload)) if rb.payload[i] != ro.payload[i]}
+            self.assertTrue(changed <= allowed, sorted(hex(a) for a in changed - allowed)[:8])
+        spans = build.image_diff(self.base, self.img)
+        self.assertEqual([(s.ram_lo, s.ram_hi) for s in spans if s.appended], [(CODE_BASE, RECORD_HI)])
 
     def test_hooks_land_on_wrapper_symbols_inside_the_record(self):
         for h in json.loads(HOOKS.read_text()):
@@ -149,7 +161,23 @@ class BuiltImageTests(unittest.TestCase):
              V5_ENTRIES["all_notes_off"], V5_ENTRIES["kbd_scan"], V5_ENTRIES["button"],
              V5_ENTRIES["init_guard"], V5_ENTRIES["orig_out"], 0x20089081,
              ARP_ENABLED_BYTE, V5_DATA["octaves"], V5_DATA["out_ptr"], V5_DATA["globals_flag"],
-             STOCK_DISPLAY_INT, V5_ENTRIES["hold_event"]]
+             STOCK_DISPLAY_INT, V5_ENTRIES["hold_event"],
+             V5_ENTRIES["rt_sniff"], STOCK_PARSER_STATE, STOCK_DISPLAY3,
+             V5_DATA["div"], V5_DATA["tps"], V5_DATA["acc"], V5_DATA["ext_clock"],
+             V5_DATA["clock_loss"], V5_DATA["display_timer"], V5_DATA["a440_used"]]
+
+    def test_v5_realtime_trampoline_and_engine_timing_facts(self):
+        # V5 trampoline 0x20089094: push {r0-r4,lr}; add r0,r0,#0xf0; mov r1,r4; bl sniff; pop; ldr pc,[pc]; lit
+        tramp = build.read_ram(self.base, 0x20089094, 0x18)
+        self.assertEqual(tramp[:4], bytes.fromhex("1fb500f1"))
+        self.assertEqual(tramp[4:8], bytes.fromhex("f0002146"))
+        self.assertEqual(struct.unpack_from("<I", tramp, 0x14)[0], STOCK_PARSER_STATE)
+        # engine tick: ldrh r0,[r4,#0x308]; ldrh r1,[r4,#0x30a]; ldrd r2,r3,[r4,#0x30c]
+        self.assertEqual(build.read_ram(self.base, 0x20088750, 12), bytes.fromhex("b4f80803b4f80a13d4e9c323"))
+        # realtime handler: modulo-12 by multiply 0x1556 -> 12 clocks per step hard-coded
+        self.assertEqual(build.read_ram(self.base, 0x20088922, 4), bytes.fromhex("41f25651"))
+        # clock-loss counter compared with tps: ldr r0,[r4,#0x30c]; ldr r1,[r4,#0x324]
+        self.assertEqual(build.read_ram(self.base, 0x20088700, 8), bytes.fromhex("d4f80c03d4f82413"))
 
     def test_interface_table_is_exactly_the_known_addresses(self):
         table = self.symbols["v5_iface"] & ~1
@@ -161,11 +189,18 @@ class BuiltImageTests(unittest.TestCase):
         self.assertNotIn(after, set(self.IFACE))
 
     def test_wrapper_materialises_no_unknown_addresses(self):
-        refs = thumb.find_absolute_addresses(self.wrapper, CODE_BASE)
+        # scan the code only: rodata (interface table, note-value table) is data, not instructions
+        layout = (OUT / "wrapper.layout").read_text()
+        text = next(l.split() for l in layout.splitlines() if l.split() and l.split()[0] == ".text")
+        text_size = int(text[2])
+        self.assertTrue(0 < text_size <= len(self.wrapper))
+        refs = thumb.find_absolute_addresses(self.wrapper[:text_size], CODE_BASE)
         allowed = set(self.IFACE)
         allowed |= set(range(STATE_BASE, RECORD_HI))      # its own state
         allowed |= set(range(CODE_BASE, STATE_BASE))      # its own code and table
-        unknown = sorted(a for a in refs if a not in allowed)
+        # only values that could be pointers on this SoC matter (L2 RAM and MMRs per the stock
+        # MMU table); smaller literals are plain data constants the compiler pooled
+        unknown = sorted(a for a in refs if 0x20000000 <= a < 0x50000000 and a not in allowed)
         self.assertEqual(unknown, [], [hex(a) for a in unknown])
         self.assertIn(self.symbols["v5_iface"] & ~1, refs)   # the table itself is referenced
 
