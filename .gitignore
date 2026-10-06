@@ -2,3 +2,4 @@
 *.MOV
 build/
 __pycache__/
+.claude/worktrees/
