@@ -41,7 +41,7 @@ behavioural source of truth; this file is the engineering context around it.
 - Sandbox quirk: compound Bash with heredocs in the worktree gets refused as "too complex";
   write files with the Write tool and keep Bash lines simple. `cd` to the scratchpad resets
   the session cwd; the worktree/root flip changes whether git ops are allowed — merge
-  `main` from the root (`cd /Users/david/git/prophet-arp-mods && git merge relatch-seq`).
+  `main` from the root checkout (`git merge relatch-seq` there).
 - Don't mask `make test` with `| grep` in a chain; check its exit status.
 
 ## Platform facts (ADSP-SC5xx: Cortex-A5 + SHARC+)

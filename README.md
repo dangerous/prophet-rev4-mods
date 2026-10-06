@@ -6,6 +6,13 @@ patches and re‑packs the OS SysEx image.
 
 Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-checklist.md`](docs/hardware-checklist.md).
 
+> **Not affiliated with Sequential.** This is a hobby project that modifies the
+> instrument's firmware. Installing a modified OS is at your own risk and may void your
+> warranty; a bad image can leave the instrument needing the DIN‑MIDI bootloader to
+> recover. Only the project's own code, tooling and reverse‑engineering notes are
+> published here — Sequential's OS files, the Arp Mod V5 image (whose author did the
+> original work this builds on) and the built images are not redistributed.
+
 ## What it adds
 
 - **Re‑latch under HOLD** — with the arp on and HOLD active, the first key you play after
