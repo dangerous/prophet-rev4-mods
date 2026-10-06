@@ -161,6 +161,10 @@ V5's window record at `0x20089600`; that layout was verified on hardware.
    exactly on clocks. Start/Stop/Continue behave as in V5; the clock-loss timeout (≈1 s)
    is unchanged for every value.
 5. A change takes effect from the next step. Applies to the arp and to seq alike.
+   **Build variants:** `make image` includes the MIDI-sync behaviour (4); `make
+   image-internal` (`firmware/hooks_internal.json`) leaves the stock MIDI-parser table
+   untouched, so under `Syn` the arp keeps V5's eighths whatever the setting — chosen as
+   the first install because the parser table is on the USB re-flash path.
 6. Realisation: internal — the engine's divisions-per-beat (engine + 0x30a) and
    ticks-per-second (engine + 0x30c) fields are set to a (div, tps) pair per value
    (1/32 → 8,1000; 1/16T → 12,1000; 1/16 → 4,1000; 1/8T → 6,1000; 1/16d → 8,3000;

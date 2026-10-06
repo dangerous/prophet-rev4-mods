@@ -80,7 +80,9 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] Release A440 after changing the value: the arp does **not** toggle.
 - [ ] Glide Rate still changes tempo at every value; `o 2` and modes still work.
 - [ ] Seq: record a sequence, hold a key, change the value: the sequence follows.
-- [ ] MIDI sync (`Syn`, DAW clock running): at `8` the arp plays eighths as in V5. Select
+- [ ] (`_internal` image) `Syn` with DAW clock: the arp plays eighths whatever the value
+      shows — expected; the clock filter is only in the full image.
+- [ ] (full image) MIDI sync (`Syn`, DAW clock running): at `8` the arp plays eighths as in V5. Select
       `16`: sixteenths locked to the DAW grid; `4`: quarters; `8d`: dotted eighths, with
       step boundaries staying on the DAW grid (every 18 clocks). Stop/Start/Continue as
       before. Pull the USB/MIDI cable with clock running: notes stop after ~1 s at every

@@ -23,12 +23,18 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
 - **Button id readout** — hold A440 and press any button the arp doesn't use: its id is
   shown for a second. For mapping the P10's extra buttons. `[HW: unverified]`
 
-## Deliverable (`dist/`, checksum in `dist/SHA256SUMS`)
+## Deliverables (`dist/`, checksums in `dist/SHA256SUMS`)
 
-`prophet10_v5_relatch_seq.syx` — re‑latch + seq + note values + readout, `make image` at
-HEAD: 7 `BL` retargets, 4 MIDI‑parser table words, and one appended 8 KB record at
-`0x2008A000` holding the wrapper (~2.9 KB code). Install exactly like V5 (USB, SysEx
-Librarian).
+Both are re‑latch + seq + note values + readout, built at HEAD with the same wrapper
+(one appended 8 KB record at `0x2008A000`, ~2.9 KB code) and 7 `BL` retargets:
+
+| File | Extra change | Note values under MIDI sync |
+|---|---|---|
+| `prophet10_v5_relatch_seq_internal.syx` (`make image-internal`) | none — MIDI‑parser table as V5 | no (eighths, as V5) |
+| `prophet10_v5_relatch_seq.syx` (`make image`) | 4 MIDI‑parser table words → wrapper trampoline | yes |
+
+Install exactly like V5 (USB, SysEx Librarian). The `_internal` variant keeps wrapper code
+out of the MIDI‑byte path that a USB re‑flash uses; the full variant adds the clock filter.
 
 History: a re‑latch‑only image (commit `5cf3f41`) was installed on a Prophet‑10 on
 2025‑10‑06 and proved the loader path, boot, the hook mechanism and the HOLD stub; it had

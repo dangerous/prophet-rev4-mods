@@ -215,6 +215,23 @@ class BuiltImageTests(unittest.TestCase):
         # octave handler stores its argument at engine+0x307: strb.w r1, [r4, #0x307]
         self.assertEqual(build.read_ram(self.base, 0x2008826E, 4), bytes.fromhex("84f80713"))
 
+    def test_internal_clock_variant_leaves_the_parser_table_as_v5(self):
+        hooks_internal = ROOT / "firmware" / "hooks_internal.json"
+        full = json.loads(HOOKS.read_text())
+        internal = json.loads(hooks_internal.read_text())
+        self.assertEqual(internal, [h for h in full if h.get("kind", "bl") == "bl"])
+        out = OUT / "image-internal.syx"
+        build.build_image(V5, self.wbin, self.wmap, hooks_internal, out)
+        img = syx.decode(out.read_bytes()).payload
+        for h in full:
+            site = int(h["site"], 16)
+            if h.get("kind", "bl") == "word":
+                self.assertEqual(build.read_ram(img, site, 4), build.read_ram(self.base, site, 4))
+            else:
+                self.assertEqual(thumb.decode_bl(site, build.read_ram(img, site, 4)), self.symbols[h["symbol"]] & ~1)
+        self.assertEqual(build.read_ram(img, CODE_BASE, len(self.wrapper)), self.wrapper)
+        self.assertEqual(len(records.parse_images(img)[0].records), len(records.parse_images(self.base)[0].records) + 1)
+
     def test_wrapper_has_no_data_sections_and_contains_no_privileged_instructions(self):
         info = fw.inspect_object(OUT / "wrapper.o")
         self.assertEqual(info["data_size"] + info["bss_size"], 0)

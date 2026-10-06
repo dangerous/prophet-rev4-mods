@@ -31,13 +31,22 @@ $(BUILD)/test_seq: tests/firmware/test_seq.c firmware/seq.c firmware/seq.h firmw
 test-image:
 	$(PYTHON) -m unittest discover -s tests/firmware -t . -p 'test_*.py'
 
-# The installable image.
-image:
-	@mkdir -p $(BUILD)
-	$(PYTHON) -m tools fwbuild firmware $(BUILD)
+# The installable images. 'image' patches the MIDI-parser table for note values under MIDI
+# sync; 'image-internal' leaves that table exactly as V5 had it (note values on the
+# internal clock only).
+image: $(BUILD)/wrapper.bin
 	$(PYTHON) -m tools build --base fixtures/V5_prophet5_main_2.1.0_arp_MIDI_SYNC.syx \
 		--wrapper $(BUILD)/wrapper.bin --map $(BUILD)/wrapper.map \
 		--hooks firmware/hooks.json -o $(BUILD)/prophet10_v5_relatch_seq.syx
+
+image-internal: $(BUILD)/wrapper.bin
+	$(PYTHON) -m tools build --base fixtures/V5_prophet5_main_2.1.0_arp_MIDI_SYNC.syx \
+		--wrapper $(BUILD)/wrapper.bin --map $(BUILD)/wrapper.map \
+		--hooks firmware/hooks_internal.json -o $(BUILD)/prophet10_v5_relatch_seq_internal.syx
+
+$(BUILD)/wrapper.bin: firmware/*.c firmware/*.h tools/fw.py tools/fwlink.py
+	@mkdir -p $(BUILD)
+	$(PYTHON) -m tools fwbuild firmware $(BUILD)
 
 clean:
 	rm -rf $(BUILD)
