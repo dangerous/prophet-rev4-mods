@@ -24,13 +24,21 @@ V5_ENTRIES = {
     "hold": 0x20089081, "all_notes_off": 0x20088E83,
     "kbd_scan": 0x20088D53, "button": 0x20088EAB, "init_guard": 0x20088C81,
     "orig_out": 0x20089061, "hold_event": 0x20088F37, "rt_sniff": 0x20088F59,
-    "stock_midi_out": 0x2003BCE1,
 }
+# stock functions the wrapper calls directly (Thumb addresses)
+STOCK_FNS = {
+    "midi_out_on": 0x20033F85, "midi_out_off": 0x20033F39,   # local key -> MIDI Out (cable, ch, note, vel)
+    "hold_query": 0x2003B695,                                # merged HOLD button/pedal state
+    "dsp_post": 0x2003D325,                                  # post a word to the voice engine
+    "display_restore": 0x2003818D,                           # redraw the patch display (ui)
+}
+STOCK_UI = 0x20057390
 ARP_ENABLED_BYTE = 0x200894D8
 V5_DATA = {
     "octaves": 0x200894DF, "out_ptr": 0x200894F0, "globals_flag": 0x200895E5,
     "div": 0x200894E2, "tps": 0x200894E4, "acc": 0x200894E8, "ext_clock": 0x200894F8,
     "clock_loss": 0x200894FC, "display_timer": 0x200895E8, "a440_used": 0x20089508,
+    "mode": 0x200894DD, "bpm": 0x200894E0,
 }
 STOCK_DISPLAY_INT = 0x20037FF7
 STOCK_DISPLAY3 = 0x20037F25
@@ -104,6 +112,40 @@ class V5FactTests(unittest.TestCase):
         self.assertEqual(rows[6:9], (0x20090000, 0x200FFFFF, 0x0000DC04))
         self.assertTrue(0x20020000 <= CODE_BASE and RECORD_HI - 1 <= 0x2008FFFF)
 
+    def test_stock_midi_out_hold_and_display_facts(self):
+        # keyboard FIFO consumer: the MIDI Out sends, reached with Local Control on or off
+        self.assertEqual(thumb.decode_bl(0x2003BEFA, build.read_ram(self.payload, 0x2003BEFA, 4)), 0x20033F84)
+        self.assertEqual(thumb.decode_bl(0x2003BF16, build.read_ram(self.payload, 0x2003BF16, 4)), 0x20033F38)
+        # the callee at the old hook site only posts a message: movs r0,#8 ; movw r1,#0xffff
+        self.assertEqual(thumb.decode_bl(0x2003BED8, build.read_ram(self.payload, 0x2003BED8, 4)), 0x2003BCE0)
+        self.assertEqual(build.read_ram(self.payload, 0x2003BCF2, 6), bytes.fromhex("08204ff6ff71"))
+        # note_off asks the hold state and skips the normal release while it is on: bl ; cbz r0
+        self.assertEqual(thumb.decode_bl(0x2003EACE, build.read_ram(self.payload, 0x2003EACE, 4)), 0x2003B694)
+        self.assertEqual(build.read_ram(self.payload, 0x2003EAD2, 2), bytes.fromhex("28b1"))
+        # hold query: ldr r3,[pc,#0x14] (= ui) ; ldrb.w r2,[r3,#0x19d] (pedal latch, then button)
+        self.assertEqual(build.read_ram(self.payload, 0x2003B694, 6), bytes.fromhex("054b93f89d21"))
+        self.assertEqual(struct.unpack("<I", build.read_ram(self.payload, 0x2003B6AC, 4))[0], STOCK_UI)
+        # hold handler: orr r0,#0x8000000 ; orr r0,#0xd0000 ; bl (voice-engine hold message)
+        self.assertEqual(build.read_ram(self.payload, 0x200396C2, 8), bytes.fromhex("40f0006040f45020"))
+        self.assertEqual(struct.unpack("<I", build.read_ram(self.payload, 0x200396EC, 4))[0], STOCK_UI)
+        # display restore: push {r0-r6,lr} ; ldrb.w r3,[r0,#0x88] (ui->factory/user ...)
+        self.assertEqual(build.read_ram(self.payload, 0x2003818C, 6), bytes.fromhex("7fb590f88830"))
+        # engine mode byte is +0x305: set_mode reads ldrb.w r2,[r0,#0x305]
+        self.assertEqual(build.read_ram(self.payload, 0x2008806E, 4), bytes.fromhex("90f80523"))
+        self.assertEqual(V5_DATA["mode"], 0x200891D8 + 0x305)
+        self.assertEqual(V5_DATA["bpm"], 0x200891D8 + 0x308)
+
+    def test_hook_lists_cover_midi_out_and_hold_query_but_not_the_old_site(self):
+        for path in (HOOKS, ROOT / "firmware" / "hooks_internal.json"):
+            sites = {int(h["site"], 16): h for h in json.loads(path.read_text())}
+            self.assertNotIn(0x2003BED8, sites, path.name)
+            self.assertEqual(int(sites[0x2003BEFA]["expect"], 16), STOCK_FNS["midi_out_on"])
+            self.assertEqual(sites[0x2003BEFA]["symbol"], "hook_local_midi_out_on")
+            self.assertEqual(int(sites[0x2003BF16]["expect"], 16), STOCK_FNS["midi_out_off"])
+            self.assertEqual(sites[0x2003BF16]["symbol"], "hook_local_midi_out_off")
+            self.assertEqual(int(sites[0x2003EACE]["expect"], 16), STOCK_FNS["hold_query"])
+            self.assertEqual(sites[0x2003EACE]["symbol"], "hook_hold_query")
+
 
 class BuiltImageTests(unittest.TestCase):
     @classmethod
@@ -166,13 +208,18 @@ class BuiltImageTests(unittest.TestCase):
     # firmware/v5_iface.h order
     IFACE = [V5_ENTRIES["local_note"], V5_ENTRIES["midi_note_on"], V5_ENTRIES["midi_note_off"],
              V5_ENTRIES["all_notes_off"], V5_ENTRIES["kbd_scan"], V5_ENTRIES["button"],
-             V5_ENTRIES["init_guard"], V5_ENTRIES["orig_out"], 0x20089081,
+             V5_ENTRIES["init_guard"], V5_ENTRIES["orig_out"],
              ARP_ENABLED_BYTE, V5_DATA["octaves"], V5_DATA["out_ptr"], V5_DATA["globals_flag"],
              STOCK_DISPLAY_INT, V5_ENTRIES["hold_event"],
              V5_ENTRIES["rt_sniff"], STOCK_PARSER_STATE, STOCK_DISPLAY3,
              V5_DATA["div"], V5_DATA["tps"], V5_DATA["acc"], V5_DATA["ext_clock"],
              V5_DATA["clock_loss"], V5_DATA["display_timer"], V5_DATA["a440_used"],
-             V5_ENTRIES["stock_midi_out"]]
+             STOCK_FNS["midi_out_on"], STOCK_FNS["midi_out_off"], STOCK_FNS["hold_query"],
+             STOCK_FNS["dsp_post"], STOCK_FNS["display_restore"], STOCK_UI,
+             V5_DATA["mode"], V5_DATA["bpm"]]
+
+    def test_old_midi_out_site_is_left_as_in_v5(self):
+        self.assertEqual(build.read_ram(self.img, 0x2003BED8, 4), build.read_ram(self.base, 0x2003BED8, 4))
 
     def test_v5_realtime_trampoline_and_engine_timing_facts(self):
         # V5 trampoline 0x20089094: push {r0-r4,lr}; add r0,r0,#0xf0; mov r1,r4; bl sniff; pop; ldr pc,[pc]; lit

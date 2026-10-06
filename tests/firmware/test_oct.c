@@ -20,11 +20,11 @@ static int count_type(int t) { int n = 0; for (int i = 0; i < nlog; i++) n += lo
 static int last_int(void) { for (int i = nlog - 1; i >= 0; i--) if (log_[i][0] == EV_INT) return log_[i][1]; return -999; }
 static void clear_log(void) { nlog = 0; }
 
-enum { KBD_AMT = 8, BANK = 0x28, GROUP = 0x20, A440 = 0x0F, PRESS = 1, RELEASE = 2, REPEAT = 3 };
+enum { LO_FREQ = 37, BANK = 0x28, GROUP = 0x20, A440 = 0x0F, PRESS = 1, RELEASE = 2, REPEAT = 3 };
 static oct_t o;
 
 static void reset(void) { oct_init(&o); clear_log(); }
-static void mod(int value) { oct_button(&o, KBD_AMT, value); }
+static void mod(int value) { oct_button(&o, LO_FREQ, value); }
 
 static void test_zero_state_is_no_shift(void) {
     oct_t z; memset(&z, 0, sizeof z);
@@ -36,7 +36,7 @@ static void test_zero_state_is_no_shift(void) {
 
 static void test_bank_up_group_down_clamped_with_display(void) {
     reset();
-    CHECK(oct_button(&o, KBD_AMT, PRESS) == OCT_CONSUMED);
+    CHECK(oct_button(&o, LO_FREQ, PRESS) == OCT_CONSUMED);
     CHECK(oct_button(&o, BANK, PRESS) == OCT_CONSUMED);
     CHECK(oct_shift(&o) == 1 && last_int() == 1 && count_type(EV_HOLD) == 1);
     CHECK(oct_button(&o, BANK, RELEASE) == OCT_CONSUMED);
@@ -46,7 +46,7 @@ static void test_bank_up_group_down_clamped_with_display(void) {
     CHECK(count_type(EV_INT) == 3);
     for (int i = 0; i < 5; i++) { oct_button(&o, GROUP, PRESS); oct_button(&o, GROUP, RELEASE); }
     CHECK(oct_shift(&o) == -2 && last_int() == -2);
-    CHECK(oct_button(&o, KBD_AMT, RELEASE) == OCT_CONSUMED);       /* used as a modifier: no tap */
+    CHECK(oct_button(&o, LO_FREQ, RELEASE) == OCT_CONSUMED);       /* used as a modifier: no tap */
 }
 
 static void test_both_directions_together_reset_to_zero(void) {
@@ -65,14 +65,14 @@ static void test_both_directions_together_reset_to_zero(void) {
 
 static void test_tap_without_bank_or_group_is_replayed(void) {
     reset();
-    CHECK(oct_button(&o, KBD_AMT, PRESS) == OCT_CONSUMED);
-    CHECK(oct_button(&o, KBD_AMT, REPEAT) == OCT_CONSUMED);
-    CHECK(oct_button(&o, KBD_AMT, RELEASE) == OCT_REPLAY_TAP);
+    CHECK(oct_button(&o, LO_FREQ, PRESS) == OCT_CONSUMED);
+    CHECK(oct_button(&o, LO_FREQ, REPEAT) == OCT_CONSUMED);
+    CHECK(oct_button(&o, LO_FREQ, RELEASE) == OCT_REPLAY_TAP);
     CHECK(nlog == 0 && oct_shift(&o) == 0);
     /* keys played while it is held do not count as "used" */
     mod(PRESS);
     oct_map_key(&o, 60, 1); oct_map_key(&o, 60, 0);
-    CHECK(oct_button(&o, KBD_AMT, RELEASE) == OCT_REPLAY_TAP);
+    CHECK(oct_button(&o, LO_FREQ, RELEASE) == OCT_REPLAY_TAP);
 }
 
 static void test_other_buttons_pass_through_when_not_held(void) {
@@ -116,6 +116,15 @@ static void test_out_of_range_keys_are_silent_on_and_off(void) {
     CHECK(oct_map_key(&o, -1, 1) < 0 && oct_map_key(&o, 128, 1) < 0);
 }
 
+static void test_modifier_is_lo_freq_and_keyboard_amount_is_ordinary_again(void) {
+    reset();
+    CHECK(OCT_MOD_ID == 37);                             /* Osc B Lo Freq, one hand from Bank/Group */
+    CHECK(oct_button(&o, 8, PRESS) == OCT_FORWARD);      /* the former modifier passes through */
+    CHECK(oct_button(&o, BANK, PRESS) == OCT_FORWARD);
+    CHECK(oct_button(&o, 8, RELEASE) == OCT_FORWARD);
+    CHECK(oct_shift(&o) == 0);
+}
+
 int main(void) {
     test_zero_state_is_no_shift();
     test_bank_up_group_down_clamped_with_display();
@@ -124,6 +133,7 @@ int main(void) {
     test_other_buttons_pass_through_when_not_held();
     test_keys_are_shifted_and_releases_use_the_press_time_shift();
     test_out_of_range_keys_are_silent_on_and_off();
+    test_modifier_is_lo_freq_and_keyboard_amount_is_ordinary_again();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

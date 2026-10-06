@@ -23,8 +23,10 @@ behavioural source of truth; this file is the engineering context around it.
 ## Hardware status (David's Prophet-10 Rev4, no DIN cable → bootloader recovery unavailable)
 
 - Flashed so far: re-latch-only (bug: hold flag), fixed re-latch (OK), relatch+seq
-  (bugs: button repeat, seq octave), `prophet10_v5_relatch_seq_internal.syx` with the
-  octave fix pending install at the time of writing.
+  (bugs: button repeat, seq octave). Built but **not installed**: the 2026-10-07 image
+  (seq octave fix, note values, readout, octave shift on Lo Freq, MIDI Out hook fix, HOLD
+  suspension while the arp is on, display revert) — `dist/` holds it; the superseded
+  builds are kept in `dist/old/`.
 - Verified: loader path, boot, hooks, HOLD stub, re-latch, seq record/play/clear, note
   value UI not yet reported, readout works (Keyboard id 36 read out).
 - Rule we hold ourselves to: no wrapper code at boot; only proven entry points; nothing in
@@ -52,17 +54,33 @@ behavioural source of truth; this file is the engineering context around it.
   0x5C04), `0x20090000–0x200FFFFF` (0xDC04). Stock uses ≤ `0x200874CC`; V5 blob
   `0x20088000–0x2008A000`; wrapper record `0x2008A000–0x2008C000`.
 - Button events `(id, value)`: 1 press, 2 release, **3 held-repeat** (gate `0x20036114`
-  passes 1–3). Known ids: Program 1–8 = 0–7, A440 = 0x0F, GLOBALS(?) = 0x19, Group = 0x20,
+  passes 1–3). Known ids: Program 1–8 = 0–7, A440 = 0x0F, TUNE = 0x0C, GLOBALS = 0x0D,
+  HOLD = 0x0E, UNISON = 0x19 (V5 tracks this one as its "globals" flag), Group = 0x20,
   Bank = 0x28, **Osc B Keyboard (key follow; has stock Group/Bank combos) = 36 (0x24)**,
-  **filter Keyboard Amount = 8** (cycles off/half/full on press; LED follows). The P10's
+  **Osc B Lo Freq = 37 (0x25) — the octave-shift modifier since 2026-10-07**, filter
+  Keyboard Amount = 8 (the modifier before that). LED ids ≠ button ids (table
+  `0x2004E496`): A440 LED 0x24, HOLD 0x23; LED setter `0x20036824(led, 0/1/2)`. The P10's
   panel is the same as the P5's — no extra buttons.
 - Display: `0x20037F25(c0,c1,c2)` 3 chars; `0x20037FF7(int)` integer (negatives shown).
   Codes: digits 0–9 = 0–9, A=0x0A b=0x0B d=0x0D E=0x0E F=0x0F i=0x12 L=0x15 n=0x17 O=0x18
   P=0x19 r=0x1B S=0x1C t=0x1D U=0x1E y=0x22 o=0x24 blank=0x25 '-'=0x26.
-- Stock keyboard FIFO consumer `0x2003BE8A…`: `note_on(1,note,vel)` at `0x2003BECC`
-  (hooked), then MIDI-out of the raw key `bl 0x2003BCE0(note, vel)` at `0x2003BED8`
-  (candidate hook for octave shift). Local-off path uses `0x20033F84/0x20033F38`.
-- Stock HOLD handler `0x200396xx` merges button + HLd pedal; LED 0x23; posts DSP msg.
+- Stock keyboard FIFO consumer `0x2003BE8C…` (1 ms timer callback): `note_on(1,note,vel)`
+  at `0x2003BECC` (hooked) only with local control on; `bl 0x2003BCE0(note, vel)` at
+  `0x2003BED8` posts a UI event (sig 8), NOT MIDI; MIDI Out of the key happens for local
+  on and off at `0x2003BEFA` (`bl 0x20033F84` note-on) / `0x2003BF16` (`bl 0x20033F38`
+  note-off), args `(cable, channel, note, vel)`. Full stock API notes: `docs/re/`.
+- Stock hold: `hold_set 0x20039688(state, source)` merges button (`ui+0x19c`) and pedal
+  (`ui+0x19d`, `ui = 0x20057390`), posts `0x080D0000|state` to the voice engine via
+  `0x2003D324` (hooked at `0x200396CA`, r4 = merged state), calls `0x2003EEE0` when going
+  off, LED 0x23. `0x2003B694()` returns the merged state; **stock `note_off` asks it at
+  `0x2003EACE` and, when on, hands the voice to the voice engine's sustain instead of
+  releasing** — hence arp steps piled up under HOLD in V5. The wrapper hooks that query
+  (answers 0 while the arp is on) and withholds/re-posts the hold message.
+- Stock display restore (patch number) `0x2003818C(ui)`; Globals menu open ⇔ word
+  `0x20057438 != 0`. Stock ignores MIDI realtime bytes (parser table F8/FA/FB/FC → loop).
+- OS = FreeRTOS + QP/C active object. Hooked sites run in the Timer Service task (keys/tick
+  1 ms, panel buttons/pots 6 ms, MIDI byte parser 1 ms) or the Prophet5 AO task (MIDI
+  notes, CC, hold); nothing hooked runs in an ISR. Full detail: `docs/re/stock-*.md`.
 
 ## V5 facts (see `firmware/v5_iface.h` for the address table)
 
@@ -88,17 +106,21 @@ behavioural source of truth; this file is the engineering context around it.
   pitches in the output callback; V5 kept at one octave while a sequence exists.
 - Re-latch/seq hold logic: hold re-assert after every clear while HOLD active.
 
-## Next: keyboard octave shift (approved design, spec slice 7)
+## Next: native arp engine (spec "Native arp engine (stock 2.1.0 base)")
 
-Modifier = Keyboard Amount (id 8): swallow its press; Bank = +1 octave, Group = −1,
-range ±2, integer display; release without Bank/Group ⇒ replay press+release to the stock
-(tap still cycles tracking; LED changes on release). Shift applies to local keys at the
-note hook (per-key shift memory for safe releases) and to the MIDI-out call at
-`0x2003BED8` (new `bl` hook, expect stock `0x2003BCE1`). Not applied in local-off mode.
-Split point moves with the keyboard (documented).
+Replace V5 with our own engine hooked straight into stock 2.1.0; RE reports in `docs/re/`
+(`v5-*.md` are git-ignored). David's rulings: octaves are per-pass transposition (C3 D4 |
+C4 D5); a key into an empty pool starts a step immediately only with HOLD off and internal
+clock; under external clock the grid is never reset; all display messages revert to the
+patch display after 1.5 s; stock hold is suspended while the arp is on. Open decisions in
+the spec: Up/Down end repeat, random repeat avoidance, arp to MIDI Out, Globals handling,
+kill-switch button. Order of work: engine (pool, pattern, clock) host-tested first, then
+glue, then a minimal stock-based image.
 
 ## Open items
 
-- Note value UI unverified on hardware; full image (clock filter) never installed.
+- Hardware-unverified in the 2026-10-07 image: note values, octave shift (Lo Freq), HOLD
+  while the arp is on, display revert, seq octave fix; full image (clock filter) never
+  installed.
 - Cosmetic: entering seq with the arp at o 2–4 flashes `o 1` over the step count.
 - Local-off mode shifting; rests in seq; display glyph for `o` vs `O` confirmed from V5.

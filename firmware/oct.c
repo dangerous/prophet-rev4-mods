@@ -1,7 +1,7 @@
 #include "oct.h"
 #include "platform.h"
 
-enum { OB_MOD = 8, OB_BANK = 0x28, OB_GROUP = 0x20, OB_PRESS = 1, OB_RELEASE = 2 };
+enum { OB_MOD = OCT_MOD_ID, OB_BANK = 0x28, OB_GROUP = 0x20, OB_PRESS = 1, OB_RELEASE = 2 };
 #define OCT_MAX 2
 #define KEY_DROPPED 0x7F
 

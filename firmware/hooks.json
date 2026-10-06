@@ -21,7 +21,7 @@
     "site": "0x200396CA",
     "expect": "0x20089081",
     "symbol": "hook_hold",
-    "note": "stock HOLD handler: post(msg) with r4 = new hold state -> V5 hold hook"
+    "note": "stock HOLD handler: post(msg) with r4 = new hold state -> V5 hold hook (replaced: message withheld while the arp is on)"
   },
   {
     "site": "0x2003BE9C",
@@ -42,10 +42,22 @@
     "note": "stock MIDI CC 123 All Notes Off -> V5 all-notes-off hook"
   },
   {
-    "site": "0x2003BED8",
-    "expect": "0x2003BCE1",
-    "symbol": "hook_local_midi_out",
-    "note": "stock keyboard FIFO consumer: post local key (note, vel) to MIDI Out -> stock fn (octave shift)"
+    "site": "0x2003BEFA",
+    "expect": "0x20033F85",
+    "symbol": "hook_local_midi_out_on",
+    "note": "stock keyboard FIFO consumer: local key note-on to MIDI Out (cable_mask, channel, note, vel) -> stock fn (octave shift)"
+  },
+  {
+    "site": "0x2003BF16",
+    "expect": "0x20033F39",
+    "symbol": "hook_local_midi_out_off",
+    "note": "stock keyboard FIFO consumer: local key note-off to MIDI Out (cable_mask, channel, note, vel) -> stock fn (octave shift)"
+  },
+  {
+    "site": "0x2003EACE",
+    "expect": "0x2003B695",
+    "symbol": "hook_hold_query",
+    "note": "stock note_off: is HOLD active? -> stock fn; answered 'no' while the arp is on"
   },
   {
     "kind": "word",

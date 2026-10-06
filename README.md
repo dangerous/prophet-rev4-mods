@@ -29,10 +29,16 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
   Default 1/8 (V5's behaviour). `[HW: unverified]`
 - **Button id readout** — hold A440 and press any button the arp doesn't use: its id is
   shown for a second. For mapping panel button ids. `[HW: verified 2026‑10‑07]`
-- **Keyboard octave shift** — hold the filter Keyboard Amount button, Bank = up, Group =
-  down (±2; both together = 0); shown on the display. Applies to the keys you play,
-  including what goes to MIDI Out; a plain tap still cycles keyboard tracking (LED on
-  release). `[HW: unverified]`
+- **Keyboard octave shift** — hold the Osc B **Lo Freq** button, Bank = up, Group = down
+  (±2; both together = 0); shown on the display. Applies to the keys you play, including
+  what goes to MIDI Out (Local Control on or off); a plain tap still toggles Lo Freq (LED
+  on release). `[HW: unverified]`
+- **HOLD while the arp is on** — the synth's own sustain is suspended while the arp runs,
+  so steps no longer pile up under HOLD (V5: C, then C+E, then C+E+G…); HOLD is purely the
+  arp's latch, and stock hold returns the moment the arp is switched off. `[HW: unverified]`
+- **Display messages** — everything the arp or the wrapper shows (mode, `o N`, `int`/`Syn`,
+  `OFF`, BPM, note value, step count, shift, button id) returns to the patch display after
+  1.5 s; nothing stays up permanently. `[HW: unverified]`
 
 ## Inputs you must supply
 

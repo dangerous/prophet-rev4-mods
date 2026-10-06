@@ -14,7 +14,8 @@ WRAPPER_BASE = 0x2008A000        # the appended wrapper record (tools/build.py)
 STATE_BASE = 0x2008B800          # code+rodata must end at or below this; state above
 REQUIRED_SYMBOLS = ("hook_local_note", "hook_midi_note_on", "hook_midi_note_off", "hook_hold",
                     "hook_kbd_scan", "hook_button", "hook_cc123", "wrapper_output",
-                    "hook_rt_trampoline", "hook_local_midi_out")
+                    "hook_rt_trampoline", "hook_local_midi_out_on", "hook_local_midi_out_off",
+                    "hook_hold_query")
 
 CFLAGS = [
     "-target", "thumbv7a-none-eabi", "-mcpu=cortex-a5", "-mthumb", "-mfloat-abi=soft",

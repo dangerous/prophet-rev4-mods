@@ -94,12 +94,13 @@ Manual verification on the instrument. Record results against the spec markers i
 
 ## Keyboard octave shift (spec "Keyboard octave shift")
 
-- [ ] Tap the filter **Keyboard Amount** button: tracking still cycles off → half → full,
-      LED changing on the *release*.
-- [ ] Hold Keyboard Amount, press Bank: display `1`; keys sound an octave up; the
-      tracking LED did not change. Release Keyboard Amount: nothing else happens.
+- [ ] Tap the Osc B **Lo Freq** button: Lo Freq still toggles, LED changing on the
+      *release*.
+- [ ] Hold Lo Freq, press Bank: display `1`; keys sound an octave up; the Lo Freq LED did
+      not change. Release Lo Freq: nothing else happens.
 - [ ] Bank again: `2`; again: stays `2`. Group ×4: `1 0 -1 -2`; again stays `-2`.
-- [ ] Hold Keyboard Amount, hold Group, press Bank: `0`.
+- [ ] Hold Lo Freq, hold Group, press Bank: `0`.
+- [ ] Globals → Local Control off, shift `1`: the DAW receives shifted notes; back on.
 - [ ] Shift `1`: hold a chord, change the shift to `-1` while holding, release the chord:
       no stuck notes; the next chord sounds an octave down.
 - [ ] Arp on, shift `1`: arpeggiates an octave up. HOLD + re-latch still work. Seq
@@ -109,10 +110,32 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] Prophet-10 split mode: the split point moves with the shift (expected).
 - [ ] Power cycle: shift back to 0.
 
+## HOLD while the arp is on (spec "HOLD while the arp is on")
+
+- [ ] Arp on, HOLD on. Hold C‑E‑G: **one note sounds at a time** (no C, C+E, C+E+G
+      pile‑up). Release the keys: still one note at a time. Repeat with the sustain pedal in
+      `HLd` mode.
+- [ ] HOLD on, arp **off**: play and release a chord — it sustains (stock hold unchanged).
+      Tap A440 while it sustains: the sustained notes stop and the arp plays the pattern from
+      the keys still down / latched. Tap A440 again: the keys still down sustain again.
+- [ ] Arp on, HOLD on, pattern latched. HOLD off: the arp drops the released notes as
+      before; the HOLD LED follows the button throughout.
+- [ ] Seq and re‑latch under HOLD behave as in their sections (one note per step).
+
+## Display messages (spec "Display messages")
+
+- [ ] Each of these shows for about 1.5 s and then the **patch number** returns: A440 +
+      Bank (`UP`…), A440 + Program 2 (`o 2`), A440 + Program 5 (`int`/`Syn`), A440 + Program
+      7 (`16d`), tap A440 on (`BPM`) and off (`OFF`), Lo Freq + Bank (`1`), A440 + Unison
+      (id), a seq step count.
+- [ ] Arp on, internal: turn Glide Rate — BPM shows while turning, then 1.5 s after you
+      stop the patch number returns. Nothing ever stays on the display permanently.
+- [ ] A new message within the 1.5 s restarts the timing (e.g. Bank, Bank, Bank).
+
 ## Button id readout (spec "Button id readout")
 
 - [ ] Hold A440, press a button the arp doesn't use (e.g. Osc B Keyboard = 36, Hold,
-      Preset, Record, Unison): display shows its id — note it down.
+      Preset, Record, Unison = 25): display shows its id — note it down.
 - [ ] Release A440: the arp does not toggle; the buttons do nothing else while A440 is held.
 
 ## If something is wrong

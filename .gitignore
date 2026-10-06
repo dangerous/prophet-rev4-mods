@@ -7,3 +7,5 @@ fixtures/*.syx
 fixtures/*.pdf
 fixtures/*.txt
 dist/*.syx
+docs/re/v5-*.md
+dist/old/

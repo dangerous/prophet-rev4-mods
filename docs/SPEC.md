@@ -111,22 +111,24 @@ payload bytes:
 
 ### Image patching (hook chaining, wrapper record)
 
-The build takes a **base** OS file (the V5 arp mod), a **wrapper binary** with its symbol
+The build takes a **base** OS file (V5 for the wrapper build, stock 2.1.0 for the native
+build — see "Arp engine (native)"), a **wrapper binary** with its symbol
 map, and a **hook list**, and produces a new OS file. Nothing is changed that the hook
 list and wrapper placement do not require.
 
 #### Wrapper record
 
-- The wrapper is loaded by **one COPY record appended to image A** after V5's last record:
-  load address `0x2008A000`, length `0x2000`. Image A's EXEC declared length grows by
-  `0x2010` (record + payload) and its check byte is recomputed. This is exactly the
-  mechanism V5 used to add itself to stock.
+- The wrapper is loaded by **one COPY record appended to image A** after the base's last
+  record: V5 base — load address `0x2008A000`, length `0x2000`; stock base — `0x20088000`,
+  length `0x8000`. Image A's EXEC declared length grows by the record size + 16 and its
+  check byte is recomputed. This is exactly the mechanism V5 used to add itself to stock.
 - Why that address: the stock startup's MMU region table maps `0x20020000–0x2008FFFF` as
   one RAM region (same attributes as V5's own blob); stock uses nothing above
   `0x200874CC`, V5 nothing above `0x2008A000`. The region is physically contiguous L2
   SRAM. `[HW: unverified for 0x2008A000+; the first wrapper ran at 0x20089600]`
-- Code occupies `[0x2008A000, 0x2008B800)`, state `[0x2008B800, 0x2008C000)`; state is
-  zero after every boot. The build fails if code+rodata exceed `0x1800` bytes.
+- V5 base: code occupies `[0x2008A000, 0x2008B800)`, state `[0x2008B800, 0x2008C000)`;
+  stock base: code `[0x20088000, 0x2008E000)`, state `[0x2008E000, 0x20090000)`. State is
+  zero after every boot. The build fails if code+rodata exceed the code area.
 - V5's own RAM-window record is left byte-identical (its zero tail is no longer used).
 
 History: versions up to `e61b2c4` placed a ≤0xA00-byte wrapper inside the zero tail of
@@ -142,8 +144,8 @@ V5's window record at `0x20089600`; that layout was verified on hardware.
 #### Hook retargeting
 
 - A hook list entry names a `site` (RAM address of a 4-byte Thumb-2 `BL` inside the stock
-  code record, `0x2002EF00..`), the `expect`ed current target (a V5 entry point, Thumb
-  bit set) and the wrapper `symbol` to call instead.
+  code record, `0x2002EF00..`), the `expect`ed current target (a V5 or stock entry point,
+  Thumb bit set) and the wrapper `symbol` to call instead.
 - The build locates the record containing the site, verifies the instruction there is a
   `BL` whose target equals `expect`, and rewrites it as a `BL` to the symbol's address
   from the map. It fails if the site is not such a `BL`, if the symbol is missing, if the
@@ -158,6 +160,195 @@ V5's window record at `0x20089600`; that layout was verified on hardware.
 - `python3 -m tools diff A.syx B.syx` — prints every differing byte span of the decoded
   payloads as `image <n> record @0x<offset> ram 0x<lo>..0x<hi>: <n> bytes`, so a reviewer
   can see exactly what a build changed. Record-structure differences are reported as such.
+
+### Arp engine (native) `[HW: unverified]`
+
+Our own arpeggiator, hooked directly into stock Main OS 2.1.0 in place of the third-party
+V5 blob; nothing of V5 is used or required. The player-facing behaviour is V5's (the
+baseline) plus this project's features, with the deliberate changes listed under
+"Differences from V5". The reverse-engineering this rests on is in `docs/re/`.
+
+Terms: *keys down*, *HOLD active* and *latched* as in "Re-latch under HOLD". *Pool* = the
+notes the arp plays from: keys down (local keyboard with local control on, and MIDI-in
+notes) plus latched notes. A pool note is a pitch; the same pitch from two sources is one
+pool note with the higher velocity.
+
+#### Controls
+
+| Action | Effect | Display |
+|---|---|---|
+| Tap A440 (press and release, nothing consumed in between) | arp on / off; the A440 LED follows | `OFF`, or BPM / `Syn` |
+| A440 + Bank / Group | mode next / previous: Up, Down, Up/Down, Random | `UP `, `dn `, `Ud `, `rnd` |
+| A440 + Program 1–4 | octave range 1–4 | `o 1`…`o 4` |
+| A440 + Program 5 | clock source internal / MIDI | `int` / `Syn` |
+| A440 + Program 6 | clear the sequence ("Seq") | — |
+| A440 + Program 7 / 8 | note value shorter / longer ("Note value") | `32`…`4b` |
+| A440 + Record (id TBD by readout) | pattern to MIDI Out off / on ("Output") | `LoC` / `out` |
+| A440 + any other button | id readout ("Button id readout") | id |
+| Glide Rate, arp on with internal clock | tempo 40–300 BPM = 40 + round(260·raw/1023), raw 0–1023; the patch's glide is not changed | BPM |
+| Glide Rate otherwise (arp off, or `Syn`) | stock glide | stock |
+| HOLD button; sustain pedal with Release/Sustain `HLd` | latch ("Re-latch under HOLD") | — |
+| Keyboard Amount + Bank / Group | keyboard octave shift ("Keyboard octave shift") | shift |
+
+1. A440 never reaches stock in any state (the tuning tone is not available). A440 press
+   marks the hold "unused"; every consumed combo marks it "used"; the release toggles the
+   arp only if still unused. Repeat events (value 3) of any button change nothing.
+2. A button consumed while A440 is held has its release consumed as well; stock never sees
+   an orphan press or release. Buttons not listed pass to stock untouched (press, repeats,
+   release).
+3. The Globals menu (a stock mode entered with GLOBALS, id 0x0D) is unaffected: it never
+   involves A440, and Program/Bank/Group are only ever consumed while A440 is held. (V5
+   special-cased button 0x19 held — which is UNISON, not GLOBALS — as a pass-through
+   modifier; that is dropped.)
+4. Transient texts (mode, octaves, `int`/`Syn`, note value, shift, readout, `OFF`) show for
+   stock's display timeout (≈1 s) and then revert: while the arp is on, to its status text
+   (`Syn` under MIDI clock, otherwise the BPM); while it is off, to stock's normal display
+   (the program number). A BPM change while on and internal shows immediately and stays.
+5. Nothing is saved with patches or across power cycles. Power-up: off, Up, 1 octave,
+   internal, 120 BPM, 1/8, MIDI-out option off, no sequence, shift 0. Mode, octaves, clock
+   source, BPM and note value survive the arp being switched off and on.
+
+#### Pool
+
+6. Note-on adds the pitch (a latched pitch pressed again becomes held again). Note-off
+   while HOLD is active latches the pitch — the pool does not shrink; otherwise it removes
+   the pitch, and if that pitch is the one sounding it is released at once (step cut short).
+7. HOLD going inactive drops every latched pitch (keys still down stay). Re-latch applies
+   as specified in "Re-latch under HOLD": the first key after all keys were released
+   replaces the latched set.
+8. MIDI CC 123–127 (all notes off, omni/mono/poly — every stock all-notes-off path)
+   empties the pool, releases the sounding note and resets the pattern. HOLD state is
+   **kept** (these do not switch HOLD off). A program change switches HOLD off in stock
+   (its LED goes out), so latched pitches drop then, as in V5; keys still down keep
+   playing and mode, tempo and the other settings are untouched.
+9. Arp off: keys sound directly through stock as if the arp did not exist; latched pitches
+   are not re-sounded and stay latched until HOLD goes inactive. Arp on with keys down:
+   the directly sounding notes are released and the pattern starts at once (internal
+   clock) or on the next clock (MIDI).
+
+#### Pattern
+
+10. Base pattern = the pool sorted by pitch. With octave range *o* the base pattern is
+    played *o* times, each pass one octave above the previous (per-pass octaves); an
+    entry above pitch 127 is silent. Up plays the expanded sequence ascending; Down plays
+    it in reverse (top octave first); Up/Down plays it forward then backward **without
+    repeating the turning notes** (C E G at `o 1` → C E G E C E G E …; one pitch at `o 1`
+    simply repeats). Random plays one entry of the expanded sequence per step, uniformly
+    at random, never the same entry twice in a row unless the sequence has one entry.
+11. Pool changes mid-pattern: Up/Down/Up-Down continue from the pitch just played (the
+    next entry above or below it in the new sequence, honouring the current direction);
+    an emptied pool silences and resets so the next note starts at the beginning.
+12. Changing mode, octave range or clock source, and a re-latch, restart the pattern. With
+    the internal clock a restarted pattern with a non-empty pool steps immediately.
+13. A step's velocity is its pool note's velocity. Steps are played through stock's voice
+    allocation exactly as keys are (unison, split/stack, glide and the DSP path are
+    stock's; the arp sends no note-off velocity).
+14. Seq mode ("Seq") substitutes the recorded steps, transposed by the trigger key, for
+    the base pattern; octaves per pass, modes, timing and output apply unchanged.
+
+#### Timing
+
+15. Internal clock: one step every 60 s ÷ (BPM × steps per beat), steps per beat from the
+    note value (1/8 → 2). The sounding note is released half-way through the step (gate
+    50 %). The time base is the 1 ms keyboard-scan tick; the remainder is carried so the
+    average tempo is exact.
+16. A note-on into an idle arp (nothing sounding, pattern at rest) steps immediately;
+    otherwise the note waits for the running clock. A tempo or note-value change does not
+    reset the phase. Under MIDI clock a note never moves the phase: steps always fall on
+    the clock grid.
+17. MIDI clock (`Syn`): 24 clocks per beat; clocks per step from the note value (1/8 → 12),
+    release at half the step (rounded down). Start → the pattern restarts on the next
+    clock; Continue → resumes; Stop → silence, position kept. Without clocks nothing
+    sounds (keys still pool). 1 s without a clock → silence, and the next clock restarts
+    the pattern. Realtime is followed from whichever port (USB or DIN) sends it first,
+    until clock loss or a switch to `int`. The internal clock is not used under `Syn`.
+    A note-value change under `Syn` re-aligns to the next multiple of the new step length
+    counted from Start, so the pattern stays on the DAW grid.
+
+#### Output
+
+18. Pattern to MIDI Out **off** (default): stock behaviour — the keys you play go to MIDI
+    Out, arp steps do not. **On**: arp/seq steps go to MIDI Out as note-on/note-off (the
+    keyboard octave shift already applied, on stock's MIDI channel and output cable) and
+    the raw keys do not; with the arp off the option changes nothing. For an external
+    synth on the Prophet's MIDI Out to play the pattern.
+19. Local control off: keys bypass the arp entirely and go straight to MIDI Out (stock);
+    MIDI-in notes still arpeggiate (as in V5).
+
+#### Robustness
+
+20. Up to 128 events arriving between two ticks are applied in order; beyond that the
+    newest are dropped and `Err` is shown for the display timeout — the arp is **never
+    disabled** by input volume. (V5 dropped events and switched the arp off above 32.)
+21. HOLD state belongs to stock; the engine reads it and never resets it (no hold
+    re-assert anywhere).
+22. No wrapper code runs at boot. While the arp is off, only the hooks' bookkeeping runs
+    (pool tracking, seq recording, octave shift, button handling). Power-up state is "arp
+    off", so a fault inside the engine proper is cleared by a power cycle and the USB
+    OS-update path stays available. Hooks in timer context never block.
+23. Kill switch: holding A440 while powering on (checked against stock's button-state
+    table during the first second of ticks; button TBD if stock assigns A440 a power-on
+    meaning) makes every hook pass straight through to stock for the whole session, with
+    no engine state touched — the instrument behaves as stock 2.1.0, so a misbehaving
+    build can always be re-flashed over USB.
+
+#### Differences from V5 (intentional)
+
+- Octaves are per pass, not a pitch-sorted union of transposed notes (C3 + D4 at `o 2` →
+  C3 D4 C4 D5; V5: C3 C4 D4 D5).
+- Random never repeats an entry back-to-back.
+- Re-latch under HOLD, seq, note values (also under MIDI clock), keyboard octave shift,
+  button id readout, pattern-to-MIDI-Out option, kill switch.
+- Glide Rate is only captured with the arp on *and* internal clock (V5 captured it whenever
+  the arp was on, so under `Syn` glide was dead and BPM changed silently).
+- CC 123–127 all clear the pool and keep HOLD (V5: CC 123 only, and it dropped its hold);
+  a consumed button's release is consumed; no overflow shutdown.
+- Display timeouts are stock's (≈1 s, not 1.2 s) and the program number comes back after
+  the arp is switched off (V5 left `OFF` on the display).
+- V5's pass-through while button 0x19 (UNISON) is held is dropped.
+- Everything else matches V5: modes and the Up/Down turning rule, timing math, 50 % gate,
+  Glide → BPM mapping, display texts, LED, Start/Stop/Continue, clock loss, port follow,
+  pass-through when off, power-up defaults.
+
+#### Realisation (stock facts asserted by tests; details in `docs/re/`)
+
+- Base image: stock Main OS 2.1.0 (`fixtures/prophet5_main_2.1.0.syx`). Hook sites, all
+  inside the stock code record and each verified to hold the expected stock target before
+  patching: `0x2003BE9C` (`bl 0x2003D828`, keyboard FIFO count — the 1 ms tick),
+  `0x2003BECC` (`bl 0x2003EC5C`, local `note_on(1, note, vel)`), `0x2003BEFA` and
+  `0x2003BF16` (`bl 0x20033F84` / `bl 0x20033F38`, local key → MIDI Out as
+  `midi_note_on/off(cable, channel, note, vel)`; run for local control on and off),
+  `0x2003B07A` (`bl 0x2003EC5C`, MIDI `note_on(2, note, vel)`), `0x2003B032`
+  (`bl 0x2003EEDC`, MIDI `note_off(2, note)`), `0x2003B294` and `0x2003B144`
+  (`bl 0x2003EBE4`, CC 123 and CC 124–127 all-notes-off), `0x200396CA` (`bl 0x2003D324`
+  inside `hold_set`, r4 = merged button/pedal hold state), `0x2003C244` (`bl 0x2003BC30`,
+  panel button `(id, value)`), `0x2003C292` (`bl 0x20036B50`, pot raw store `(id, raw)`),
+  `0x2003C2A6` (`bl 0x2003BC6C`, pot-change post `(id, old, new)`), and the four
+  MIDI-parser table words `0x200343D8/E0/E4/E8` (F8/FA/FB/FC, stock `0x20034343`). The
+  stock call at `0x2003BED8` (`0x2003BCE0`) posts a UI event, not MIDI — it is not hooked.
+- Contexts (FreeRTOS): the tick, button, pot and realtime hooks run in the timer-service
+  task; the MIDI note, CC and HOLD hooks run in the lower-priority Prophet5 active-object
+  task and can be pre-empted by the former. No hook runs in an interrupt. Engine state is
+  mutated only from the tick; the other hooks hand events over through a 128-entry queue
+  under a short interrupt-disabled section (previous state restored).
+- Stock primitives used: `note_on 0x2003EC5C(src, note, vel)` / `note_off 0x2003E95C(src,
+  note)` (src 1 local, 2 MIDI; bookkeeping only in stock), `all_notes_off 0x2003EBE4`,
+  `led_set 0x20036824(id, state)` with A440 LED id `0x24`, display `0x20037F25(c0, c1,
+  c2)` / `0x20037FF7(int)`, display timeout `0x20036B14(1)` + `0x2003C940()` (stock then
+  restores the program number itself via `0x2003818C`), MIDI transmit `0x20033F84` /
+  `0x20033F38(cable, channel, note, vel)` with cable = global 6 and channel from
+  `0x20037B2C()` (how the pattern reaches MIDI Out), pot store `0x20036B50` and pot-change
+  post `0x2003BC6C` (Glide Rate = pot 22, raw 0–1023; the store is always performed so
+  stock's pot tracking stays current, only the post is swallowed while captured),
+  `global_get 0x20037B20(idx)` (7 == 2 → local control on), button-state table
+  `0x20079B20` (kill switch), `fifo_count 0x2003D828`.
+- Wrapper record: one COPY record appended to image A at `0x20088000`, length `0x8000`
+  (code `[0x20088000, 0x2008E000)`, state `[0x2008E000, 0x20090000)`, zero at boot) — the
+  RAM V5 and the V5-based wrapper occupied, inside the stock MMU region that ends at
+  `0x2008FFFF`.
+- Build: `make image-native` → `build/prophet10_native.syx` from `firmware/hooks_native.json`.
+  The V5-based images stay the shipped build, and the "Realisation" subsections of the
+  other behaviour sections describe that build, until this section is hardware-verified.
 
 ### Note value (arp/seq step length) `[HW: unverified]`
 
@@ -213,9 +404,11 @@ V5's window record at `0x20089600`; that layout was verified on hardware.
 5. Limits of this version: keys are not shifted in Local-Off mode (keys to MIDI Out only);
    Keyboard Amount held together with A440 is undefined.
 6. Realisation: the local-note hook shifts the key and records the per-key shift
-   (128-entry table) so the release maps identically; a new `bl` hook on the stock call
-   that sends local keys to MIDI Out (`0x2003BED8`, expecting stock `0x2003BCE1`,
-   `(note, vel)`) applies the same per-key mapping; the button hook swallows id 8 (press,
+   (128-entry table) so the release maps identically; `bl` hooks on the two stock calls
+   that send local keys to MIDI Out (`0x2003BEFA` note-on and `0x2003BF16` note-off,
+   expecting stock `0x20033F85` / `0x20033F39`, `(cable, channel, note, vel)`) apply the
+   same per-key mapping — the call at `0x2003BED8` hooked by earlier builds posts a UI
+   event, not MIDI, so those builds did not shift MIDI Out; the button hook swallows id 8 (press,
    repeats, release), treats Bank/Group presses while it is held as shift commands, and on
    a release with no shift command replays press+release of id 8 through V5's button entry
    (which forwards non-arp buttons to stock when A440 is not held).
@@ -223,8 +416,8 @@ V5's window record at `0x20089600`; that layout was verified on hardware.
 ### Button id readout `[HW: unverified]`
 
 While A440 is held, pressing a panel button that neither V5 nor the wrapper assigns
-(anything other than Program 1–8, Bank, Group, Keyboard Amount (id 8) and the GLOBALS
-modifier id `0x19`) shows
+(anything other than Program 1–8, Bank, Group, Keyboard Amount (id 8) and UNISON, id
+`0x19`, which V5 treats as a pass-through modifier) shows
 that button's id on the display for about a second and is otherwise ignored. An aid for
 mapping panel button ids when designing new combinations; V5 passed such presses to
 stock, where they had no defined meaning while A440 was held.
@@ -236,15 +429,17 @@ Enforced by tests on every built image against its base:
 1. The output decodes with `trailer: ok`, target `main`.
 2. The SHARC image (`AC`) is byte-identical to the base.
 3. The main-CPU image has the base's record sequence (same count, types, load addresses,
-   lengths, EXEC entry) **plus exactly one appended COPY record** (`0x2008A000`, `0x2000`);
-   the EXEC declared length is the base's plus `0x2010`.
+   lengths, EXEC entry) **plus exactly one appended COPY record** (V5 base `0x2008A000`,
+   `0x2000`; stock base `0x20088000`, `0x8000`); the EXEC declared length is the base's
+   plus the record size + 16.
 4. Payload bytes of the base's records differ only within the 4-byte `BL` at each `bl`
    hook site (a retarget may leave the first halfword unchanged) and within the 4-byte
    word at each `word` site.
 5. The stock startup record (COPY `0x2002E000`, `0xEDC` bytes) is byte-identical to the
    base; no wrapper code runs at boot — the wrapper is entered only through the hooks.
 6. Every hook site lies inside the stock code record and, before patching, holds exactly
-   what the hook list says it holds (a `BL` to the named V5 entry, or the named word).
+   what the hook list says it holds (a `BL` to the named V5 or stock entry, or the named
+   word).
 
 ### Re-latch under HOLD `[HW: verified 2026-10-06, Prophet-10 Rev4 — incl. the hold re-assert fix]`
 
@@ -366,5 +561,3 @@ A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and 
   0x20088EAB` `(id, value)`, CC 123 `0x2003B294 → 0x20088E83`, in addition to the
   re-latch hooks. Wrapper state occupies `0x20089E80–0x2008A000`.
 
-### Safety invariants
-_Not yet specced._

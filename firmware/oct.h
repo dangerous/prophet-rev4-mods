@@ -6,10 +6,11 @@
 #include <stdint.h>
 
 enum { OCT_FORWARD = 0, OCT_CONSUMED = 1, OCT_REPLAY_TAP = 2 };
+#define OCT_MOD_ID 37             /* modifier button: Osc B Lo Freq (was filter Keyboard Amount, 8) */
 
 typedef struct {
     int8_t  shift;            /* -2..2 octaves */
-    uint8_t mod_held;         /* Keyboard Amount (id 8) is down */
+    uint8_t mod_held;         /* the modifier (Lo Freq, id 37) is down */
     uint8_t used;             /* Bank/Group pressed during this hold: not a tap */
     uint8_t bank_down;
     uint8_t group_down;

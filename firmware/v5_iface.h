@@ -16,7 +16,6 @@ enum {
     IF_BUTTON,            /* 0x20088EAB V5 panel-button hook: (id, value) */
     IF_INIT_GUARD,        /* 0x20088C81 V5 lazy init (idempotent) */
     IF_ORIG_OUT,          /* 0x20089061 V5 original note output: (ctx, src, on, note, vel) */
-    IF_HOLD_HOOK,         /* 0x20089081 V5 hold hook (reads r4) — used by the asm stub */
     IF_ARP_ENABLED_BYTE,  /* 0x200894D8 engine + 0x300 */
     IF_OCTAVES_BYTE,      /* 0x200894DF engine + 0x307 */
     IF_OUT_PTR,           /* 0x200894F0 engine + 0x318: note output function pointer */
@@ -33,7 +32,14 @@ enum {
     IF_ENGINE_CLKLOSS,    /* 0x200894FC engine + 0x324: ticks since last MIDI clock (u32) */
     IF_DISPLAY_TIMER,     /* 0x200895E8 V5 hook state + 0x418: display timeout (u16 ticks) */
     IF_A440_USED,         /* 0x20089508 V5 button ctx + 8: A440 hold used as modifier (u8) */
-    IF_STOCK_MIDI_OUT,    /* 0x2003BCE1 stock: post local key (note, vel) to MIDI Out */
+    IF_STOCK_MIDI_OUT_ON, /* 0x20033F85 stock: local key note-on to MIDI Out (cable_mask, channel, note, vel) */
+    IF_STOCK_MIDI_OUT_OFF,/* 0x20033F39 stock: local key note-off to MIDI Out (cable_mask, channel, note, vel) */
+    IF_STOCK_HOLD_QUERY,  /* 0x2003B695 stock: merged HOLD button/pedal state () -> 0/1 */
+    IF_STOCK_DSP_POST,    /* 0x2003D325 stock: post a 32-bit word to the voice engine */
+    IF_STOCK_DISPLAY_RESTORE, /* 0x2003818D stock: redraw the patch display (ui) */
+    IF_STOCK_UI,          /* 0x20057390 stock: the UI object passed to display restore */
+    IF_ENGINE_MODE,       /* 0x200894DD engine + 0x305: mode 0 Up 1 Down 2 Up/Down 3 Random (u8) */
+    IF_ENGINE_BPM,        /* 0x200894E0 engine + 0x308: BPM (u16) */
     IF_COUNT
 };
 
