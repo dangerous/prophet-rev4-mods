@@ -245,6 +245,10 @@ A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and 
 - Octave setting byte `0x200894DF` (engine + 0x307); Program ids 0–3 = octaves 1–4;
   id 5 = Program 6. Any Program press while A440 is held marks the A440 hold as "used",
   which suppresses the toggle on release; ids 5–7 are otherwise no-ops in V5.
+- Panel button events arrive as `(id, value)` with value 1 = press, 2 = release and
+  **3 = still held** (the stock gate `0x20036114` passes 1–3; repeats arrive while a
+  button is down). Only 1 and 2 change wrapper state, as in V5.
+  `[HW: bug seen 2025-10-06 — a repeat reset the A440-held flag; fixed]`
 - Hooks: keyboard-scan tick `0x2003BE9C → 0x20088D53`, panel buttons `0x2003C244 →
   0x20088EAB` `(id, value)`, CC 123 `0x2003B294 → 0x20088E83`, in addition to the
   re-latch hooks. Wrapper state occupies `0x20089E80–0x2008A000`.

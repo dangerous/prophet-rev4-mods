@@ -173,12 +173,17 @@ int seq_note(seq_t *s, int src, int note, int vel)
 int seq_button(seq_t *s, int id, int value)
 {
     if (id == ID_A440) {
-        s->a440_held = value == PRESS;
-        if (value == RELEASE && s->recording) {
-            s->recording = 0;
-            s->active = s->count > 0;
-            if (s->active)
-                clear_v5(s);                      /* drop what the audible recording left in the arp */
+        /* the stock also sends 3 ("still held") repeats: only 1 and 2 change state, as in V5 */
+        if (value == PRESS) {
+            s->a440_held = 1;
+        } else if (value == RELEASE) {
+            s->a440_held = 0;
+            if (s->recording) {
+                s->recording = 0;
+                s->active = s->count > 0;
+                if (s->active)
+                    clear_v5(s);                  /* drop what the audible recording left in the arp */
+            }
         }
         return 0;
     }

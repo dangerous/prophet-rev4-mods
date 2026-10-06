@@ -55,6 +55,12 @@ class V5FactTests(unittest.TestCase):
         # the hold-event entry: push {r4, lr}; mov r4, r0; bl guard; ... enqueues event 5
         self.assertEqual(build.read_ram(self.payload, 0x20088F36, 4), bytes.fromhex("10b50446"))
 
+    def test_stock_button_gate_passes_values_1_to_3(self):
+        # 0x20036114: subs r3, r1, #1 ; push {r4, lr} ; cmp r3, #2 ; bhi -> reject
+        self.assertEqual(build.read_ram(self.payload, 0x20036114, 8), bytes.fromhex("4b1e10b5022b19d8"))
+        # V5's button hook only acts on values 1 and 2: subs r1, r5, #1 ... cmp r1, #1 ; bhi
+        self.assertEqual(build.read_ram(self.payload, 0x20088EC2, 4), bytes.fromhex("012907d8"))
+
     def test_hold_hook_forwards_r4_and_calls_stock_post(self):
         code = build.read_ram(self.payload, 0x20089080, 0x14)
         # push {r4, lr}; ldr r3,[pc,#0xc]; blx r3; mov r0, r4; bl ...; pop {r4, pc}; ...; literal

@@ -446,6 +446,31 @@ static void test_clears_do_not_touch_hold_when_inactive(void) {
     CHECK(count_type(EV_CLEAR) == 2 && count_type(EV_HOLD) == 0);
 }
 
+static void test_button_repeat_values_do_not_change_held_state(void) {
+    /* the stock delivers value 3 ("still held") repeats while a button is down; V5 ignores
+     * them and so must we — the first hardware test lost the A440 state to one of these */
+    reset();
+    CHECK(seq_button(&s, A440, PRESS) == 0);
+    for (int i = 0; i < 20; i++) CHECK(seq_button(&s, A440, 3) == 0);
+    CHECK(seq_button(&s, A440, 0) == 0);
+    CHECK(s.a440_held == 1);
+    CHECK(seq_note(&s, LOCAL, 60, 100) == 0);                 /* recording starts */
+    CHECK(s.recording == 1 && s.count == 1 && last_of(EV_DISPLAY)->a == 1);
+    CHECK(has_button(PROGRAM1, PRESS));
+    seq_button(&s, A440, 3);
+    seq_note(&s, LOCAL, 60, 0);
+    CHECK(seq_button(&s, A440, RELEASE) == 0);
+    CHECK(s.a440_held == 0 && s.active == 1);
+    /* repeats on Program buttons while active are harmless too */
+    seq_button(&s, A440, PRESS);
+    CHECK(seq_button(&s, PROGRAM2, PRESS) == 1);
+    CHECK(seq_button(&s, PROGRAM2, 3) == 1);
+    CHECK(s.octaves == 2);
+    CHECK(seq_button(&s, PROGRAM6, 3) == 0);
+    CHECK(s.active == 1);                                     /* only a press clears */
+    seq_button(&s, A440, RELEASE);
+}
+
 static void test_state_fits_and_is_zero_initialised(void) {
     seq_t z;
     memset(&z, 0, sizeof z);
@@ -479,6 +504,7 @@ int main(void) {
     test_fed_dummy_with_no_steps_cannot_hang();
     test_clears_reassert_hold_to_the_arp();
     test_clears_do_not_touch_hold_when_inactive();
+    test_button_repeat_values_do_not_change_held_state();
     test_state_fits_and_is_zero_initialised();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
