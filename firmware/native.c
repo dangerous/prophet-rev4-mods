@@ -212,6 +212,8 @@ void plat_engine_reset_acc(void) {}
 int hook_kbd_scan(void *fifo)
 {
     ensure_init();
+    arpui_tick(UI, ARP);                                   /* kill switch first: it must get its
+                                                              chance before any engine code runs */
     if (!killed()) {
         int post;
         q_drain();
@@ -220,7 +222,6 @@ int hook_kbd_scan(void *fifo)
             dsp_post(DSP_HOLD_MSG | (uint32_t)post);       /* "HOLD while the arp is on" */
         arp_tick(ARP);
     }
-    arpui_tick(UI, ARP);                                   /* also watches the kill switch */
     return SFN(NI_FIFO_COUNT, scan_fn)(fifo);
 }
 
