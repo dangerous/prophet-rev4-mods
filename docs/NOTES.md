@@ -168,8 +168,9 @@ behavioural source of truth; this file is the engineering context around it.
 ## Open items
 
 - Patch memory (arp settings in program parameters 93/94) verified 2026-10-07; the voice
-  engine ignores those slots. Possible follow-up: the sequence in the 29 spare
-  bytes of the flash record (pitches only, ~28 steps, not in SysEx dumps; hooks on the flash
-  serialiser/deserialiser — a 4 KB sector holds 32 programs, so backup first).
+  engine ignores those slots. The 29 spare record bytes are too small for a sequence; the
+  flash map, driver API and two unreferenced areas (`0x511000–0x5FFFFF`, `0x755000–end`)
+  are in `docs/re/flash.md` (2026-10-07, from disassembly only — a read-only check on the
+  instrument for chip size and blankness is the next step before any write).
 - Seq recording from MIDI-in not yet exercised on hardware.
 - Possible later features: arp to MIDI Out (for an external synth), rests in seq.
