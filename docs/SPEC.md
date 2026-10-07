@@ -288,9 +288,9 @@ this engine deliberately differs it is marked **(change)** with the reason.
   is an ordinary A440 press. Realisation: during the first 3 s of ticks (the panel link
   comes up later than 1 s) the stock button-held table is polled; A440 down there without
   a press event having been reported since power-on means it was held from the start.
-  `[HW: 2026-10-07 — a 1 s table-only window missed the pre-held button, 3 s saw it; a
-  press-event trigger was tried and dropped because a normal A440 tap soon after power-on
-  also killed the arp; held-from-start with the press exclusion not yet re-tested]`
+  `[HW: verified 2026-10-07, Prophet-10 Rev4 — held from power-on kills; a tap 1 s after
+  power-on does not. A 1 s table-only window had missed the pre-held button (the panel
+  link comes up later); the panel reports no synthetic press for a pre-held button]`
 - No code runs at boot; all state is zero in the image and initialised lazily by the first
   hook that runs.
 
