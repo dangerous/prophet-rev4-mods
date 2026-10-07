@@ -33,8 +33,8 @@ behavioural source of truth; this file is the engineering context around it.
   Globals); kill switch verified with a 3 s table window. A press-event trigger was added
   and then dropped (a normal tap soon after power-on killed the arp); the table check now
   excludes an A440 that was reported pressed — verified both ways 2026-10-07 (so the panel
-  sends no synthetic press for a pre-held button). Pending re-test: the Program 7/8
-  direction swap (8 = shorter/+).
+  sends no synthetic press for a pre-held button). Program 7/8 direction swap (8 =
+  shorter/+) verified the same day. Nothing pending on hardware.
 - First native flash attempt stalled the loader at `100` with the eight Program LEDs lit:
   the payload was an exact multiple of 7 and our encoder omitted the empty tail group's MS
   byte, which the loader always reads. Nothing was written; power cycle recovered. Fixed in
@@ -137,5 +137,5 @@ behavioural source of truth; this file is the engineering context around it.
 
 ## Open items
 
-- Re-test on hardware: the Program 7/8 swap; seq recording from MIDI-in not yet exercised.
+- Seq recording from MIDI-in not yet exercised on hardware.
 - Possible later features: arp to MIDI Out (for an external synth), rests in seq.

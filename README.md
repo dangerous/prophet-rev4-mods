@@ -29,7 +29,7 @@ All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
   A440 + Program 6 clears it.
 - **Note value** — A440 + Program 8 (shorter, +) / Program 7 (longer, −): 1/32, 1/16T,
   1/16, 1/8T, 1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1, 2 bars, 4 bars, on the internal clock
-  and under MIDI sync. Default 1/8. `[the 7/8 swap not yet re‑tested]`
+  and under MIDI sync. Default 1/8.
 - **Keyboard octave shift** — hold the Osc B **Lo Freq** button, Bank = up, Group = down
   (±2; both together = 0). Applies to the keys you play and to MIDI Out; a plain tap still
   toggles Lo Freq (LED on release).

@@ -163,7 +163,7 @@ record placement do not require.
   payloads as `image <n> record @0x<offset> ram 0x<lo>..0x<hi>: <n> bytes`, so a reviewer
   can see exactly what a build changed. Record-structure differences are reported as such.
 
-### Arp engine `[HW: verified 2026-10-07, Prophet-10 Rev4 — the whole checklist on the first flash; the Program 7/8 swap that followed is in the rebuilt image, not yet re-tested]`
+### Arp engine `[HW: verified 2026-10-07, Prophet-10 Rev4 — the whole checklist]`
 
 The arp proper. The behaviours specified in their own sections (re-latch, seq, note
 value, keyboard octave shift, HOLD while the arp is on, display messages, button id
@@ -333,7 +333,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
    Power-up default is 1/8. Not saved with patches.
 2. A440 + **Program 8** selects the next shorter (faster) value, A440 + **Program 7** the
    next longer — think − / +, where + is faster (swapped from the first build on
-   2026-10-07); the ends do not wrap. The display shows the new value:
+   2026-10-07, verified the same day); the ends do not wrap. The display shows the new value:
    `32`, `16t`, `16`, `8t`, `16d`, `8`, `8d`, `4`, `4d`, `2`, `1`, `2b`, `4b`
    (right-aligned; glyphs as the panel font allows).
 3. Internal clock: the step period is the note value at the current BPM; the note is
