@@ -295,10 +295,12 @@ deviations are marked **(change)** with the reason.
 - Events from the other task are queued to the tick; the queue holds 64 events; if it ever
   fills, the newest events are dropped and the arp is **not** disabled **(change: V5 cleared
   and disabled the arp on overflow)**.
-- **Kill switch**: holding **A440** during the first second after power-on disables every
-  arp hook for the session (all hooks fall straight through to stock), so a
-  misbehaving engine cannot block the USB re-flash path. (To confirm on hardware: A440 has
-  no stock power-on meaning; the bootloader is entered with the wheels, not buttons.)
+- **Kill switch**: A440 held at power-on, **or pressed within the first 3 s after
+  power-on**, disables every arp hook for the session (all hooks fall straight through to
+  stock; the A440 press itself reaches stock too), so a misbehaving engine can be bypassed
+  without re-flashing. Detected two ways: the stock button-held table, and the A440 press
+  event itself. `[HW: 2026-10-07 — the table alone (1 s window) did not detect a button
+  held from before power-on: a panel reports changes, and its link comes up late]`
 - No code runs at boot; all state is zero in the image and initialised lazily by the first
   hook that runs.
 

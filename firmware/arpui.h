@@ -17,7 +17,7 @@
 #define ARPUI_BANK 0x28
 #define ARPUI_LED_A440 0x24
 #define ARPUI_POT_GLIDE 0x16
-#define ARPUI_BOOT_TICKS 1000         /* kill-switch window after power-on */
+#define ARPUI_BOOT_TICKS 3000         /* kill-switch window after power-on (3 s) */
 
 typedef struct {
     rate_t   rate;

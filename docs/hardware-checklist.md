@@ -144,9 +144,9 @@ Manual verification on the instrument. Record results against the spec markers i
 installs over V5 or stock alike. First flash of a new engine — test in this order and stop
 at the first surprise:
 
-- [ ] **Kill switch first**: power off, hold A440, power on, keep holding ~2 s. Everything
-      must be pure stock: keys sound, A440 plays the tuning tone, Glide Rate is glide, HOLD
-      sustains. Power cycle without holding anything.
+- [ ] **Kill switch first**: power on and **press A440 within 3 s** (holding it from before
+      power-on should work too). Everything must be pure stock: keys sound, A440 plays the
+      tuning tone, Glide Rate is glide, HOLD sustains. Power cycle without touching anything.
 - [ ] Arp off: play, HOLD, sustain pedal, MIDI in, program change — all as stock. A440 does
       **not** play the tuning tone (it is the arp button); Globals → A440 still does.
 - [ ] Tap A440: LED on, display shows `120` then the patch number after 1.5 s. Hold C‑E‑G:

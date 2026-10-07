@@ -247,6 +247,20 @@ static void test_a440_held_at_power_on_disables_everything(void) {
     ticks(10);
     CHECK(!u.kill);
     fake_a440_down = 0;
+    CHECK(ARPUI_BOOT_TICKS == 3000);                                   /* the panel link can come up late */
+}
+
+static void test_a440_pressed_within_the_window_also_kills(void) {
+    arpui_init(&u); arp_init(&a); clear_log();
+    ticks(2500);
+    CHECK(btn(A440, PRESS) == 0 && u.kill);                            /* the press reaches stock */
+    CHECK(btn(A440, RELEASE) == 0 && !a.enabled);
+    ticks(ARPUI_BOOT_TICKS);
+    CHECK(btn(A440, PRESS) == 0 && btn(A440, RELEASE) == 0 && !a.enabled);
+    arpui_init(&u); arp_init(&a); clear_log();
+    ticks(ARPUI_BOOT_TICKS + 1);                                       /* just after the window: a tap toggles */
+    tap_a440();
+    CHECK(!u.kill && a.enabled);
 }
 
 int main(void) {
@@ -263,6 +277,7 @@ int main(void) {
     test_messages_revert_to_patch_display_after_1500_ticks();
     test_led_follows_enabled_only_when_it_changes();
     test_a440_held_at_power_on_disables_everything();
+    test_a440_pressed_within_the_window_also_kills();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;
 }
