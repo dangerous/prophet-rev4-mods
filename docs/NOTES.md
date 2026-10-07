@@ -37,9 +37,10 @@ behavioural source of truth; this file is the engineering context around it.
   shorter/+) verified the same day. A440 + Glide Rate tempo (Glide Rate alone = glide with
   the arp running) and the `16S` / `8S` swing values (internal clock) verified 2026-10-07.
   The Prophet-6 ten-value note-value list and order (Program 7/8 walk, display) verified
-  2026-10-07. Pending: A440 + Unison tap tempo (added 2026-10-07, unflashed), Assign mode
-  and the arithmetic packing of parameter 93 (added 2026-10-07, unflashed), and swing
-  under `Syn`.
+  2026-10-07. Tap tempo (A440 + Unison), Assign mode, the arithmetic packing of parameter
+  93, BPM following the MIDI clock under `Syn` (gestures inert there) and swing under
+  `Syn` all verified 2026-10-07 in one pass. Nothing pending on hardware except seq
+  recording from MIDI-in.
 - First native flash attempt stalled the loader at `100` with the eight Program LEDs lit:
   the payload was an exact multiple of 7 and our encoder omitted the empty tail group's MS
   byte, which the loader always reads. Nothing was written; power cycle recovered. Fixed in

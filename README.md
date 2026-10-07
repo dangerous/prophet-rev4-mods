@@ -18,13 +18,13 @@ All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
 
 - **Arp** — tap **A440** to switch it on (LED). Modes Up, Down, Up/Down (ends not
   repeated), Random, Assign (`ASS`: the notes in the order you played them, repeats
-  allowed — `[HW: unverified]`); 1–4 octaves played **per pass** (C3 D4 | C4 D5); A440 + Glide Rate
+  allowed — `[HW: verified 2026-10-07, Prophet-10 Rev4]`); 1–4 octaves played **per pass** (C3 D4 | C4 D5); A440 + Glide Rate
   sets 40–300 BPM, A440 + Unison taps it; Glide Rate alone is always glide; MIDI clock sync with
   Start/Stop/Continue, 1 s clock‑loss, the pattern always on the clock grid; under sync the
   BPM follows the DAW (switch back to internal and it carries on at that tempo) and the two
-  tempo gestures just show `Syn` `[HW: unverified]`. One note
+  tempo gestures just show `Syn` `[HW: verified 2026-10-07, Prophet-10 Rev4]`. One note
   sounds per step, also under HOLD.
-- **Tap tempo** `[HW: unverified]` — hold A440 and tap Unison: the first tap shows `tAP`,
+- **Tap tempo** `[HW: verified 2026-10-07, Prophet-10 Rev4]` — hold A440 and tap Unison: the first tap shows `tAP`,
   each further tap sets the BPM from the mean of the last (up to 4) intervals, 40–300; a gap
   of more than 2 s starts a new series. Works with the arp on or off; under MIDI clock
   (`Syn`) a tap just shows `Syn` (the tempo follows the clock); BPM isn't saved.

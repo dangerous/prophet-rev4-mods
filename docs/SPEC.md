@@ -186,7 +186,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
   buttons behave as stock (below).
 - **While A440 is held**: Bank = next mode, Group = previous mode (Up → Down → Up/Down →
   Random → Assign → Up…, Group the other way; display `UP`, `dn`, `Ud`, `rnd`, `ASS` —
-  Assign `[HW: unverified]`); Program 1–4 = 1–4 octaves (`o 1`…`o 4`);
+  Assign `[HW: verified 2026-10-07, Prophet-10 Rev4]`); Program 1–4 = 1–4 octaves (`o 1`…`o 4`);
   Program 5 = toggle clock source (`int` / `Syn`); Program 6 = clear sequence; Program 7/8 =
   note value longer/shorter (− / +, + is faster); Unison = tempo tap (below); any other button = id readout. Any of these cancels the toggle
   on A440 release. Held-repeat events (value 3) are ignored. A combo button whose release
@@ -195,7 +195,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
 - **A440 + Glide Rate** sets the tempo `[HW: verified 2026-10-07, Prophet-10 Rev4]`: while
   A440 is held, turning Glide Rate sets the BPM of the internal clock, 40–300 (`BPM = 40 + round(260 · raw / 1023)`, raw
   0–1023), whether the arp is on or off. **Under external clock (`Syn`) it does nothing to
-  the BPM** `[HW: unverified]` (the tempo follows the clock, "Clock"): the display shows
+  the BPM** `[HW: verified 2026-10-07, Prophet-10 Rev4]` (the tempo follows the clock, "Clock"): the display shows
   `Syn` as the hint instead. The display shows the BPM while
   the pot turns (a display message like any other). Turning the pot counts as using the A440
   hold, so the A440 release does not toggle the arp, also under `Syn`. Both pot hooks (raw store and change
@@ -203,7 +203,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
   patch's glide value is not touched. **Glide Rate alone is always the normal glide control**,
   also while the arp is running. **(change: V5, and this engine before 2026-10-07, captured
   the pot as tempo whenever the arp was on, which made glide unusable with the arp running.)**
-- **A440 + Unison is tap tempo** `[HW: unverified]`: while A440 is held, each press of
+- **A440 + Unison is tap tempo** `[HW: verified 2026-10-07, Prophet-10 Rev4]`: while A440 is held, each press of
   Unison (button id 25 / `0x19`) is a tempo tap. The first tap of a series shows `tAP` and
   records the time; the BPM is unchanged. The **second tap sets the tempo immediately** from
   that single interval; each later tap uses a rolling mean of the most recent four
@@ -259,7 +259,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
   descending without repeating the top and bottom notes (C E G E C E G …); Random = each
   step picks uniformly from the pattern, independently of the previous step; Seq = the
   recorded order ("Seq").
-- **Assign** (as the Prophet-6's Assign mode) `[HW: unverified]`: the pool notes in the
+- **Assign** (as the Prophet-6's Assign mode) `[HW: verified 2026-10-07, Prophet-10 Rev4]`: the pool notes in the
   **order they were entered** (note-on order), each with the velocity of its own entry:
   play G C E D → G C E D G C E D … Duplicates are allowed: with HOLD active a latched
   pitch pressed again (while another key is down, so no re-latch) becomes a further entry
@@ -299,8 +299,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
   Swing values split each pair of steps 2 : 1 with the pair boundary at multiples of the pair
   length counted from Start (16th S: 12-clock pairs, steps at 0, 8, 12, 20, 24 …; 8th S:
   24-clock pairs, steps at 0, 16, 24, 40, 48 …), gate-off at half of each step, rounded
-  down. `[HW: unverified]`
-  **The BPM follows the external clock** `[HW: unverified]`, measured over each beat on the
+  down. `[HW: verified 2026-10-07, Prophet-10 Rev4]`
+  **The BPM follows the external clock** `[HW: verified 2026-10-07, Prophet-10 Rev4]`, measured over each beat on the
   1 ms tick: the intervals between accepted clocks are summed over the most recent 24 (one
   beat), and once a full beat has been measured BPM = round(60000 / beat ms), clamped to
   40–300, updated with every further clock (a rolling window). It has no effect while
@@ -407,7 +407,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
    data**); **93 = note value × 10 + mode × 2 + on/off**, where note value is the position
    in the "Note value" list (0 = Half … 9 = 32nd), mode 0–4 = Up, Down, Up/Down, Random,
    Assign, and on/off 0/1 — so 0–99. A 93 above 99 or a 94 outside 1–4 counts as no arp
-   data. `[HW: unverified — the arithmetic packing; the slots themselves verified]`
+   data. `[HW: verified 2026-10-07, Prophet-10 Rev4]`
    Programs saved under the earlier bitfield layout of 93 (on/off | mode << 1 | note code
    << 3 — only test saves made on 2026-10-07) are not converted: they load with the wrong
    settings (or as no arp data) and must be re-saved. Written
@@ -447,7 +447,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
    8th D 18, 8th 12, 8th S 24-clock pairs split 16 + 8, 8th T 8, 16th 6, 16th S 12-clock
    pairs split 8 + 4, 16th T 4, 32nd 3 clocks per step — counted from Start (swing pairs
    start at multiples of the pair length), so step boundaries fall exactly on clocks and stay
-   on the DAW grid across a change. `[HW: unverified for the swing values]`
+   on the DAW grid across a change. `[HW: verified 2026-10-07, Prophet-10 Rev4 — incl. the swing values]`
 5. A change takes effect from the next step. Applies to the arp and to seq alike.
 6. Realisation: `rate.c` holds the list in the order above (index 0 = Half … 9 = 32nd;
    `rate_step(dir)` moves −1 = longer / Program 7, +1 = shorter / Program 8) and maps each
