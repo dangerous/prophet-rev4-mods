@@ -78,9 +78,9 @@ def cmd_diff(args) -> int:
 
 
 def cmd_fwbuild(args) -> int:
-    bin_path, map_path = fw.build_wrapper(args.src, args.out, args.profile)
+    bin_path, map_path = fw.build_wrapper(args.src, args.out)
     print("wrote %s and %s" % (bin_path, map_path))
-    print((Path(args.out) / (fw.PROFILES[args.profile]["name"] + ".layout")).read_text(), end="")
+    print((Path(args.out) / (fw.NAME + ".layout")).read_text(), end="")
     return 0
 
 
@@ -88,20 +88,19 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="python3 -m tools")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("fwbuild", help="cross-compile and link the wrapper (wrapper.bin/.map)")
+    p = sub.add_parser("fwbuild", help="cross-compile and link the engine (native.bin/.map)")
     p.add_argument("src")
     p.add_argument("out")
-    p.add_argument("--profile", choices=sorted(fw.PROFILES), default="v5")
     p.set_defaults(func=cmd_fwbuild)
 
-    p = sub.add_parser("build", help="place the wrapper and retarget hooks in a base OS .syx")
+    p = sub.add_parser("build", help="place the engine and retarget hooks in a base OS .syx")
     p.add_argument("--base", required=True)
     p.add_argument("--wrapper", required=True)
     p.add_argument("--map", required=True)
     p.add_argument("--hooks", required=True)
     p.add_argument("-o", "--out", required=True)
     p.add_argument("--record", default="0x%X:0x%X" % (build.WRAPPER_REC_BASE, build.WRAPPER_REC_SIZE),
-                   help="appended record BASE:SIZE (hex); the native build uses 0x20088000:0x8000")
+                   help="appended record BASE:SIZE (hex)")
     p.set_defaults(func=cmd_build)
 
     p = sub.add_parser("diff", help="list differing byte spans between two OS .syx files")

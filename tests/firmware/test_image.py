@@ -1,6 +1,7 @@
-"""Structural acceptance tests on the real built image (docs/SPEC.md: "Safety invariants",
-"Re-latch under HOLD" wrapper facts). Builds the wrapper with the cross-compiler and the
-image with the tools, then checks everything the spec promises about the bytes."""
+"""Structural acceptance tests on the built image — our arp engine hooked into stock Main
+OS 2.1.0 (docs/SPEC.md: "Native arp engine (stock 2.1.0 base)" Realisation and
+Robustness, "Image patching"). Builds firmware/native.c with the cross-compiler and the image
+from the stock fixture, then checks everything the spec promises about the bytes."""
 import json
 import struct
 import unittest
@@ -10,151 +11,97 @@ from tests import fixture_check
 from tools import build, fw, records, syx, thumb
 
 ROOT = Path(__file__).resolve().parents[2]
-V5 = ROOT / "fixtures" / "V5_prophet5_main_2.1.0_arp_MIDI_SYNC.syx"
 STOCK = ROOT / "fixtures" / "prophet5_main_2.1.0.syx"
+HOOKS = ROOT / "firmware" / "hooks_native.json"
+OUT = ROOT / "build" / "test-native"
+
+REC_BASE, STATE_BASE, REC_HI = 0x20088000, 0x2008E000, 0x20090000
+
+# every stock BL site the native build retargets, with the stock target it must find there
+BL_SITES = {
+    0x2003BE9C: 0x2003D829,   # keyboard FIFO count: the 1 ms tick
+    0x2003BECC: 0x2003EC5D,   # local note_on(1, note, vel)
+    0x2003BEFA: 0x20033F85,   # local key -> MIDI Out note-on (cable, ch, note, vel)
+    0x2003BF16: 0x20033F39,   # local key -> MIDI Out note-off
+    0x2003B07A: 0x2003EC5D,   # MIDI note_on(2, note, vel)
+    0x2003B032: 0x2003EEDD,   # MIDI note_off(2, note)
+    0x2003B294: 0x2003EBE5,   # CC 123 all-notes-off
+    0x2003B144: 0x2003EBE5,   # CC 124-127 all-notes-off
+    0x200396CA: 0x2003D325,   # hold handler's voice-engine message (r4 = merged state)
+    0x2003C244: 0x2003BC31,   # panel button (id, value)
+    0x2003C292: 0x20036B51,   # pot raw store (pot, raw)
+    0x2003C2A6: 0x2003BC6D,   # pot change post (pot, old, new)
+    0x2003EACE: 0x2003B695,   # note_off's hold query
+}
+WORD_SITES = {0x200343D8: 0x20034343, 0x200343E0: 0x20034343,   # parser table F8 FA FB FC
+              0x200343E4: 0x20034343, 0x200343E8: 0x20034343}
+SYMBOLS = {
+    0x2003BE9C: "hook_kbd_scan", 0x2003BECC: "hook_local_note",
+    0x2003BEFA: "hook_local_midi_out_on", 0x2003BF16: "hook_local_midi_out_off",
+    0x2003B07A: "hook_midi_note_on", 0x2003B032: "hook_midi_note_off",
+    0x2003B294: "hook_cc123", 0x2003B144: "hook_cc123", 0x200396CA: "hook_hold",
+    0x2003C244: "hook_button", 0x2003C292: "hook_pot_store", 0x2003C2A6: "hook_pot_change",
+    0x2003EACE: "hook_hold_query",
+}
+
+# firmware/native.c stock_iface order: every stock address the native code touches
+IFACE = [
+    0x2003EC5D,   # note_on(src, note, vel)
+    0x2003E95D,   # note_off(src, note)
+    0x2003EBE5,   # all_notes_off()
+    0x20036825,   # led_set(led, 0/1)
+    0x20037F25,   # display3(c0, c1, c2)
+    0x20037FF7,   # display_int(v)
+    0x2003818D,   # display_restore(ui)
+    0x20057390,   # ui object
+    0x20057438,   # Globals menu open (word != 0)
+    0x20079B5C,   # button-held table entry for A440 (u16)
+    0x2003B695,   # hold query
+    0x2003D325,   # voice-engine post(word)
+    0x2003D829,   # fifo_count(fifo)
+    0x2003BC31,   # button post(id, value)
+    0x20036B51,   # pot store(pot, raw)
+    0x2003BC6D,   # pot change post(pot, old, new)
+    0x20033F85,   # MIDI Out note-on
+    0x20033F39,   # MIDI Out note-off
+    0x20034343,   # parser state handler the trampoline continues to
+]
 
 
 def setUpModule():
-    fixture_check.require([V5.name, STOCK.name])
-HOOKS = ROOT / "firmware" / "hooks.json"
-OUT = ROOT / "build" / "test-image"
-
-V5_ENTRIES = {
-    "local_note": 0x20088C51, "midi_note_on": 0x20088CFD, "midi_note_off": 0x20088D2D,
-    "hold": 0x20089081, "all_notes_off": 0x20088E83,
-    "kbd_scan": 0x20088D53, "button": 0x20088EAB, "init_guard": 0x20088C81,
-    "orig_out": 0x20089061, "hold_event": 0x20088F37, "rt_sniff": 0x20088F59,
-}
-# stock functions the wrapper calls directly (Thumb addresses)
-STOCK_FNS = {
-    "midi_out_on": 0x20033F85, "midi_out_off": 0x20033F39,   # local key -> MIDI Out (cable, ch, note, vel)
-    "hold_query": 0x2003B695,                                # merged HOLD button/pedal state
-    "dsp_post": 0x2003D325,                                  # post a word to the voice engine
-    "display_restore": 0x2003818D,                           # redraw the patch display (ui)
-}
-STOCK_UI = 0x20057390
-ARP_ENABLED_BYTE = 0x200894D8
-V5_DATA = {
-    "octaves": 0x200894DF, "out_ptr": 0x200894F0, "globals_flag": 0x200895E5,
-    "div": 0x200894E2, "tps": 0x200894E4, "acc": 0x200894E8, "ext_clock": 0x200894F8,
-    "clock_loss": 0x200894FC, "display_timer": 0x200895E8, "a440_used": 0x20089508,
-    "mode": 0x200894DD, "bpm": 0x200894E0,
-}
-STOCK_DISPLAY_INT = 0x20037FF7
-STOCK_DISPLAY3 = 0x20037F25
-STOCK_PARSER_STATE = 0x20034343
-CODE_BASE = 0x2008A000          # appended wrapper record
-STATE_BASE = 0x2008B800
-RECORD_HI = 0x2008C000
-V5_WINDOW_LO, V5_WINDOW_HI = 0x20088000, 0x2008A000
+    fixture_check.require([STOCK.name])
 
 
-class V5FactTests(unittest.TestCase):
-    """The addresses the wrapper hard-codes must be what the V5 fixture actually contains."""
+class NativeHookListTests(unittest.TestCase):
+    def test_hook_list_is_exactly_the_specified_sites(self):
+        hooks = json.loads(HOOKS.read_text())
+        bl = {int(h["site"], 16): h for h in hooks if h.get("kind", "bl") == "bl"}
+        words = {int(h["site"], 16): h for h in hooks if h.get("kind") == "word"}
+        self.assertEqual(set(bl), set(BL_SITES))
+        self.assertEqual(set(words), set(WORD_SITES))
+        for site, h in bl.items():
+            self.assertEqual(int(h["expect"], 16), BL_SITES[site], hex(site))
+            self.assertEqual(h["symbol"], SYMBOLS[site], hex(site))
+        for site, h in words.items():
+            self.assertEqual(int(h["expect"], 16), WORD_SITES[site])
+            self.assertEqual(h["symbol"], "hook_rt_trampoline")
 
-    def setUp(self):
-        self.payload = syx.decode(V5.read_bytes()).payload
-
-    def test_hook_sites_hold_the_v5_entry_points(self):
-        for h in json.loads(HOOKS.read_text()):
-            site, expect = int(h["site"], 16), int(h["expect"], 16)
-            raw = build.read_ram(self.payload, site, 4)
-            if h.get("kind", "bl") == "word":
-                self.assertEqual(struct.unpack("<I", raw)[0], expect)
-            else:
-                self.assertEqual(thumb.decode_bl(site, raw), expect & ~1)
-
-    def test_v5_entry_points_start_with_a_push(self):
-        for name, addr in V5_ENTRIES.items():
-            hw = struct.unpack("<H", build.read_ram(self.payload, addr & ~1, 2))[0]
-            if name == "orig_out":   # a bare trampoline: movw r12, #0xe95d
-                self.assertTrue(thumb.is_movw(hw), "%s @0x%08X: %04x" % (name, addr, hw))
-                continue
-            self.assertTrue((hw & 0xFE00) == 0xB400 or hw == 0xE92D,   # push / push.w
-                            "%s @0x%08X: %04x" % (name, addr, hw))
-
-    def test_arp_hold_flag_is_reset_by_its_clear(self):
-        # hold handler: strb.w r1, [r0, #0x302]; clear handler: strh.w r9(=0), [r4, #0x301]
-        self.assertEqual(build.read_ram(self.payload, 0x2008863C, 4), bytes.fromhex("80f80213"))
-        self.assertEqual(build.read_ram(self.payload, 0x200886BC, 4), bytes.fromhex("a4f80193"))
-        # the hold-event entry: push {r4, lr}; mov r4, r0; bl guard; ... enqueues event 5
-        self.assertEqual(build.read_ram(self.payload, 0x20088F36, 4), bytes.fromhex("10b50446"))
-
-    def test_stock_button_gate_passes_values_1_to_3(self):
-        # 0x20036114: subs r3, r1, #1 ; push {r4, lr} ; cmp r3, #2 ; bhi -> reject
-        self.assertEqual(build.read_ram(self.payload, 0x20036114, 8), bytes.fromhex("4b1e10b5022b19d8"))
-        # V5's button hook only acts on values 1 and 2: subs r1, r5, #1 ... cmp r1, #1 ; bhi
-        self.assertEqual(build.read_ram(self.payload, 0x20088EC2, 4), bytes.fromhex("012907d8"))
-
-    def test_hold_hook_forwards_r4_and_calls_stock_post(self):
-        code = build.read_ram(self.payload, 0x20089080, 0x14)
-        # push {r4, lr}; ldr r3,[pc,#0xc]; blx r3; mov r0, r4; bl ...; pop {r4, pc}; ...; literal
-        self.assertEqual(code[:4], bytes.fromhex("10b5034b"))
-        self.assertEqual(code[4:8], bytes.fromhex("98472046"))
-        self.assertEqual(struct.unpack_from("<I", code, 0x10)[0], 0x2003D325)
-
-    def test_arp_enabled_byte_is_engine_offset_0x300(self):
-        # init: movw r6,#0x91d0 ; movt r6,#0x2008 ; engine = r6 + 8 ; enabled = engine + 0x300
-        self.assertEqual(ARP_ENABLED_BYTE, 0x200891D0 + 8 + 0x300)
-        code = build.read_ram(self.payload, 0x20088C84, 8)
-        hw = struct.unpack("<4H", code)
-        self.assertTrue(thumb.is_movw(hw[0]) and thumb.is_movt(hw[2]))
-        self.assertEqual(((hw[1] >> 8) & 0xF, (hw[3] >> 8) & 0xF), (6, 6))          # r6
-        self.assertEqual((thumb.movw_imm16(hw[0], hw[1]), thumb.movw_imm16(hw[2], hw[3])),
-                         (0x91D0, 0x2008))
-
-    def test_mmu_region_table_maps_the_wrapper_record_range(self):
-        # stock .data: (start, end, attrs) rows; 0x20020000-0x2008FFFF shares V5's attributes
-        stock = syx.decode(STOCK.read_bytes()).payload
-        rows = struct.unpack("<9I", build.read_ram(stock, 0x2004DD38, 36))
-        self.assertEqual(rows[0:3], (0x20010000, 0x2001FFFF, 0x00001C00))
-        self.assertEqual(rows[3:6], (0x20020000, 0x2008FFFF, 0x00005C04))
-        self.assertEqual(rows[6:9], (0x20090000, 0x200FFFFF, 0x0000DC04))
-        self.assertTrue(0x20020000 <= CODE_BASE and RECORD_HI - 1 <= 0x2008FFFF)
-
-    def test_stock_midi_out_hold_and_display_facts(self):
-        # keyboard FIFO consumer: the MIDI Out sends, reached with Local Control on or off
-        self.assertEqual(thumb.decode_bl(0x2003BEFA, build.read_ram(self.payload, 0x2003BEFA, 4)), 0x20033F84)
-        self.assertEqual(thumb.decode_bl(0x2003BF16, build.read_ram(self.payload, 0x2003BF16, 4)), 0x20033F38)
-        # the callee at the old hook site only posts a message: movs r0,#8 ; movw r1,#0xffff
-        self.assertEqual(thumb.decode_bl(0x2003BED8, build.read_ram(self.payload, 0x2003BED8, 4)), 0x2003BCE0)
-        self.assertEqual(build.read_ram(self.payload, 0x2003BCF2, 6), bytes.fromhex("08204ff6ff71"))
-        # note_off asks the hold state and skips the normal release while it is on: bl ; cbz r0
-        self.assertEqual(thumb.decode_bl(0x2003EACE, build.read_ram(self.payload, 0x2003EACE, 4)), 0x2003B694)
-        self.assertEqual(build.read_ram(self.payload, 0x2003EAD2, 2), bytes.fromhex("28b1"))
-        # hold query: ldr r3,[pc,#0x14] (= ui) ; ldrb.w r2,[r3,#0x19d] (pedal latch, then button)
-        self.assertEqual(build.read_ram(self.payload, 0x2003B694, 6), bytes.fromhex("054b93f89d21"))
-        self.assertEqual(struct.unpack("<I", build.read_ram(self.payload, 0x2003B6AC, 4))[0], STOCK_UI)
-        # hold handler: orr r0,#0x8000000 ; orr r0,#0xd0000 ; bl (voice-engine hold message)
-        self.assertEqual(build.read_ram(self.payload, 0x200396C2, 8), bytes.fromhex("40f0006040f45020"))
-        self.assertEqual(struct.unpack("<I", build.read_ram(self.payload, 0x200396EC, 4))[0], STOCK_UI)
-        # display restore: push {r0-r6,lr} ; ldrb.w r3,[r0,#0x88] (ui->factory/user ...)
-        self.assertEqual(build.read_ram(self.payload, 0x2003818C, 6), bytes.fromhex("7fb590f88830"))
-        # engine mode byte is +0x305: set_mode reads ldrb.w r2,[r0,#0x305]
-        self.assertEqual(build.read_ram(self.payload, 0x2008806E, 4), bytes.fromhex("90f80523"))
-        self.assertEqual(V5_DATA["mode"], 0x200891D8 + 0x305)
-        self.assertEqual(V5_DATA["bpm"], 0x200891D8 + 0x308)
-
-    def test_hook_lists_cover_midi_out_and_hold_query_but_not_the_old_site(self):
-        for path in (HOOKS, ROOT / "firmware" / "hooks_internal.json"):
-            sites = {int(h["site"], 16): h for h in json.loads(path.read_text())}
-            self.assertNotIn(0x2003BED8, sites, path.name)
-            self.assertEqual(int(sites[0x2003BEFA]["expect"], 16), STOCK_FNS["midi_out_on"])
-            self.assertEqual(sites[0x2003BEFA]["symbol"], "hook_local_midi_out_on")
-            self.assertEqual(int(sites[0x2003BF16]["expect"], 16), STOCK_FNS["midi_out_off"])
-            self.assertEqual(sites[0x2003BF16]["symbol"], "hook_local_midi_out_off")
-            self.assertEqual(int(sites[0x2003EACE]["expect"], 16), STOCK_FNS["hold_query"])
-            self.assertEqual(sites[0x2003EACE]["symbol"], "hook_hold_query")
+    def test_stock_holds_the_expected_instructions_at_every_site(self):
+        payload = syx.decode(STOCK.read_bytes()).payload
+        for site, target in BL_SITES.items():
+            self.assertEqual(thumb.decode_bl(site, build.read_ram(payload, site, 4)), target & ~1, hex(site))
+        for site, word in WORD_SITES.items():
+            self.assertEqual(struct.unpack("<I", build.read_ram(payload, site, 4))[0], word, hex(site))
 
 
-class BuiltImageTests(unittest.TestCase):
+class NativeImageTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         OUT.mkdir(parents=True, exist_ok=True)
         cls.wbin, cls.wmap = fw.build_wrapper(ROOT / "firmware", OUT)
-        cls.out = OUT / "image.syx"
-        build.build_image(V5, cls.wbin, cls.wmap, HOOKS, cls.out)
-        cls.base = syx.decode(V5.read_bytes()).payload
+        cls.out = OUT / "native.syx"
+        build.build_image(STOCK, cls.wbin, cls.wmap, HOOKS, cls.out, rec_base=REC_BASE, rec_size=REC_HI - REC_BASE)
+        cls.base = syx.decode(STOCK.read_bytes()).payload
         cls.img = syx.decode(cls.out.read_bytes()).payload
         cls.symbols = build.parse_map(cls.wmap.read_text())
         cls.wrapper = cls.wbin.read_bytes()
@@ -162,133 +109,71 @@ class BuiltImageTests(unittest.TestCase):
     def test_output_is_a_valid_main_os_file(self):
         c = syx.decode(self.out.read_bytes())
         self.assertEqual(c.target, "main")
-        self.assertEqual(syx.trailer_for(c.payload), c.trailer)
+        self.assertEqual(c.trailer, syx.trailer_for(c.payload))
+        images = records.parse_images(self.img)
+        self.assertEqual(len(images), len(records.parse_images(self.base)))
+        self.assertEqual(images[0].entry, records.parse_images(self.base)[0].entry)
 
-    def test_invariants_sharc_identical_structure_plus_one_record_startup_identical(self):
-        bi, oi = records.parse_images(self.base), records.parse_images(self.img)
-        self.assertEqual(records.serialize_images([bi[1]]), records.serialize_images([oi[1]]))
-        self.assertEqual([(r.type, r.w1, r.w2, r.w3) for r in bi[0].records[1:]],
-                         [(r.type, r.w1, r.w2, r.w3) for r in oi[0].records[1:-1]])
-        extra = oi[0].records[-1]
-        self.assertEqual((extra.type, extra.w1, extra.w2), (records.COPY, CODE_BASE, RECORD_HI - CODE_BASE))
-        self.assertEqual((bi[0].entry, bi[0].declared_len + 16 + extra.w2), (oi[0].entry, oi[0].declared_len))
-        self.assertEqual(build.read_ram(self.base, 0x2002E000, 0xEDC),
-                         build.read_ram(self.img, 0x2002E000, 0xEDC))
-        self.assertEqual(build.read_ram(self.base, V5_WINDOW_LO, V5_WINDOW_HI - V5_WINDOW_LO),
-                         build.read_ram(self.img, V5_WINDOW_LO, V5_WINDOW_HI - V5_WINDOW_LO))
-
-    def test_only_hook_sites_and_the_appended_record_differ(self):
-        sites = [int(h["site"], 16) for h in json.loads(HOOKS.read_text())]
-        allowed = {site + k for site in sites for k in range(4)}
-        bi, oi = records.parse_images(self.base), records.parse_images(self.img)
-        for rb, ro in zip(bi[0].records, oi[0].records[:-1]):   # the last output record is the wrapper
-            if rb.type != records.COPY:
-                continue
-            changed = {rb.w1 + i for i in range(len(rb.payload)) if rb.payload[i] != ro.payload[i]}
-            self.assertTrue(changed <= allowed, sorted(hex(a) for a in changed - allowed)[:8])
+    def test_only_the_hook_sites_and_the_record_differ_from_stock(self):
         spans = build.image_diff(self.base, self.img)
-        self.assertEqual([(s.ram_lo, s.ram_hi) for s in spans if s.appended], [(CODE_BASE, RECORD_HI)])
+        self.assertEqual([(s.ram_lo, s.ram_hi) for s in spans if s.appended], [(REC_BASE, REC_HI)])
+        # the four parser-table words are adjacent and reported as one span (the F9 word
+        # between them is untouched); every BL site is its own 4-byte span
+        changed = sorted(s.ram_lo for s in spans if not s.appended)
+        self.assertEqual(changed, sorted(set(BL_SITES) | {min(WORD_SITES)}))
+        for s in spans:
+            if s.appended:
+                continue
+            if s.ram_lo in BL_SITES:
+                self.assertLessEqual(s.size, 4)
+            else:
+                self.assertEqual((s.ram_lo, s.ram_hi), (0x200343D8, 0x200343EC))
+        self.assertEqual(build.read_ram(self.img, 0x200343DC, 4), build.read_ram(self.base, 0x200343DC, 4))
 
-    def test_hooks_land_on_wrapper_symbols_inside_the_record(self):
+    def test_hooks_land_on_symbols_inside_the_code_area(self):
         for h in json.loads(HOOKS.read_text()):
             site = int(h["site"], 16)
             if h.get("kind", "bl") == "word":
                 target = struct.unpack("<I", build.read_ram(self.img, site, 4))[0] & ~1
             else:
                 target = thumb.decode_bl(site, build.read_ram(self.img, site, 4))
-            self.assertEqual(target, self.symbols[h["symbol"]] & ~1)
-            self.assertTrue(CODE_BASE <= target < STATE_BASE)
+            self.assertEqual(target, self.symbols[h["symbol"]] & ~1, h["symbol"])
+            self.assertTrue(REC_BASE <= target < STATE_BASE)
 
-    def test_wrapper_fits_below_its_state_and_is_placed_verbatim(self):
-        self.assertLessEqual(CODE_BASE + len(self.wrapper), STATE_BASE)
-        self.assertEqual(build.read_ram(self.img, CODE_BASE, len(self.wrapper)), self.wrapper)
-        self.assertEqual(build.read_ram(self.img, STATE_BASE, RECORD_HI - STATE_BASE),
-                         bytes(RECORD_HI - STATE_BASE))
+    def test_wrapper_fits_below_its_state_and_state_is_zero(self):
+        self.assertLessEqual(REC_BASE + len(self.wrapper), STATE_BASE)
+        self.assertEqual(build.read_ram(self.img, REC_BASE, len(self.wrapper)), self.wrapper)
+        self.assertEqual(build.read_ram(self.img, STATE_BASE, REC_HI - STATE_BASE), bytes(REC_HI - STATE_BASE))
 
-    # firmware/v5_iface.h order
-    IFACE = [V5_ENTRIES["local_note"], V5_ENTRIES["midi_note_on"], V5_ENTRIES["midi_note_off"],
-             V5_ENTRIES["all_notes_off"], V5_ENTRIES["kbd_scan"], V5_ENTRIES["button"],
-             V5_ENTRIES["init_guard"], V5_ENTRIES["orig_out"],
-             ARP_ENABLED_BYTE, V5_DATA["octaves"], V5_DATA["out_ptr"], V5_DATA["globals_flag"],
-             STOCK_DISPLAY_INT, V5_ENTRIES["hold_event"],
-             V5_ENTRIES["rt_sniff"], STOCK_PARSER_STATE, STOCK_DISPLAY3,
-             V5_DATA["div"], V5_DATA["tps"], V5_DATA["acc"], V5_DATA["ext_clock"],
-             V5_DATA["clock_loss"], V5_DATA["display_timer"], V5_DATA["a440_used"],
-             STOCK_FNS["midi_out_on"], STOCK_FNS["midi_out_off"], STOCK_FNS["hold_query"],
-             STOCK_FNS["dsp_post"], STOCK_FNS["display_restore"], STOCK_UI,
-             V5_DATA["mode"], V5_DATA["bpm"]]
+    def test_interface_table_is_exactly_the_known_stock_addresses(self):
+        table = self.symbols["stock_iface"] & ~1
+        self.assertTrue(REC_BASE <= table < STATE_BASE)
+        words = struct.unpack_from("<%dI" % len(IFACE), self.wrapper, table - REC_BASE)
+        self.assertEqual([hex(w) for w in words], [hex(a) for a in IFACE])
+        after = struct.unpack_from("<I", self.wrapper + b"\0" * 4, table - REC_BASE + 4 * len(IFACE))[0]
+        self.assertNotIn(after, set(IFACE))
 
-    def test_old_midi_out_site_is_left_as_in_v5(self):
-        self.assertEqual(build.read_ram(self.img, 0x2003BED8, 4), build.read_ram(self.base, 0x2003BED8, 4))
-
-    def test_v5_realtime_trampoline_and_engine_timing_facts(self):
-        # V5 trampoline 0x20089094: push {r0-r4,lr}; add r0,r0,#0xf0; mov r1,r4; bl sniff; pop; ldr pc,[pc]; lit
-        tramp = build.read_ram(self.base, 0x20089094, 0x18)
-        self.assertEqual(tramp[:4], bytes.fromhex("1fb500f1"))
-        self.assertEqual(tramp[4:8], bytes.fromhex("f0002146"))
-        self.assertEqual(struct.unpack_from("<I", tramp, 0x14)[0], STOCK_PARSER_STATE)
-        # engine tick: ldrh r0,[r4,#0x308]; ldrh r1,[r4,#0x30a]; ldrd r2,r3,[r4,#0x30c]
-        self.assertEqual(build.read_ram(self.base, 0x20088750, 12), bytes.fromhex("b4f80803b4f80a13d4e9c323"))
-        # realtime handler: modulo-12 by multiply 0x1556 -> 12 clocks per step hard-coded
-        self.assertEqual(build.read_ram(self.base, 0x20088922, 4), bytes.fromhex("41f25651"))
-        # clock-loss counter compared with tps: ldr r0,[r4,#0x30c]; ldr r1,[r4,#0x324]
-        self.assertEqual(build.read_ram(self.base, 0x20088700, 8), bytes.fromhex("d4f80c03d4f82413"))
-
-    def test_interface_table_is_exactly_the_known_addresses(self):
-        table = self.symbols["v5_iface"] & ~1
-        self.assertTrue(CODE_BASE <= table < STATE_BASE)
-        words = struct.unpack_from("<%dI" % len(self.IFACE), self.wrapper, table - CODE_BASE)
-        self.assertEqual([hex(w) for w in words], [hex(a) for a in self.IFACE])
-        # and the word after the table is not another address into V5/stock (table is complete)
-        after = struct.unpack_from("<I", self.wrapper + b"\0" * 4, table - CODE_BASE + 4 * len(self.IFACE))[0]
-        self.assertNotIn(after, set(self.IFACE))
-
-    def test_wrapper_materialises_no_unknown_addresses(self):
-        # scan the code only: rodata (interface table, note-value table) is data, not instructions
-        layout = (OUT / "wrapper.layout").read_text()
+    def test_code_materialises_no_unknown_addresses(self):
+        layout = (OUT / "native.layout").read_text()
         text = next(l.split() for l in layout.splitlines() if l.split() and l.split()[0] == ".text")
         text_size = int(text[2])
         self.assertTrue(0 < text_size <= len(self.wrapper))
-        refs = thumb.find_absolute_addresses(self.wrapper[:text_size], CODE_BASE)
-        allowed = set(self.IFACE)
-        allowed |= set(range(STATE_BASE, RECORD_HI))      # its own state
-        allowed |= set(range(CODE_BASE, STATE_BASE))      # its own code and table
-        # only values that could be pointers on this SoC matter (L2 RAM and MMRs per the stock
-        # MMU table); smaller literals are plain data constants the compiler pooled
+        refs = thumb.find_absolute_addresses(self.wrapper[:text_size], REC_BASE)
+        allowed = set(IFACE) | set(range(REC_BASE, REC_HI))
         unknown = sorted(a for a in refs if 0x20000000 <= a < 0x50000000 and a not in allowed)
         self.assertEqual(unknown, [], [hex(a) for a in unknown])
-        self.assertIn(self.symbols["v5_iface"] & ~1, refs)   # the table itself is referenced
+        self.assertIn(self.symbols["stock_iface"] & ~1, refs)
 
-    def test_v5_output_pointer_facts(self):
-        # init stores the output fn (movw/movt #0x9061/#0x2008 into r1) and the engine is
-        # state+8, so the pointer lives at engine+0x318 and its ctx at engine+0x31c.
-        code = build.read_ram(self.base, 0x20088CA4, 8)
-        hw = struct.unpack("<4H", code)
-        self.assertEqual((thumb.movw_imm16(hw[0], hw[1]), thumb.movw_imm16(hw[2], hw[3])), (0x9061, 0x2008))
-        self.assertEqual(V5_DATA["out_ptr"], 0x200891D0 + 8 + 0x318)
-        self.assertEqual(V5_DATA["octaves"], 0x200891D0 + 8 + 0x307)
-        # octave handler stores its argument at engine+0x307: strb.w r1, [r4, #0x307]
-        self.assertEqual(build.read_ram(self.base, 0x2008826E, 4), bytes.fromhex("84f80713"))
+    def test_mmu_region_covers_the_record(self):
+        rows = struct.unpack("<9I", build.read_ram(self.base, 0x2004DD38, 36))
+        self.assertEqual(rows[3:6], (0x20020000, 0x2008FFFF, 0x00005C04))
+        self.assertTrue(0x20020000 <= REC_BASE and REC_HI - 1 <= 0x2008FFFF)
 
-    def test_internal_clock_variant_leaves_the_parser_table_as_v5(self):
-        hooks_internal = ROOT / "firmware" / "hooks_internal.json"
-        full = json.loads(HOOKS.read_text())
-        internal = json.loads(hooks_internal.read_text())
-        self.assertEqual(internal, [h for h in full if h.get("kind", "bl") == "bl"])
-        out = OUT / "image-internal.syx"
-        build.build_image(V5, self.wbin, self.wmap, hooks_internal, out)
-        img = syx.decode(out.read_bytes()).payload
-        for h in full:
-            site = int(h["site"], 16)
-            if h.get("kind", "bl") == "word":
-                self.assertEqual(build.read_ram(img, site, 4), build.read_ram(self.base, site, 4))
-            else:
-                self.assertEqual(thumb.decode_bl(site, build.read_ram(img, site, 4)), self.symbols[h["symbol"]] & ~1)
-        self.assertEqual(build.read_ram(img, CODE_BASE, len(self.wrapper)), self.wrapper)
-        self.assertEqual(len(records.parse_images(img)[0].records), len(records.parse_images(self.base)[0].records) + 1)
+    def test_rt_trampoline_continues_to_the_stock_parser_state(self):
+        # last word of the trampoline path is loaded from the table entry for the parser state
+        self.assertEqual(IFACE[-1], 0x20034343)
+        self.assertEqual(self.symbols["hook_rt_trampoline"] & 1, 1)   # Thumb
 
-    def test_wrapper_has_no_data_sections_and_contains_no_privileged_instructions(self):
-        info = fw.inspect_object(OUT / "wrapper.o")
-        self.assertEqual(info["data_size"] + info["bss_size"], 0)
-        for hw_pattern in ("cpsid", "cpsie", "mcr", "mrc", "svc", "msr"):
-            self.assertNotIn(hw_pattern, info["mnemonics"], hw_pattern)
+
+if __name__ == "__main__":
+    unittest.main()

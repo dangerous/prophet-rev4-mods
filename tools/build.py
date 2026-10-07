@@ -1,4 +1,4 @@
-"""Image patching: append the wrapper record to image A and retarget hook sites
+"""Image patching: append the engine record to image A and retarget hook sites
 (docs/SPEC.md: "Image patching" and "Safety invariants")."""
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from typing import Dict, List
 from . import records, syx, thumb
 
 STOCK_CODE_BASE = 0x2002EF00      # the big stock code COPY record
-WRAPPER_REC_BASE = 0x2008A000     # the appended wrapper COPY record
-WRAPPER_REC_SIZE = 0x2000
+WRAPPER_REC_BASE = 0x20088000     # the appended engine COPY record
+WRAPPER_REC_SIZE = 0x8000
 DIFF_MERGE_GAP = 8                # bytes of unchanged data that still join two spans
 
 
@@ -95,8 +95,8 @@ def _patch_code_record(code: records.Record, symbols: Dict[str, int], hooks: Lis
 def build_payload(base_payload: bytes, wrapper: bytes, symbols: Dict[str, int],
                   hooks: List[dict], rec_base: int = WRAPPER_REC_BASE,
                   rec_size: int = WRAPPER_REC_SIZE) -> bytes:
-    """Patch the hook sites and append the wrapper as one COPY record at rec_base/rec_size
-    (V5 base: 0x2008A000/0x2000; stock base: 0x20088000/0x8000)."""
+    """Patch the hook sites and append the engine as one COPY record at rec_base/rec_size
+    (0x20088000/0x8000 by default)."""
     images = records.parse_images(base_payload)
     image_a = images[0]
 

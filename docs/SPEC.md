@@ -2,9 +2,9 @@
 
 ## Overview
 
-Wrapper firmware for the Sequential Prophet-5/10 Rev4 that layers new behaviour on top of
-the third-party "Arp Mod V5" (an unofficial patch of Main OS 2.1.0), plus the tooling that
-unpacks, patches and re-packs the OS SysEx image. Consumers are the player at the
+An arpeggiator and step sequencer for the Sequential Prophet-5/10 Rev4: this project's own
+code hooked into Sequential's stock Main OS 2.1.0, plus the tooling that unpacks, patches
+and re-packs the OS SysEx image. Consumers are the player at the
 instrument (behaviour is observable as notes sounding, display text and LED state in
 response to keys, panel buttons, HOLD/pedal and MIDI) and the instrument's OS loader
 (which consumes the `.syx` file, making the file format an external contract).
@@ -16,8 +16,10 @@ a Python build/packing CLI.
 
 ## Conventions
 
-- "Stock" = Sequential Main OS 2.1.0. "V5" = the Arp Mod V5 `.syx` as received.
-  "Wrapper" = the code this project adds.
+- "Stock" = Sequential Main OS 2.1.0. "The engine" = the code this project adds, one
+  record appended to stock. "V5" = Nicolas Maldonado's third-party Arp Mod V5, whose
+  documented behaviour the arp was modelled on; named only where behaviour deliberately
+  differs from it.
 - Addresses are RAM addresses as loaded by the stock OS loader unless stated otherwise.
 - Each behaviour carries a hardware-verification marker: `[HW: unverified]` or
   `[HW: verified <date>, <unit>]`. Host tests enforce the behaviour; the marker records
@@ -58,8 +60,7 @@ F0 01 32 7C [7D] 7A <6-byte header group> <payload> <trailer: 2 bytes> F7
   `(S >> 8) & 0x7F`. The loader compares `S & 0x7F7F` with `t0 | t1 << 8` and rejects the
   transfer **before** the write phase on mismatch.
 
-Fixture facts: Main 2.1.0 `groups=30180, tail=4`; V5 `groups=31353, tail=1`; Panel 1.1.3
-`groups=2498, tail=2`.
+Fixture facts: Main 2.1.0 `groups=30180, tail=4`; Panel 1.1.3 `groups=2498, tail=2`.
 
 #### Decoded payload: record stream
 
@@ -102,7 +103,7 @@ payload bytes:
 
 #### Required input files `[HW: n/a]`
 
-- The stock, Panel and V5 `.syx` files are copyrighted and are not part of the repository.
+- Sequential's Main and Panel OS `.syx` files are copyrighted and not part of the repository.
   They live in `fixtures/`; `fixtures/SHA256SUMS` is the authoritative list of the files
   the tools and tests need, with their SHA-256 (`<hash>  <name>` per line, `shasum -c`
   format); `fixtures/README.md` says where each comes from.
@@ -114,43 +115,35 @@ payload bytes:
   expected hash and `fixtures/README.md` is printed on stderr once per test process. Tests
   that need no fixture (the host C harnesses) still run.
 
-### Image patching (hook chaining, wrapper record)
+### Image patching (hook chaining, the engine record)
 
-The build takes a **base** OS file (V5 for the wrapper build, stock 2.1.0 for the native
-build — see "Native arp engine"), a **wrapper binary** with its symbol
-map, and a **hook list**, and produces a new OS file. Nothing is changed that the hook
-list and wrapper placement do not require.
+The build takes the **stock** OS file, the **engine binary** with its symbol map, and a
+**hook list**, and produces a new OS file. Nothing is changed that the hook list and the
+record placement do not require.
 
-#### Wrapper record
+#### Engine record
 
-- The wrapper is loaded by **one COPY record appended to image A** after the base's last
-  record: V5 base — load address `0x2008A000`, length `0x2000`; stock base — `0x20088000`,
-  length `0x8000`. Image A's EXEC declared length grows by the record size + 16 and its
-  check byte is recomputed. This is exactly the mechanism V5 used to add itself to stock.
+- The engine is loaded by **one COPY record appended to image A** after stock's last
+  record: load address `0x20088000`, length `0x8000`. Image A's EXEC declared length grows
+  by the record size + 16 and its check byte is recomputed.
 - Why that address: the stock startup's MMU region table maps `0x20020000–0x2008FFFF` as
-  one RAM region (same attributes as V5's own blob); stock uses nothing above
-  `0x200874CC`, V5 nothing above `0x2008A000`. The region is physically contiguous L2
-  SRAM. `[HW: unverified for 0x2008A000+; the first wrapper ran at 0x20089600]`
-- V5 base: code occupies `[0x2008A000, 0x2008B800)`, state `[0x2008B800, 0x2008C000)`;
-  stock base: code `[0x20088000, 0x2008E000)`, state `[0x2008E000, 0x20090000)`. State is
-  zero after every boot. The build fails if code+rodata exceed the code area.
-- V5's own RAM-window record is left byte-identical (its zero tail is no longer used).
-
-History: versions up to `e61b2c4` placed a ≤0xA00-byte wrapper inside the zero tail of
-V5's window record at `0x20089600`; that layout was verified on hardware.
+  one RAM region; stock uses nothing above `0x200874CC`. The region is physically
+  contiguous L2 SRAM. `[HW: verified 2026-10-07]`
+- Code occupies `[0x20088000, 0x2008E000)`, state `[0x2008E000, 0x20090000)`. State is zero
+  after every boot. The build fails if code+rodata exceed the code area.
 
 #### Patch kinds
 
 - `bl` — retarget a 4-byte Thumb-2 `BL` (below).
-- `word` — replace a 32-bit word at a RAM address inside the stock code record with a
-  wrapper symbol's address, after verifying the word currently holds the `expect`ed value.
-  Used for the stock MIDI-parser dispatch-table entries that V5 points at its trampoline.
+- `word` — replace a 32-bit word at a RAM address inside the stock code record with an
+  engine symbol's address, after verifying the word currently holds the `expect`ed value.
+  Used for the stock MIDI-parser status-table entries for F8/FA/FB/FC.
 
 #### Hook retargeting
 
 - A hook list entry names a `site` (RAM address of a 4-byte Thumb-2 `BL` inside the stock
-  code record, `0x2002EF00..`), the `expect`ed current target (a V5 or stock entry point,
-  Thumb bit set) and the wrapper `symbol` to call instead.
+  code record, `0x2002EF00..`), the `expect`ed current target (a stock entry point, Thumb
+  bit set) and the engine `symbol` to call instead.
 - The build locates the record containing the site, verifies the instruction there is a
   `BL` whose target equals `expect`, and rewrites it as a `BL` to the symbol's address
   from the map. It fails if the site is not such a `BL`, if the symbol is missing, if the
@@ -158,30 +151,24 @@ V5's window record at `0x20089600`; that layout was verified on hardware.
 
 #### CLI
 
-- `python3 -m tools build --base BASE.syx --wrapper W.bin --map W.map --hooks hooks.json
+- `python3 -m tools build --base BASE.syx --wrapper E.bin --map E.map --hooks hooks.json
   -o OUT.syx [--record BASE:SIZE]` — performs the above and writes `OUT.syx` (trailer and
-  header recomputed). `--record` selects the appended record: default `0x2008A000:0x2000`
-  (the V5-based build); the native build uses `0x20088000:0x8000`.
-- `python3 -m tools fwbuild SRC OUT [--profile v5|native]` cross-compiles and links the
-  wrapper for that record: `v5` (default) builds `SRC/wrapper.c` at `0x2008A000` with the
-  code limit `0x2008B800` and writes `wrapper.bin/.map/.layout`; `native` builds
-  `SRC/native.c` at `0x20088000` with the limit `0x2008E000` and writes `native.*`. Each
-  profile checks that its hook symbols are present.
-  The map is `nm`-style text: `<hex address> <symbol>` per line. Each hook entry has an
-  optional `"kind": "bl" | "word"` (default `bl`).
+  header recomputed). `--record` defaults to `0x20088000:0x8000`. The map is `nm`-style
+  text: `<hex address> <symbol>` per line. Each hook entry has an optional
+  `"kind": "bl" | "word"` (default `bl`).
+- `python3 -m tools fwbuild SRC OUT` cross-compiles `SRC/native.c` for thumbv7a, links it
+  at `0x20088000` with the code limit `0x2008E000`, checks the hook symbols are present and
+  writes `native.bin`, `native.map` and `native.layout` into `OUT`.
 - `python3 -m tools diff A.syx B.syx` — prints every differing byte span of the decoded
   payloads as `image <n> record @0x<offset> ram 0x<lo>..0x<hi>: <n> bytes`, so a reviewer
   can see exactly what a build changed. Record-structure differences are reported as such.
 
-### Native arp engine (stock 2.1.0 base) `[HW: verified 2026-10-07, Prophet-10 Rev4 — the whole native checklist on the first flash; the Program 7/8 swap that followed is in the rebuilt image, not yet re-tested]`
+### Arp engine `[HW: verified 2026-10-07, Prophet-10 Rev4 — the whole checklist on the first flash; the Program 7/8 swap that followed is in the rebuilt image, not yet re-tested]`
 
-Replaces the dependency on Arp Mod V5: the base image becomes Sequential's stock Main OS
-2.1.0 and every arp behaviour below is this project's code. The behaviours specified elsewhere in
-this document (re-latch, seq, note value, keyboard octave shift, button id readout, HOLD
-while the arp is on, display messages) keep their meaning;
-where their "Realisation" notes name V5 addresses, this section's realisation supersedes
-them for the native image (`make image-native`). V5's documented behaviour is the baseline;
-deviations are marked **(change)** with the reason.
+The arp proper. The behaviours specified in their own sections (re-latch, seq, note
+value, keyboard octave shift, HOLD while the arp is on, display messages, button id
+readout) are realised by this engine. V5's documented behaviour was the baseline; where
+this engine deliberately differs it is marked **(change)** with the reason.
 
 #### Settings and defaults
 
@@ -320,8 +307,8 @@ deviations are marked **(change)** with the reason.
   state); panel button `0x2003C244` (`0x2003BC31`, (id, value)); pot store `0x2003C292`
   (`0x20036B51`, (pot, raw)); pot change `0x2003C2A6` (`0x2003BC6D`, (pot, old, new)); MIDI
   parser table words `0x200343D8/E0/E4/E8` (F8/FA/FB/FC, stock `0x20034343`). The site
-  `0x2003BED8` used by the V5-based image for octave shift is **not** a MIDI Out call (it
-  posts a message no state handles) and is not hooked.
+  `0x2003BED8` is **not** a MIDI Out call (it posts a message no state handles) and is not
+  hooked.
 - Stock functions used: note_on `0x2003EC5D`, note_off `0x2003E95D`, all_notes_off
   `0x2003EBE5`, LED `0x20036825(led, 0 off / 1 on)` with A440 LED `0x24`, display `0x20037F25`
   / `0x20037FF7`, display restore `0x2003818D(ui = 0x20057390)`, Globals-open test: word
@@ -332,45 +319,30 @@ deviations are marked **(change)** with the reason.
   task. Only the latter are queued (a 64-entry single-producer ring drained by the tick);
   the former act on the engine directly. The lazy init runs under `cpsid i` / `cpsie i`
   with the previous state restored; hooks never block.
-- Build: `make image-native` → `build/prophet10_native.syx` from `firmware/native.c`
-  (`fwbuild --profile native`) and `firmware/hooks_native.json` (`build --record
-  0x20088000:0x8000`). Sources: `arp.c` (engine), `arpui.c` (controls, display, LED, kill
-  switch), `oct.c`, `rate.c`, `disp.c`, `vhold.c`. The V5-based images remain available
-  (`make image`, `make image-internal`) until this section is hardware-verified.
+- Build: `make image` (alias `make image-native`) → `build/prophet10_native.syx` from
+  `firmware/native.c` (`fwbuild`) and `firmware/hooks_native.json`. Sources: `arp.c`
+  (engine), `arpui.c` (controls, display, LED, kill switch), `oct.c`, `rate.c`, `disp.c`,
+  `vhold.c`.
 
-### Note value (arp/seq step length) `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock; MIDI sync not exercised]`
+### Note value (arp/seq step length) `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock and MIDI sync]`
 
 1. The step length is one of 13 values, shortest to longest: 1/32, 1/16T, 1/16, 1/8T,
    1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1 (whole), 2 bars, 4 bars (a bar is four beats).
-   Power-up default is 1/8, which is exactly V5's behaviour. Not saved with patches.
+   Power-up default is 1/8. Not saved with patches.
 2. A440 + **Program 8** selects the next shorter (faster) value, A440 + **Program 7** the
    next longer — think − / +, where + is faster (swapped from the first build on
-   2026-10-07); the ends do not wrap. The display shows the new value for about a second:
+   2026-10-07); the ends do not wrap. The display shows the new value:
    `32`, `16t`, `16`, `8t`, `16d`, `8`, `8d`, `4`, `4d`, `2`, `1`, `2b`, `4b`
    (right-aligned; glyphs as the panel font allows).
-3. Internal clock: the step period is the note value at the current BPM (Glide pot, as in
-   V5); the note is released half-way through the step, as V5 does.
+3. Internal clock: the step period is the note value at the current BPM; the note is
+   released half-way through the step.
 4. MIDI sync: steps follow the incoming clock at the selected value — 3, 4, 6, 8, 9, 12,
-   18, 24, 36, 48, 96, 192 or 384 clocks per step for the list above. Step boundaries fall
-   exactly on clocks. Start/Stop/Continue behave as in V5; the clock-loss timeout (≈1 s)
-   is unchanged for every value.
+   18, 24, 36, 48, 96, 192 or 384 clocks per step for the list above, counted from Start,
+   so step boundaries fall exactly on clocks and stay on the DAW grid across a change.
 5. A change takes effect from the next step. Applies to the arp and to seq alike.
-   **Build variants:** `make image` includes the MIDI-sync behaviour (4); `make
-   image-internal` (`firmware/hooks_internal.json`) leaves the stock MIDI-parser table
-   untouched, so under `Syn` the arp keeps V5's eighths whatever the setting — chosen as
-   the first install because the parser table is on the USB re-flash path.
-6. Realisation: internal — the engine's divisions-per-beat (engine + 0x30a) and
-   ticks-per-second (engine + 0x30c) fields are set to a (div, tps) pair per value
-   (1/32 → 8,1000; 1/16T → 12,1000; 1/16 → 4,1000; 1/8T → 6,1000; 1/16d → 8,3000;
-   1/8 → 2,1000; 1/8d → 4,3000; 1/4 → 1,1000; 1/4d → 2,3000; 1/2 → 1,2000; 1 → 1,4000;
-   2b → 1,8000; 4b → 1,16000) and the step accumulator (engine + 0x310) is zeroed on
-   change. Sync — the engine steps every 12 clocks it sees (hard-coded), so the wrapper's
-   trampoline, installed at the four MIDI-parser table entries V5 uses, hands V5's sniff
-   a filtered stream: per real clock it forwards 4, 3, 2, 3/2, 4/3, 1, 2/3, 1/2, 1/3, 1/4,
-   1/8, 1/16 or 1/32 clocks (fractions as exact repeating patterns), forwards FA/FB/FC
-   unchanged, and zeroes the engine's clock-loss counter (engine + 0x324) on every real
-   clock so withheld clocks never trigger the timeout. While sync is active the (div, tps)
-   fields hold V5's (2, 1000).
+6. Realisation: `rate.c` maps each value to beats per step as a fraction (1/32 → 1/8 beat …
+   4 bars → 16 beats); the engine's internal period is `60 s / BPM × beats` with the
+   remainder carried, and the MIDI-clock step is `24 × beats` clocks (always integral).
 
 ### Keyboard octave shift `[HW: verified 2026-10-07, Prophet-10 Rev4 — Lo Freq modifier, tap replay, shifted keys and MIDI Out]`
 
@@ -394,17 +366,16 @@ deviations are marked **(change)** with the reason.
    reachable from the 61-key range at ±2).
 5. In Local-Off mode (keys go to MIDI Out only) the shift still applies to what is sent.
    Lo Freq held together with A440 is undefined.
-6. Realisation: the local-note hook shifts the key and records the per-key shift
-   (128-entry table) so the release maps identically; `bl` hooks on the two stock calls
-   that send a local key to MIDI Out — note-on `0x2003BEFA` (expecting `0x20033F85`) and
-   note-off `0x2003BF16` (expecting `0x20033F39`), both `(cable_mask, channel, note, vel)`
-   — apply the same per-key mapping to `note`. These sites are reached whether Local
-   Control is on or off. (The site used before, `0x2003BED8` → `0x2003BCE1`, is not a MIDI
-   Out call: it posts a message no state handles. `[HW: bug found 2026-10-07 by
-   disassembly before that image was installed]`.) The button hook swallows id 37 (press,
-   repeats, release), treats Bank/Group presses while it is held as shift commands, and on
-   a release with no shift command replays press+release of id 37 through V5's button
-   entry (which forwards non-arp buttons to stock when A440 is not held).
+6. Realisation: the local-note hook (`0x2003BECC`) shifts the key and records the per-key
+   shift (128-entry table) so the release maps identically; `bl` hooks on the two stock
+   calls that send a local key to MIDI Out — note-on `0x2003BEFA` (expecting `0x20033F85`)
+   and note-off `0x2003BF16` (expecting `0x20033F39`), both `(cable_mask, channel, note,
+   vel)` — apply the same per-key mapping to `note`. These sites are reached whether Local
+   Control is on or off. (`0x2003BED8` is not a MIDI Out call: it posts a message no state
+   handles. `[HW: bug found 2026-10-07 by disassembly before that image was installed]`.)
+   The button hook swallows id 37 (press, repeats, release), treats Bank/Group presses
+   while it is held as shift commands, and on a release with no shift command replays
+   press+release of id 37 into stock's button post (`0x2003BC31`).
 
 ### HOLD while the arp is on `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
@@ -423,7 +394,7 @@ deviations are marked **(change)** with the reason.
 5. Realisation: stock `note_off` asks the hold state (`bl 0x2003B694` at `0x2003EACE`) and,
    when it is on, hands the voice to the voice engine's sustain instead of releasing it; the
    voice engine is told about hold by the message `0x080D0000 | state` posted from the hold
-   handler (`0x200396CA`). The wrapper hooks `0x2003EACE` (expecting `0x2003B695`) to answer
+   handler (`0x200396CA`). The engine hooks `0x2003EACE` (expecting `0x2003B695`) to answer
    "off" while the arp is enabled, skips the hold message in its hold hook while the arp is
    enabled (still passing the state to the arp's hold event), and on every arp enable/disable
    transition with HOLD active posts the message itself (`0x2003D325`: off on enable, on on
@@ -431,51 +402,44 @@ deviations are marked **(change)** with the reason.
 
 ### Display messages `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
-1. Every message the arp or the wrapper puts on the display — mode (`UP dn Ud rnd`), octaves
+1. Every message the engine puts on the display — mode (`UP dn Ud rnd`), octaves
    (`o N`), clock (`int`/`Syn`), `OFF`, BPM (while Glide Rate turns, and when the arp is
    switched on), note value, seq step count, keyboard shift, button id — shows for 1.5 s
    after the last change and then the display returns to the stock patch display (bank,
    group and program). Nothing stays on the display permanently. `(change from V5, which
    kept OFF / BPM / Syn up for as long as the arp was on)`
 2. A new message restarts the 1.5 s.
-3. Realisation: the wrapper keeps its own timer, fed by its own display calls and by
-   watching the arp's displayed settings (enabled, mode, octaves, clock source, BPM) change
-   each tick; while it runs, V5's display timer is held above zero so V5 never draws its
-   status text; at expiry V5's timer is zeroed and the stock display restore
-   `0x2003818D(ui = 0x20057390)` is called.
+3. Realisation: the UI keeps one 1.5 s timer, restarted by every message it shows; at
+   expiry the stock patch display is redrawn with `0x2003818D(ui = 0x20057390)`.
 
-### Button id readout `[HW: unverified]`
+### Button id readout `[HW: verified 2026-10-07, Prophet-10 Rev4 — Keyboard 36, GLOBALS 13, Unison 25]`
 
 While A440 is held, pressing a panel button that the arp does not assign — anything other
 than Program 1–8, Bank, Group, GLOBALS (id 13 / `0x0D`, which must still open its menu) and
 Lo Freq (id 37, consumed by the keyboard octave shift) — shows that button's id on the
-display and is otherwise ignored. `[HW: 2026-10-07 — ids read out as expected (GLOBALS
-shows 13); the V5-based image excludes UNISON (`0x19`) instead of GLOBALS, a leftover of
-the mis-identified id, so there Unison toggles and GLOBALS is read out; correct in the
-native build only]` An aid for
-mapping panel button ids when designing new combinations; V5 passed such presses to
-stock, where they had no defined meaning while A440 was held.
+display and is otherwise ignored (its release is consumed too). An aid for mapping panel
+button ids when designing new combinations.
 
 ### Safety invariants
 
-Enforced by tests on every built image against its base:
+Enforced by tests on every built image against stock:
 
 1. The output decodes with `trailer: ok`, target `main`.
-2. The SHARC image (`AC`) is byte-identical to the base.
-3. The main-CPU image has the base's record sequence (same count, types, load addresses,
-   lengths, EXEC entry) **plus exactly one appended COPY record** (V5 base `0x2008A000`,
-   `0x2000`; stock base `0x20088000`, `0x8000`); the EXEC declared length is the base's
-   plus the record size + 16.
-4. Payload bytes of the base's records differ only within the 4-byte `BL` at each `bl`
-   hook site (a retarget may leave the first halfword unchanged) and within the 4-byte
-   word at each `word` site.
-5. The stock startup record (COPY `0x2002E000`, `0xEDC` bytes) is byte-identical to the
-   base; no wrapper code runs at boot — the wrapper is entered only through the hooks.
+2. The SHARC image (`AC`) is byte-identical to stock.
+3. The main-CPU image has stock's record sequence (same count, types, load addresses,
+   lengths, EXEC entry) **plus exactly one appended COPY record** (`0x20088000`, `0x8000`);
+   the EXEC declared length is stock's plus the record size + 16.
+4. Payload bytes of stock's records differ only within the 4-byte `BL` at each `bl` hook
+   site (a retarget may leave the first halfword unchanged) and within the 4-byte word at
+   each `word` site.
+5. The stock startup record (COPY `0x2002E000`, `0xEDC` bytes) is byte-identical; no engine
+   code runs at boot — the engine is entered only through the hooks.
 6. Every hook site lies inside the stock code record and, before patching, holds exactly
-   what the hook list says it holds (a `BL` to the named V5 or stock entry, or the named
-   word).
+   what the hook list says it holds (a `BL` to the named stock entry, or the named word).
+7. The engine's code references no RAM or MMR address outside its own record and the stock
+   addresses listed in its interface table, which the tests compare word for word.
 
-### Re-latch under HOLD `[HW: verified 2026-10-06, Prophet-10 Rev4 — incl. the hold re-assert fix]`
+### Re-latch under HOLD `[HW: verified 2026-10-06/07, Prophet-10 Rev4]`
 
 Terms: *HOLD active* = the HOLD button is lit, or the sustain pedal is down with Global
 Release/Sustain set to `HLd` (both reach the same stock hold handler). *Keys down* = the
@@ -492,21 +456,13 @@ be non-empty.
    latched (e.g. the first chord after power-up, or after HOLD was switched off).
 3. A MIDI Note On with velocity 0 is a release. Local key releases are seen even while
    HOLD is active (the stock keyboard scanner reports them regardless of HOLD).
-4. Switching HOLD off makes the arp drop released notes (existing V5 behaviour); from
-   then on only keys still down count as latched.
-5. All note events are forwarded to the arp exactly as before, after any clear.
-6. Realisation: the clear uses the arp's own All‑Notes‑Off path (stock all‑notes‑off
-   followed by the arp's clear event), i.e. the same thing MIDI CC 123 does in V5. That
-   clear also resets the arp's **own hold flag** (engine + 0x302; CC 123 semantics), so
-   immediately after it the wrapper re‑asserts "hold on" through V5's hold‑event entry
-   (`0x20088F37`, what its HOLD hook calls). Queue order: clear, hold on, new notes. The
-   re‑latched chord therefore stays latched. `[HW: bug seen 2026-10-06 before this fix]`
-
-Wrapper facts this depends on (V5 as shipped; each is asserted by a test on the fixture):
-arp‑enabled byte at `0x200894D8`; V5 entry points local‑note `0x20088C51`, MIDI note‑on
-`0x20088CFD`, MIDI note‑off `0x20088D2D`, hold `0x20089081` (reads the new hold state from
-`r4` as left by the stock caller), all‑notes‑off `0x20088E83`. Wrapper state lives in
-`0x20089E80–0x2008A000` inside the wrapper window and is zero after every boot.
+4. Switching HOLD off makes the arp drop released notes; from then on only keys still
+   down count as latched.
+5. The new key is added after the clear, so it is the first note of the new pattern.
+6. Realisation: the engine's note pool (`arp.c`): when HOLD is active, no key is down and
+   latched notes exist, a note-on empties the latched set and releases the sounding
+   step before adding the key; the pattern restarts at the next step boundary ("Arp
+   engine" — Start rule). `[HW: verified 2026-10-06 (V5-based build) and 2026-10-07 (engine)]`
 
 ### Seq (step-recorded sequence) `[HW: verified 2026-10-06/07, Prophet-10 Rev4 — record, transposed playback, clear, octaves (o N, no toggle on A440 release, Program 6); MIDI-in recording not exercised]`
 
@@ -520,11 +476,11 @@ A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and 
    sequence (and stopping its playback). Each further note-on while A440 stays held
    appends a step; after 32 steps further note-ons are ignored. Key releases are ignored
    while recording. The display shows the step count after each recorded step.
-2. Notes played while recording sound as they would have without this wrapper (they reach
-   the arp normally) and their later releases are forwarded, so nothing sticks.
+2. Notes played while recording sound directly (they bypass the pool) and their releases
+   are honoured, so nothing sticks.
 3. Releasing A440 ends the recording. If at least one step was recorded, seq mode becomes
    active and **that A440 release does not toggle the arp**. If nothing was recorded,
-   A440 behaves exactly as in V5 (a tap toggles the arp; held + buttons = settings).
+   A440 behaves as usual (a tap toggles the arp; held + buttons = settings).
 4. Buttons keep working while A440 is held during recording (mode, clock source).
 
 #### Playback (seq mode active, arp enabled)
@@ -545,19 +501,12 @@ A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and 
 
 #### Octaves
 
-10. There is one octave setting, shared by the arp and seq, changed with A440 + Program
-    1–4 at any time and shown as `o N` for about a second, as in V5. Entering seq mode
-    takes over the setting in force. While a sequence exists (recording or active, arp on
-    or off) the setting spans the whole sequence: with `o 2` the sequence plays once as
-    recorded, then once an octave up; direction modes apply across the expanded pattern;
-    changes take effect immediately. The arp's own expansion is held at one octave while a
-    sequence exists — the wrapper expands instead — and a Program 1–4 press in seq mode
-    counts as using the A440 hold, so releasing A440 afterwards does not toggle the arp.
-    `[HW: bug seen 2026-10-06 — consumed presses left V5's "used" flag clear, so the A440
-    release toggled the arp; fixed]`
-11. Leaving seq mode (Program 6) hands the current setting back to the arp: whatever `o N`
-    was last selected — before, during or after recording — is what the arp plays with
-    afterwards, and `o N` is shown if the arp's value changes.
+10. The octave setting is shared by the arp and seq (A440 + Program 1–4, `o N`). With
+    `o 2` the sequence plays once as recorded, then once an octave up — per pass, as the
+    arp's own octaves; direction modes apply across the expanded pattern; a change takes
+    effect from the next step. A Program 1–4 press while A440 is held counts as using the
+    hold, so releasing A440 afterwards does not toggle the arp.
+11. Leaving seq mode (Program 6) leaves the octave setting as it is.
 
 #### Clear
 
@@ -565,33 +514,14 @@ A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and 
     (including re-latch) resumes; the A440 release afterwards does not toggle the arp.
 13. Power-up: no sequence.
 
-#### Realisation (V5 facts asserted by tests)
+#### Realisation
 
-- The engine emits every step and every pass-through note through a function pointer at
-  `0x200894F0` (context word `0x200894F4`) with `(ctx, src, on, note, velocity)`; V5
-  installs `0x20089061` there during its lazy init (`0x20088C81`). The wrapper installs
-  its own output function after that init, from the keyboard-scan tick, and substitutes
-  **dummy notes** `k + N·m` (step `k`, octave `m`, `N` = step count) for recorded pitches;
-  real notes pass through unchanged.
-- Dummies are fed through the V5 local-note entry and drained via the V5 event queue, at
-  most 16 per tick (32-entry ring; an overflow makes V5 disable the arp).
-- Every clear the wrapper issues (restart, end of recording, Program 6) is followed by a
-  hold re‑assert when HOLD is active, for the same reason as in "Re-latch under HOLD".
-- V5 draws `o N` from its keyboard-scan hook whenever the octave byte changed during the
-  engine tick: stock 3-character display `0x20037F25` with codes `0x24` ('o'), `0x25`
-  (blank), N, then display timeout `0x4B0` ticks at `0x200895E8`; the wrapper draws the
-  seq-mode value the same way. V5's engine sets its "A440 used" byte (`0x20089508`, button
-  ctx + 8) only for Program/Bank/Group presses it receives and otherwise toggles the arp on
-  the A440 release (engine `0x200889BA`), so a Program 1–4 press the wrapper consumes sets
-  that byte itself.
-- Octave setting byte `0x200894DF` (engine + 0x307); Program ids 0–3 = octaves 1–4;
-  id 5 = Program 6. Any Program press while A440 is held marks the A440 hold as "used",
-  which suppresses the toggle on release; ids 5–7 are otherwise no-ops in V5.
-- Panel button events arrive as `(id, value)` with value 1 = press, 2 = release and
-  **3 = still held** (the stock gate `0x20036114` passes 1–3; repeats arrive while a
-  button is down). Only 1 and 2 change wrapper state, as in V5.
-  `[HW: bug seen 2026-10-06 — a repeat reset the A440-held flag; fixed]`
-- Hooks: keyboard-scan tick `0x2003BE9C → 0x20088D53`, panel buttons `0x2003C244 →
-  0x20088EAB` `(id, value)`, CC 123 `0x2003B294 → 0x20088E83`, in addition to the
-  re-latch hooks. Wrapper state occupies `0x20089E80–0x2008A000`.
-
+- Recording and playback live in the engine (`arp.c`): while A440 is held the UI routes
+  every note (local, after octave shift, or MIDI) to the recorder, which sounds it directly
+  through the stock voice allocator and appends it; the first recorded note of a hold
+  discards the previous sequence. Playback uses the recorded steps, transposed onto the
+  trigger key, as the pattern's base order in place of the pitch-sorted pool; the pool
+  still decides whether the pattern runs (keys down / latched) and the trigger is the most
+  recently pressed pool note.
+- The step count is shown through the UI's display path and reverts like every other
+  message ("Display messages").

@@ -1,8 +1,8 @@
 # prophet-rev4-mods
 
-Wrapper firmware for the Sequential Prophet‑5/10 Rev4, layered on the third‑party
-**Arp Mod V5** (an unofficial patch of Main OS 2.1.0), plus the tooling that unpacks,
-patches and re‑packs the OS SysEx image.
+An arpeggiator and step sequencer for the Sequential Prophet‑5 / Prophet‑10 Rev4, written
+as our own code hooked into Sequential's stock Main OS 2.1.0, plus the tooling that
+unpacks, patches and re‑packs the OS SysEx image.
 
 Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-checklist.md`](docs/hardware-checklist.md).
 
@@ -10,102 +10,85 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
 > instrument's firmware. Installing a modified OS is at your own risk and may void your
 > warranty; a bad image can leave the instrument needing the DIN‑MIDI bootloader to
 > recover. Only the project's own code, tooling and reverse‑engineering notes are
-> published here — Sequential's OS files, the Arp Mod V5 image (whose author did the
-> original work this builds on) and the built images are not redistributed.
+> published here — Sequential's OS files and the built image are not redistributed.
 
-## What it adds
+## What it does
 
-- **Re‑latch under HOLD** — with the arp on and HOLD active, the first key you play after
-  releasing all keys starts a fresh chord instead of adding to the latched one.
-  `[HW: verified 2026‑10‑06]`
-- **Seq** — hold A440 and play to record up to 32 steps (releases ignored, so timing is
-  free). Then play a key: the sequence runs at the arp's tempo/sync, transposed from the
-  first recorded note, in the arp's direction mode, over the arp's octave range. HOLD
-  latches it; the first key after all‑up restarts it. A440 + Program 6 clears it.
-  `[HW: verified 2026‑10‑06]`
-- **Note value** — A440 + Program 8 (shorter, +) / Program 7 (longer, −) steps through 1/32,
-  1/16T, 1/16, 1/8T, 1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1, 2 bars, 4 bars for the arp and
-  seq, on internal clock and under MIDI sync. Display shows e.g. `16t`, `8d`, `2b`.
-  Default 1/8 (V5's behaviour). `[HW: verified 2026‑10‑07, internal clock]`
-- **Button id readout** — hold A440 and press any button the arp doesn't use: its id is
-  shown for a second. For mapping panel button ids. `[HW: verified 2026‑10‑07]`
+All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
+
+- **Arp** — tap **A440** to switch it on (LED). Modes Up, Down, Up/Down (ends not
+  repeated), Random; 1–4 octaves played **per pass** (C3 D4 | C4 D5); 40–300 BPM from the
+  Glide Rate pot while the arp is on with the internal clock; MIDI clock sync with
+  Start/Stop/Continue, 1 s clock‑loss, the pattern always on the clock grid. One note
+  sounds per step, also under HOLD.
+- **Re‑latch under HOLD** — with HOLD active, the first key after releasing all keys starts
+  a fresh chord instead of adding to the latched one.
+- **Seq** — hold A440 and play up to 32 notes (releases ignored, so timing is free).
+  Then play a key: the sequence runs transposed from the first recorded note, at the arp's
+  tempo/sync, in the arp's direction mode, over the arp's octaves; HOLD latches it.
+  A440 + Program 6 clears it.
+- **Note value** — A440 + Program 8 (shorter, +) / Program 7 (longer, −): 1/32, 1/16T,
+  1/16, 1/8T, 1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1, 2 bars, 4 bars, on the internal clock
+  and under MIDI sync. Default 1/8. `[the 7/8 swap not yet re‑tested]`
 - **Keyboard octave shift** — hold the Osc B **Lo Freq** button, Bank = up, Group = down
-  (±2; both together = 0); shown on the display. Applies to the keys you play, including
-  what goes to MIDI Out (Local Control on or off); a plain tap still toggles Lo Freq (LED
-  on release). `[HW: verified 2026‑10‑07]`
-- **HOLD while the arp is on** — the synth's own sustain is suspended while the arp runs,
-  so steps no longer pile up under HOLD (V5: C, then C+E, then C+E+G…); HOLD is purely the
-  arp's latch, and stock hold returns the moment the arp is switched off. `[HW: verified 2026‑10‑07]`
-- **Display messages** — everything the arp or the wrapper shows (mode, `o N`, `int`/`Syn`,
-  `OFF`, BPM, note value, step count, shift, button id) returns to the patch display after
-  1.5 s; nothing stays up permanently. `[HW: verified 2026‑10‑07]`
+  (±2; both together = 0). Applies to the keys you play and to MIDI Out; a plain tap still
+  toggles Lo Freq (LED on release).
+- **Display** — every message (mode, `o N`, `int`/`Syn`, `OFF`, BPM, note value, step
+  count, shift, button id) returns to the patch display after 1.5 s.
+- **Button id readout** — hold A440 and press an unused button to see its id.
+- **Kill switch** — hold A440 at power‑on (or press it within 3 s) and every hook passes
+  straight through to stock for that session.
+- **Globals menu** is pure stock while it is open, so Sequential's A440 tuning tone is still
+  available from there.
+
+Controls follow the conventions established by Nicolas Maldonado's **Arp Mod V5**, the
+third‑party patch whose documented behaviour this engine was modelled on (A440 as the arp
+button, Bank/Group for modes, Program 1–5 for octaves and clock source, Glide Rate for
+tempo). Deliberate differences are listed in the spec.
 
 ## Inputs you must supply
 
-Sequential's OS files and the V5 image are copyrighted and are **not in this repository**.
-Drop them into `fixtures/` — [`fixtures/README.md`](fixtures/README.md) lists the three
-files, where they come from and their SHA‑256 (`fixtures/SHA256SUMS`). Tests that need a
-missing file skip with a warning; `make image` stops with the same message.
+Sequential's OS files are copyrighted and **not in this repository**. Drop them into
+`fixtures/` — [`fixtures/README.md`](fixtures/README.md) lists the two files, where they
+come from and their SHA‑256 (`fixtures/SHA256SUMS`). Tests that need a missing file skip
+with a warning; `make image` stops with the same message.
 
-## Images (`dist/` — build them; hashes in `dist/SHA256SUMS`)
+## The image (`dist/` — build it; hash in `dist/SHA256SUMS`)
 
-The built images are derived from those inputs, so they aren't distributed either. Both
-targets below produce re‑latch + seq + note values + readout + octave shift from the same
-wrapper (one appended 8 KB record at `0x2008A000`: code in the first 6 KB, state in the last
-2 KB) and the `BL`/word retargets listed in `firmware/hooks*.json`:
+`make image` → `build/prophet10_native.syx`: stock 2.1.0 plus one 32 KB record at
+`0x20088000` (≈5.6 KB of code, state zero at boot) and 17 retargeted sites — 13 `BL`s and
+the 4 MIDI‑parser table words for F8/FA/FB/FC (`firmware/hooks_native.json`). Nothing else
+in the OS changes; `python3 -m tools diff fixtures/prophet5_main_2.1.0.syx build/…` lists
+exactly those spans. The engine runs only when the hooked stock calls fire — never at boot.
 
-| Target | Output in `build/` | Extra change | Note values under MIDI sync |
-|---|---|---|---|
-| `make image-internal` | `prophet10_v5_relatch_seq_internal.syx` | none — MIDI‑parser table as V5 | no (eighths, as V5) |
-| `make image` | `prophet10_v5_relatch_seq.syx` | 4 MIDI‑parser table words → wrapper trampoline | yes |
-
-Install exactly like V5 (USB, SysEx Librarian). The `_internal` variant keeps wrapper code
-out of the MIDI‑byte path that a USB re‑flash uses; the full variant adds the clock filter
-and has not been installed on hardware yet. [`dist/README.md`](dist/README.md) explains the
-checksums.
-
-### Native build — our own arp on stock 2.1.0, no V5 `[HW: verified 2026‑10‑07, first flash]`
-
-`make image-native` → `build/prophet10_native.syx`: the same features re‑implemented as
-one engine hooked straight into Sequential's stock OS (spec section "Native arp engine"),
-so nothing of the third‑party patch is needed. Behaviour follows V5's documented arp plus
-deliberate changes: octaves are per pass (C3 D4 | C4 D5), a key into an empty pool starts
-the pattern at once only with HOLD off on the internal clock, the MIDI‑clock grid is never
-reset by notes, Glide Rate is tempo only while the arp is on *and* on the internal clock,
-CC 123–127 clear the pool but keep HOLD, the queue never disables the arp, and holding
-**A440 at power‑on** switches every hook off for the session (kill switch). 5.6 KB of code
-in a 32 KB record at `0x20088000`; 17 stock sites retargeted (`firmware/hooks_native.json`).
-
-History: a re‑latch‑only image was installed on a Prophet‑10 Rev4 on 2026‑10‑06 and proved
-the loader path, boot, the hook mechanism and the HOLD stub; it had a bug (the arp's clear
-also dropped the arp's own hold flag, so a re‑latched chord did not stay latched), fixed by
-"Re‑assert hold to the arp after every clear". The `_internal` image has been installed
-since, through the seq and note‑value work.
-
-In both variants the wrapper lives in a record appended to the image at
-`0x2008A000–0x2008C000`; the SHARC image, the stock startup code and every other byte are
-identical to V5 (`python3 -m tools diff fixtures/V5_… build/…` lists exactly the changed
-spans). The wrapper runs only when the hooked stock calls fire — never at boot — so a
-misbehaving hook leaves the synth bootable and re‑flashable over USB. All memory it
-touches is its own state inside that record plus V5/stock entry points listed in
-`firmware/v5_iface.h`, which the tests read back from the built binary.
+Install over USB with SysEx Librarian (Globals → MIDI SysEx = USB), exactly as an official
+OS update; the file is a complete Main OS and installs over any prior version.
+[`dist/README.md`](dist/README.md) explains the checksum.
 
 ## Layout
 
-- `fixtures/` — where the official Main 2.1.0 / Panel 1.1.3 and the V5 `.syx` go (git‑ignored; see above).
+- `fixtures/` — where the official Main 2.1.0 / Panel 1.1.3 `.syx` go (git‑ignored; see above).
 - `tools/` — Python 3.9+ stdlib‑only CLI: `inspect`, `unpack`, `pack`, `diff`, `fwbuild`, `build`.
-- `firmware/` — wrapper C sources (`relatch.c`, `seq.c`, `rate.c`, `oct.c` portable logic,
-  `wrapper.c` hook glue, `hooks.json` / `hooks_internal.json` the patched call sites).
+- `firmware/` — `arp.c` (engine), `arpui.c` (controls, display, LED, kill switch),
+  `oct.c`, `rate.c`, `disp.c`, `vhold.c` (portable logic), `native.c` (hooks and the stock
+  interface table), `hooks_native.json` (the patched sites).
 - `tests/` — `unittest` suites (tooling, built‑image invariants) and host C harnesses.
-- `docs/` — spec, working notes, hardware checklist.
+- `docs/` — spec, working notes, hardware checklist, reverse‑engineering notes on stock
+  (`docs/re/`).
 
 ## Build and test
 
 ```
-make test            # tooling tests, host harnesses, cross-build + image invariants
-make image-internal  # build/prophet10_v5_relatch_seq_internal.syx
-make image           # build/prophet10_v5_relatch_seq.syx
+make test     # tooling tests, host harnesses, cross-build + image invariants
+make image    # build/prophet10_native.syx
 ```
 
 Requires Apple clang (Xcode command line tools) for the Thumb‑2 cross build; no other
 dependencies.
+
+## History
+
+The project began (2026‑10‑06) as a wrapper around Arp Mod V5 — re‑latch, seq, note values
+and the octave shift were first built as hooks chained in front of V5's entry points and
+verified on hardware that way. On 2026‑10‑07 the arp was re‑implemented as this engine so
+the project is self‑contained and MIT‑licensed; the wrapper was then removed.

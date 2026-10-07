@@ -1,4 +1,4 @@
-/* Native arp engine core (docs/SPEC.md: "Native arp engine (stock 2.1.0 base)"): note pool,
+/* Arp engine core (docs/SPEC.md: "Arp engine"): note pool,
  * pattern order, internal/MIDI clock, HOLD latch and re-latch, start rule, seq playback.
  * Portable logic; voices are reached through platform.h (plat_voice_on/off = stock
  * note_on/note_off). The UI (buttons, pot, display, LED) lives in arpui.c. */

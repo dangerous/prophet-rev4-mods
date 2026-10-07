@@ -1,4 +1,4 @@
-/* Native arp UI (docs/SPEC.md: "Native arp engine" — Controls, Display, Robustness): the
+/* Arp UI (docs/SPEC.md: "Arp engine" — Controls, Display, Robustness): the
  * A440 button and its combos, seq recording, Glide Rate as tempo, display messages with the
  * 1.5 s revert, the A440 LED and the power-on kill switch. Portable logic over arp.c, rate.c
  * and disp.c; everything external goes through platform.h. The glue decides task context. */

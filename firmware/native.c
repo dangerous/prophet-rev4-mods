@@ -1,8 +1,7 @@
-/* Native build glue (docs/SPEC.md: "Native arp engine (stock 2.1.0 base)" — Realisation):
+/* Engine glue (docs/SPEC.md: "Arp engine" — Realisation):
  * the functions the patched stock BL/word sites land on, the platform calls the portable
  * modules make into stock, and the hand-over queue from the Prophet5 task to the 1 ms tick.
- * Built freestanding for thumbv7a as a single translation unit at 0x20088000 (tools/fw.py
- * profile "native"). Nothing of V5 is used.
+ * Built freestanding for thumbv7a as a single translation unit at 0x20088000 (tools/fw.py).
  *
  * Task contexts (docs/re/stock-hook-sites.md): the keyboard tick, local notes, panel buttons,
  * pots and MIDI realtime bytes run in the FreeRTOS Timer Service task; MIDI notes, CC 123-127
@@ -204,8 +203,6 @@ void plat_display_restore(void) { SFN(NI_DISPLAY_RESTORE, ptr_fn)(SPTR(NI_UI, vo
 int  plat_globals_open(void) { return *SPTR(NI_GLOBALS_OPEN, volatile const uint32_t *) != 0; }
 int  plat_a440_down(void) { return *SPTR(NI_A440_HELD, volatile const uint16_t *) != 0; }
 void plat_display_hold(void) { disp_touch(&UI->disp); }   /* oct.c: the shift readout reverts too */
-void plat_a440_mark_used(void) {}                          /* rate.c's V5-era path, unused here */
-void plat_engine_reset_acc(void) {}
 
 /* --- hooks: Timer Service task ----------------------------------------------------------- */
 /* stock 0x2003BE9C: the 1 ms keyboard poll. Everything the engine does happens here. */

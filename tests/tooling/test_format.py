@@ -13,17 +13,15 @@ from tools import records, syx
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "fixtures"
 MAIN = FIXTURES / "prophet5_main_2.1.0.syx"
-V5 = FIXTURES / "V5_prophet5_main_2.1.0_arp_MIDI_SYNC.syx"
 PANEL = FIXTURES / "prophet5Panel_v1.1.3.syx"
 
 
 def setUpModule():
-    fixture_check.require([MAIN.name, V5.name, PANEL.name])
+    fixture_check.require([MAIN.name, PANEL.name])
 
 # (path, target, groups, tail) — spec "Fixture facts"
 FIXTURE_FACTS = [
     (MAIN, "main", 30180, 4),
-    (V5, "main", 31353, 1),
     (PANEL, "panel", 2498, 2),
 ]
 
@@ -131,15 +129,6 @@ class RecordStreamTests(unittest.TestCase):
         self.assertEqual([len(im.records) for im in images], [35, 33])  # EXEC record included
         self.assertEqual(images[-1].end, len(payload))
 
-    def test_v5_fixture_adds_one_record_to_image_a(self):
-        payload = syx.decode(V5.read_bytes()).payload
-        images = records.parse_images(payload)
-        self.assertEqual([len(im.records) for im in images], [36, 33])
-        self.assertEqual(images[0].declared_len, 0x22FB4)
-        extra = images[0].records[-1]
-        self.assertEqual((extra.type, extra.w1, extra.w2), (records.COPY, 0x20088000, 0x2000))
-        self.assertEqual(len(extra.payload), 0x2000)
-
     def test_record_types_and_payload_rules(self):
         payload = syx.decode(MAIN.read_bytes()).payload
         image_a = records.parse_images(payload)[0]
@@ -186,12 +175,12 @@ class RecordStreamTests(unittest.TestCase):
 
 class CliTests(unittest.TestCase):
     def test_inspect_reports_target_counts_trailer_and_images(self):
-        r = _cli("inspect", V5)
+        r = _cli("inspect", MAIN)
         self.assertEqual(r.returncode, 0, r.stderr)
         out = r.stdout
-        for needle in ("target: main", "groups: 31353", "tail: 1", "trailer: ok",
+        for needle in ("target: main", "groups: 30180", "tail: 4", "trailer: ok",
                        "family: AD", "family: AC", "entry: 0x2002E001", "entry: 0x001C0AFC",
-                       "records: 36", "records: 33", "0x20010000", "0x2008A000"):
+                       "records: 35", "records: 33", "0x20010000"):
             self.assertIn(needle, out)
 
     def test_inspect_reports_bad_trailer(self):

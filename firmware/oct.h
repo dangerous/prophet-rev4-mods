@@ -1,5 +1,5 @@
 /* Keyboard octave shift (docs/SPEC.md: "Keyboard octave shift"). Portable logic; the
- * wrapper's hooks call these and act on the return values. */
+ * glue's hooks call these and act on the return values. */
 #ifndef OCT_H
 #define OCT_H
 

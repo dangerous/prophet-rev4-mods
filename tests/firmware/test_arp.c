@@ -1,5 +1,5 @@
-/* Host harness for the native arp engine core (docs/SPEC.md: "Native arp engine (stock 2.1.0
- * base)" — Note pool, Pattern, Clock, Output). A fake voice allocator records every note-on /
+/* Host harness for the arp engine core (docs/SPEC.md: "Arp engine" — Note pool, Pattern,
+ * Clock, Output). A fake voice allocator records every note-on /
  * note-off with the tick it happened at, so tests assert exact sequences and timing.
  * `make test-firmware`. */
 #include <stdio.h>

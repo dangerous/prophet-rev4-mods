@@ -1,4 +1,4 @@
-/* Host harness for the native arp UI (docs/SPEC.md: "Native arp engine" — Controls,
+/* Host harness for the arp UI (docs/SPEC.md: "Arp engine" — Controls,
  * Display, Robustness). `make test-firmware`. */
 #include <stdio.h>
 #include <string.h>
@@ -24,10 +24,6 @@ void plat_display_restore(void) { push(EV_RESTORE, 0, 0, 0); }
 void plat_led(int led, int on) { push(EV_LED, led, on, 0); }
 int  plat_globals_open(void) { return fake_globals_open; }
 int  plat_a440_down(void) { return fake_a440_down; }
-/* rate.c's V5-era platform calls, unused by the native UI */
-void plat_display_hold(void) { push(99, 0, 0, 0); }
-void plat_a440_mark_used(void) { push(99, 0, 0, 0); }
-void plat_engine_reset_acc(void) { push(99, 0, 0, 0); }
 
 static int count_type(int t) { int n = 0; for (int i = 0; i < nlog; i++) n += log_[i].type == t; return n; }
 static ev_t *last_of(int t) { for (int i = nlog - 1; i >= 0; i--) if (log_[i].type == t) return &log_[i]; return 0; }

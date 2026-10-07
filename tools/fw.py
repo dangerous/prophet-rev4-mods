@@ -1,5 +1,5 @@
-"""Firmware build driver: cross-compile firmware/wrapper.c with clang for thumbv7a
-(Cortex-A5) and link it at the wrapper window base (docs/SPEC.md: "Wrapper placement")."""
+"""Firmware build driver: cross-compile firmware/native.c with clang for thumbv7a
+(Cortex-A5) and link it at the engine record base (docs/SPEC.md: "Engine record")."""
 from __future__ import annotations
 
 import re
@@ -10,24 +10,14 @@ from typing import Dict, Tuple
 
 from . import fwlink
 
-WRAPPER_BASE = 0x2008A000        # the appended wrapper record (tools/build.py), V5 base
-STATE_BASE = 0x2008B800          # code+rodata must end at or below this; state above
-REQUIRED_SYMBOLS = ("hook_local_note", "hook_midi_note_on", "hook_midi_note_off", "hook_hold",
-                    "hook_kbd_scan", "hook_button", "hook_cc123", "wrapper_output",
-                    "hook_rt_trampoline", "hook_local_midi_out_on", "hook_local_midi_out_off",
-                    "hook_hold_query")
-NATIVE_REQUIRED_SYMBOLS = ("hook_kbd_scan", "hook_local_note", "hook_midi_note_on", "hook_midi_note_off",
-                           "hook_cc123", "hook_hold", "hook_button", "hook_pot_store", "hook_pot_change",
-                           "hook_hold_query", "hook_local_midi_out_on", "hook_local_midi_out_off",
-                           "hook_rt_trampoline", "stock_iface")
-
-# Build profiles (docs/SPEC.md "Wrapper record"): source file, output name, record base, code limit
-PROFILES = {
-    "v5": {"src": "wrapper.c", "name": "wrapper", "base": WRAPPER_BASE, "limit": STATE_BASE,
-           "required": REQUIRED_SYMBOLS},
-    "native": {"src": "native.c", "name": "native", "base": 0x20088000, "limit": 0x2008E000,
-               "required": NATIVE_REQUIRED_SYMBOLS},
-}
+ENGINE_BASE = 0x20088000         # the appended engine record (tools/build.py)
+CODE_LIMIT = 0x2008E000          # code+rodata must end at or below this; state above
+SOURCE = "native.c"
+NAME = "native"
+REQUIRED_SYMBOLS = ("hook_kbd_scan", "hook_local_note", "hook_midi_note_on", "hook_midi_note_off",
+                    "hook_cc123", "hook_hold", "hook_button", "hook_pot_store", "hook_pot_change",
+                    "hook_hold_query", "hook_local_midi_out_on", "hook_local_midi_out_off",
+                    "hook_rt_trampoline", "stock_iface")
 
 CFLAGS = [
     "-target", "thumbv7a-none-eabi", "-mcpu=cortex-a5", "-mthumb", "-mfloat-abi=soft",
@@ -49,36 +39,33 @@ def _clang() -> str:
     raise FirmwareBuildError("clang not found")
 
 
-def compile_object(src_dir: Path, out_dir: Path, src: str = "wrapper.c", name: str = "wrapper") -> Path:
+def compile_object(src_dir: Path, out_dir: Path) -> Path:
     src_dir, out_dir = Path(src_dir), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    obj = out_dir / (name + ".o")
-    cmd = [_clang(), *CFLAGS, "-I", str(src_dir), "-c", str(src_dir / src), "-o", str(obj)]
+    obj = out_dir / (NAME + ".o")
+    cmd = [_clang(), *CFLAGS, "-I", str(src_dir), "-c", str(src_dir / SOURCE), "-o", str(obj)]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         raise FirmwareBuildError("clang failed:\n%s" % r.stderr)
     return obj
 
 
-def build_wrapper(src_dir: Path, out_dir: Path, profile: str = "v5") -> Tuple[Path, Path]:
-    """Compile and link the profile's source; write <name>.bin/.map/.layout; return bin, map."""
-    if profile not in PROFILES:
-        raise FirmwareBuildError("unknown build profile '%s'" % profile)
-    p = PROFILES[profile]
+def build_wrapper(src_dir: Path, out_dir: Path) -> Tuple[Path, Path]:
+    """Compile and link; write native.bin, native.map and native.layout; return bin, map."""
     out_dir = Path(out_dir)
-    obj = compile_object(src_dir, out_dir, p["src"], p["name"])
+    obj = compile_object(src_dir, out_dir)
     try:
-        image, symbols, info = fwlink.link(obj.read_bytes(), p["base"], limit=p["limit"])
+        image, symbols, info = fwlink.link(obj.read_bytes(), ENGINE_BASE, limit=CODE_LIMIT)
     except fwlink.LinkError as e:
         raise FirmwareBuildError(str(e))
-    missing = [s for s in p["required"] if s not in symbols]
+    missing = [s for s in REQUIRED_SYMBOLS if s not in symbols]
     if missing:
-        raise FirmwareBuildError("wrapper is missing required symbols: %s" % ", ".join(missing))
-    bin_path, map_path = out_dir / (p["name"] + ".bin"), out_dir / (p["name"] + ".map")
+        raise FirmwareBuildError("engine is missing required symbols: %s" % ", ".join(missing))
+    bin_path, map_path = out_dir / (NAME + ".bin"), out_dir / (NAME + ".map")
     bin_path.write_bytes(image)
     map_path.write_text("".join("%08x %s\n" % (a, n) for n, a in sorted(symbols.items(), key=lambda kv: kv[1])))
-    (out_dir / (p["name"] + ".layout")).write_text(
-        "base 0x%08X end 0x%08X (%d bytes, limit 0x%08X)\n" % (info["base"], info["end"], info["end"] - info["base"], p["limit"])
+    (out_dir / (NAME + ".layout")).write_text(
+        "base 0x%08X end 0x%08X (%d bytes, limit 0x%08X)\n" % (info["base"], info["end"], info["end"] - info["base"], CODE_LIMIT)
         + "".join("  %-12s 0x%08X %d\n" % s for s in info["sections"]))
     return bin_path, map_path
 

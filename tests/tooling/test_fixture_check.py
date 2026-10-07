@@ -19,7 +19,6 @@ OTHER_HASH = "0" * 64
 REQUIRED = {
     "prophet5_main_2.1.0.syx",
     "prophet5Panel_v1.1.3.syx",
-    "V5_prophet5_main_2.1.0_arp_MIDI_SYNC.syx",
 }
 
 
@@ -72,7 +71,7 @@ class FixtureGuardTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             fixture_check.require(["unlisted.syx"], d)
 
-    def test_repo_sha256sums_lists_exactly_the_three_inputs(self):
+    def test_repo_sha256sums_lists_exactly_the_two_inputs(self):
         self.assertEqual(set(fixture_check.expected_hashes()), REQUIRED)
         for h in fixture_check.expected_hashes().values():
             self.assertRegex(h, r"^[0-9a-f]{64}$")
@@ -97,7 +96,7 @@ class MissingInputCliTests(unittest.TestCase):
 
     def test_build_with_missing_base_writes_nothing(self):
         with tempfile.TemporaryDirectory() as d:
-            missing = Path(d) / "V5_prophet5_main_2.1.0_arp_MIDI_SYNC.syx"
+            missing = Path(d) / "prophet5_main_2.1.0.syx"
             out = Path(d) / "out.syx"
             r = _cli("build", "--base", missing, "--wrapper", Path(d) / "w.bin",
                      "--map", Path(d) / "w.map", "--hooks", Path(d) / "h.json", "-o", out)
