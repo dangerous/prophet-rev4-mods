@@ -37,8 +37,12 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] Arp on, HOLD off: play a chord, release, wait, play another: starts immediately.
 - [ ] A440 + Bank/Group: `dn` (G E C), `Ud` (C E G E C…), `rnd`, `UP`. A440 + Program 2:
       `o 2` → C E G C' E' G'. Hold C3 + D4 at `o 2`: C3 D4 C4 D5 (per pass).
-- [ ] Glide Rate while on: BPM shown while turning, 40–300, patch number back after 1.5 s;
-      arp off: Glide Rate is glide again and the patch's glide value was not changed.
+- [ ] Hold A440 and turn Glide Rate: BPM shown while turning, 40–300, the tempo follows,
+      patch number back after 1.5 s; releasing A440 does **not** toggle the arp. Also with
+      the arp off (hold A440, turn, release: still off; tap on: the new BPM) and under `Syn`.
+- [ ] Arp running, Glide Rate alone (no A440): it is **glide** — the step notes glide, the
+      tempo does not change; the patch's glide value was not changed by the A440 + Glide
+      turns before.
 - [ ] A440 + Program 5: `Syn`. DAW clock: steps on the grid, Start restarts, Stop silences,
       Continue resumes; pull the cable: silence after 1 s. A440 + Program 5: `int`.
 - [ ] CC 123 from the DAW: pool cleared, HOLD LED unchanged. Program change while the arp
@@ -105,8 +109,15 @@ Manual verification on the instrument. Record results against the spec markers i
 ## Note value (spec "Note value")
 
 - [ ] Arp on, internal clock, hold a chord. Hold A440, press Program 8: `16d`, faster;
-      again: `8t`, `16`, `16t`, `32`; once more: stays `32`.
-- [ ] A440 + Program 7 back up through `16t … 8 … 8d 4 4d 2 1 2b 4b`; stays at `4b`.
+      again: `8t`, `16S`, `16`, `16t`, `32`; once more: stays `32`.
+- [ ] A440 + Program 7 back up through `16t 16 16S 8t 16d 8 8S 8d 4 4d 2 1 2b 4b`; stays at
+      `4b`.
+- [ ] Swing: `8S` = long-short pairs, the pair one beat (triplet feel, long = 2 × short);
+      `16S` = the same at sixteenths (pair = half a beat). The pattern order does not change.
+      Under `Syn`: `8S` steps on clocks 0, 16, 24, 40 … and `16S` on 0, 8, 12, 20 … counted
+      from Start (the long step falls on the beat).
+- [ ] Patch memory: save a program at `8S`, another at `16S`; both reload with their swing.
+      A program saved before this build at `8` or `16d` still loads at `8` / `16d`.
       Each change takes effect from the next step; the patch number returns after 1.5 s.
 - [ ] Release A440 after changing the value: the arp does **not** toggle.
 - [ ] `Syn` with DAW clock: `16` = sixteenths locked to the grid; `4` = quarters; `8d` =

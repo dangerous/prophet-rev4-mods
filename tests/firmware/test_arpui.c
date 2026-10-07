@@ -115,8 +115,40 @@ static void test_program_buttons_set_octaves_clock_and_note_value(void) {
     btn(P8, PRESS); btn(P8, RELEASE);                                  /* shorter (+): 1/16d */
     CHECK(rate_index(&u.rate) == RATE_DEFAULT_INDEX - 1 && a.beats_num == 3 && a.beats_den == 8);
     CHECK(last_d3_is(1, 6, CH_D));
-    btn(P7, PRESS); btn(P7, RELEASE); btn(P7, PRESS); btn(P7, RELEASE);  /* longer (-) twice: 1/8d */
-    CHECK(a.beats_num == 3 && a.beats_den == 4 && last_d3_is(BLANK, 8, CH_D));
+    btn(P7, PRESS); btn(P7, RELEASE); btn(P7, PRESS); btn(P7, RELEASE);  /* longer (-) twice: 8S */
+    CHECK(a.beats_num == 1 && a.beats_den == 1 && a.swing == 1 && last_d3_is(BLANK, 8, CH_S));
+    btn(P7, PRESS); btn(P7, RELEASE);                                  /* 1/8d: swing off again */
+    CHECK(a.beats_num == 3 && a.beats_den == 4 && a.swing == 0 && last_d3_is(BLANK, 8, CH_D));
+    btn(A440, RELEASE);
+    CHECK(!a.enabled);
+}
+
+/* from 1/8: Program 8 (shorter) and Program 7 (longer) step through the list with its display */
+static void test_program_7_8_step_through_every_value(void) {
+    static const int SHORTER[][5] = {   /* d0 d1 d2 num den, swing in the column below */
+        { 1, 6, CH_D, 3, 8 }, { BLANK, 8, CH_T, 1, 3 }, { 1, 6, CH_S, 1, 2 }, { BLANK, 1, 6, 1, 4 },
+        { 1, 6, CH_T, 1, 6 }, { BLANK, 3, 2, 1, 8 }, { BLANK, 3, 2, 1, 8 } };
+    static const int SHORTER_SWING[] = { 0, 0, 1, 0, 0, 0, 0 };
+    static const int LONGER[][5] = {
+        { BLANK, 8, CH_S, 1, 1 }, { BLANK, 8, CH_D, 3, 4 }, { BLANK, BLANK, 4, 1, 1 }, { BLANK, 4, CH_D, 3, 2 },
+        { BLANK, BLANK, 2, 2, 1 }, { BLANK, BLANK, 1, 4, 1 }, { BLANK, 2, 0x0B, 8, 1 }, { BLANK, 4, 0x0B, 16, 1 },
+        { BLANK, 4, 0x0B, 16, 1 } };
+    static const int LONGER_SWING[] = { 1, 0, 0, 0, 0, 0, 0, 0, 0 };
+    reset();
+    btn(A440, PRESS);
+    for (int i = 0; i < 7; i++) {                                      /* 16d 8t 16S 16 16t 32, stays 32 */
+        btn(P8, PRESS); btn(P8, RELEASE);
+        CHECK(last_d3_is(SHORTER[i][0], SHORTER[i][1], SHORTER[i][2]));
+        CHECK(a.beats_num == SHORTER[i][3] && a.beats_den == SHORTER[i][4] && a.swing == SHORTER_SWING[i]);
+    }
+    btn(A440, RELEASE);
+    reset();
+    btn(A440, PRESS);
+    for (int i = 0; i < 9; i++) {                                      /* 8S 8d 4 4d 2 1 2b 4b, stays 4b */
+        btn(P7, PRESS); btn(P7, RELEASE);
+        CHECK(last_d3_is(LONGER[i][0], LONGER[i][1], LONGER[i][2]));
+        CHECK(a.beats_num == LONGER[i][3] && a.beats_den == LONGER[i][4] && a.swing == LONGER_SWING[i]);
+    }
     btn(A440, RELEASE);
     CHECK(!a.enabled);
 }
@@ -182,22 +214,39 @@ static void test_globals_menu_open_passes_everything(void) {
 }
 
 /* ---- Glide Rate ---------------------------------------------------------------------- */
-static void test_glide_is_tempo_only_with_arp_on_and_internal_clock(void) {
+static void test_glide_is_tempo_only_with_a440_held(void) {
     reset();
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 500) == 0);         /* arp off: stock glide */
+    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 500) == 0);         /* arp off, no A440: stock glide */
     CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0 && a.bpm == 120);
-    tap_a440();
+    btn(A440, PRESS);                                                  /* arp off + A440 held: tempo */
     clear_log();
     CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 1023) == 1 && a.bpm == 300 && last_int() == 300);
     CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 1);
     arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 0);
-    CHECK(a.bpm == 40);
+    CHECK(a.bpm == 40 && last_int() == 40);
     arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 512);
     CHECK(a.bpm == 40 + (260 * 512 + 511) / 1023);
     CHECK(arpui_pot_store(&u, &a, 0x15, 900) == 0);                    /* another pot: stock */
-    arp_set_ext(&a, 1);
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 100) == 0);         /* under Syn: glide again */
-    CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0 && a.bpm != 40 + (260 * 100 + 511) / 1023);
+    CHECK(arpui_pot_change(&u, &a, 0x15) == 0);
+    CHECK(count_type(EV_PARAM) == 0);                                  /* BPM is not saved */
+    btn(A440, RELEASE);
+    CHECK(!a.enabled);                                                 /* the pot used the hold: no toggle */
+    tap_a440();                                                        /* arp on, internal clock */
+    int bpm = a.bpm;
+    CHECK(a.enabled && arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 1023) == 0);   /* no A440: glide */
+    CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0 && a.bpm == bpm);
+    arp_set_ext(&a, 1);                                                /* under Syn, A440 held: still tempo */
+    btn(A440, PRESS);
+    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 100) == 1 && a.bpm == 40 + (260 * 100 + 511) / 1023);
+    CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 1);
+    btn(A440, RELEASE);
+    CHECK(a.enabled);                                                  /* no toggle */
+    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 600) == 0 && arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0);
+    btn(A440, PRESS);                                                  /* Globals opened mid-hold: stock */
+    fake_globals_open = 1;
+    btn(P2, PRESS);
+    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 600) == 0 && arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0);
+    fake_globals_open = 0;
 }
 
 /* ---- display revert and LED ---------------------------------------------------------- */
@@ -275,7 +324,11 @@ static void test_settings_are_written_to_the_patch_slots(void) {
     CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (5 << 3)));
     btn(P3, PRESS); btn(P3, RELEASE);                                  /* 3 octaves */
     CHECK(params[ARPUI_PARAM_OCT] == 3);
-    btn(P8, PRESS); btn(P8, RELEASE);                                  /* shorter: index 4 */
+    btn(P8, PRESS); btn(P8, RELEASE);                                  /* shorter: 1/16d, code 4 */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (4 << 3)));
+    btn(P8, PRESS); btn(P8, RELEASE); btn(P8, PRESS); btn(P8, RELEASE);  /* 1/8T, 16S: code 13 */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (13 << 3)));
+    btn(P7, PRESS); btn(P7, RELEASE); btn(P7, PRESS); btn(P7, RELEASE);  /* 1/8T, 1/16d: code 4 */
     CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (4 << 3)));
     int n = stores();
     btn(P5, PRESS); btn(P5, RELEASE);                                  /* clock source: not saved */
@@ -294,15 +347,24 @@ static void test_program_load_applies_saved_state(void) {
     params[ARPUI_PARAM_PACK] = 1 | (2 << 1) | (7 << 3);                /* on, Up/Down, 1/4 */
     int n = stores();
     arpui_program_loaded(&u, &a);
-    CHECK(a.enabled && a.mode == ARP_UPDOWN && a.octaves == 2 && rate_index(&u.rate) == 7);
-    CHECK(a.beats_num == 1 && a.beats_den == 1);
+    CHECK(a.enabled && a.mode == ARP_UPDOWN && a.octaves == 2 && rate_index(&u.rate) == 9);   /* code 7 */
+    CHECK(a.beats_num == 1 && a.beats_den == 1 && a.swing == 0);
     CHECK(stores() == n);                                              /* loading does not write back */
     ticks(1);
     CHECK(last_led() == 1);
     params[ARPUI_PARAM_PACK] = 0 | (1 << 1) | (3 << 3);                /* saved with the arp off, Down, 1/8T */
     params[ARPUI_PARAM_OCT] = 4;
     arpui_program_loaded(&u, &a);
-    CHECK(!a.enabled && a.mode == ARP_DOWN && a.octaves == 4 && rate_index(&u.rate) == 3);
+    CHECK(!a.enabled && a.mode == ARP_DOWN && a.octaves == 4 && rate_index(&u.rate) == 4);   /* code 3 */
+    params[ARPUI_PARAM_PACK] = 1 | (14 << 3);                         /* 8S */
+    arpui_program_loaded(&u, &a);
+    CHECK(a.enabled && rate_index(&u.rate) == 7 && a.beats_num == 1 && a.beats_den == 1 && a.swing == 1);
+    params[ARPUI_PARAM_PACK] = 1 | (13 << 3);                         /* 16S */
+    arpui_program_loaded(&u, &a);
+    CHECK(rate_index(&u.rate) == 3 && a.beats_num == 1 && a.beats_den == 2 && a.swing == 1);
+    params[ARPUI_PARAM_PACK] = 1 | (5 << 3);                          /* 1/8: swing off again */
+    arpui_program_loaded(&u, &a);
+    CHECK(rate_index(&u.rate) == RATE_DEFAULT_INDEX && a.beats_num == 1 && a.beats_den == 2 && a.swing == 0);
 }
 
 static void test_program_without_arp_data_switches_off_and_leaves_settings(void) {
@@ -318,7 +380,7 @@ static void test_program_without_arp_data_switches_off_and_leaves_settings(void)
     arpui_program_loaded(&u, &a);
     CHECK(!a.enabled && a.mode == ARP_RANDOM);
     tap_a440();
-    params[ARPUI_PARAM_OCT] = 1; params[ARPUI_PARAM_PACK] = 1 | (13 << 3);   /* note value 13: no data */
+    params[ARPUI_PARAM_OCT] = 1; params[ARPUI_PARAM_PACK] = 1 | (15 << 3);   /* note-value code 15: no data */
     arpui_program_loaded(&u, &a);
     CHECK(!a.enabled && a.mode == ARP_RANDOM);
 }
@@ -328,12 +390,13 @@ int main(void) {
     test_repeats_are_ignored();
     test_bank_group_cycle_modes_with_names();
     test_program_buttons_set_octaves_clock_and_note_value();
+    test_program_7_8_step_through_every_value();
     test_recording_and_program6_clear();
     test_orphan_release_is_consumed_and_other_buttons_pass();
     test_readout_of_unassigned_buttons();
     test_globals_button_abandons_the_hold();
     test_globals_menu_open_passes_everything();
-    test_glide_is_tempo_only_with_arp_on_and_internal_clock();
+    test_glide_is_tempo_only_with_a440_held();
     test_messages_revert_to_patch_display_after_1500_ticks();
     test_led_follows_enabled_only_when_it_changes();
     test_a440_held_at_power_on_disables_everything();

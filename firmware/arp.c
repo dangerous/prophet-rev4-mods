@@ -1,11 +1,18 @@
 #include "arp.h"
 #include "platform.h"
 
-/* Internal clock: every 1 ms tick adds bpm*den to the accumulator; a step is due at
- * 60000*num (= 60000/bpm ms * num/den beats) and the gate closes at half that. The
- * remainder is carried so the average tempo is exact. */
-#define FULL(a)  (60000u * (a)->beats_num)
-#define HALF(a)  (30000u * (a)->beats_num)
+/* Internal clock: every 1 ms tick adds 3*bpm*den to the accumulator; a step is due at
+ * 180000*num (= 60000/bpm ms * num/den beats) and the gate closes at half that. With swing
+ * num/den is a pair of steps: the long step is due at 120000*num, the short one at
+ * 60000*num (2/3 and 1/3, exact in integers). The remainder is carried so the average
+ * tempo is exact. */
+static uint32_t step_units(const arp_t *a)
+{
+    uint32_t u = 60000u * a->beats_num;
+    if (!a->swing)
+        return 3 * u;
+    return a->swing_short ? u : 2 * u;
+}
 
 static void zero(void *p, unsigned n)
 {
@@ -259,6 +266,7 @@ void arp_note(arp_t *a, int src, int note, int vel)
             if (!a->hold && !a->ext) {                     /* start rule: now, phase from here */
                 step(a);
                 a->acc = 0;
+                a->swing_short = 0;                        /* a swing pair begins: long step */
             }
         }
         return;
@@ -310,6 +318,7 @@ void arp_enable(arp_t *a, int on)
         reset_pattern(a);
         if (!a->ext) {
             a->acc = 0;
+            a->swing_short = 0;
             if (arp_pool_count(a))
                 step(a);
         }
@@ -355,12 +364,22 @@ void arp_set_beats(arp_t *a, int num, int den)
     a->beats_den = (uint8_t)den;
 }
 
+void arp_set_swing(arp_t *a, int on)
+{
+    on = on != 0;
+    if (on == a->swing)
+        return;
+    a->swing = (uint8_t)on;
+    a->swing_short = 0;                                    /* the next swing step is a long one */
+}
+
 void arp_set_ext(arp_t *a, int ext)
 {
     a->ext = (uint8_t)(ext != 0);
     release(a);
     reset_pattern(a);
     a->acc = 0;
+    a->swing_short = 0;
     a->clocks = 0;
     a->running = 1;                                        /* clocks alone drive it until a Stop */
     a->port = ARP_NONE;
@@ -408,14 +427,17 @@ void arp_realtime(arp_t *a, int byte, int port)
         return;
     switch (byte) {
     case 0xF8: {
-        unsigned sc = step_clocks(a), half = sc / 2;
+        /* sc = clocks per step, or per pair with swing: long = 2/3 of it, short = 1/3, the
+         * pair boundary at multiples of sc from Start */
+        unsigned sc = step_clocks(a), m = a->clocks % sc;
+        unsigned lng = a->swing ? sc / 3 * 2 : sc;
         a->loss = 0;
         if (!a->running)
             return;
         if (a->enabled) {
-            if (a->clocks % sc == 0)
+            if (m == 0 || m == lng)
                 step(a);
-            else if (half && a->clocks % sc == half && a->gate_open)
+            else if (a->gate_open && ((m < lng && m == lng / 2) || (m > lng && m - lng == (sc - lng) / 2)))
                 release(a);
         }
         a->clocks++;
@@ -449,11 +471,14 @@ void arp_tick(arp_t *a)
         }
         return;
     }
-    a->acc += (uint32_t)a->bpm * a->beats_den;
-    if (a->gate_open && a->acc >= HALF(a))
+    a->acc += 3u * a->bpm * a->beats_den;
+    if (a->gate_open && a->acc >= step_units(a) / 2)
         release(a);
-    if (a->acc >= FULL(a)) {
-        a->acc -= FULL(a);
+    if (a->acc >= step_units(a)) {
+        a->acc -= step_units(a);
+        if (a->swing)
+            a->swing_short ^= 1;
         step(a);
     }
 }
+

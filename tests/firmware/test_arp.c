@@ -375,6 +375,97 @@ static void test_beats_change_under_ext_realigns_from_start(void) {
     CHECK(n_on() == 3);
 }
 
+/* ---- swing ("Note value": 16S / 8S) ------------------------------------------------- */
+static int off_tick(int k) { for (int i = 0; i < nlog; i++) if (!log_[i].on && k-- == 0) return log_[i].t; return -1; }
+
+static void test_swing_8s_internal_at_120_bpm(void) {
+    reset();
+    arp_set_beats(&a, 1, 1); arp_set_swing(&a, 1);                     /* 8S: pair = 1 beat = 500 ms */
+    CHECK(a.swing == 1);
+    arp_enable(&a, 1);
+    chord_ceg();                                                       /* C steps now: a pair begins */
+    ticks(2000);
+    CHECK(strncmp(ons(), "48 52 55 48 52 55 48 52 55 ", 27) == 0);       /* order unaffected */
+    CHECK(on_tick(0) == 0 && on_tick(1) == 334 && on_tick(2) == 500 && on_tick(3) == 834 && on_tick(4) == 1000);
+    CHECK(on_tick(5) == 1334 && on_tick(6) == 1500 && on_tick(7) == 1834 && on_tick(8) == 2000);
+    /* gate at half of each step: long 0..334 -> 167, short 334..500 -> 417 */
+    CHECK(off_tick(0) == 167 && off_tick(1) == 417 && off_tick(2) == 667 && off_tick(3) == 917);
+}
+
+static void test_swing_16s_internal_at_120_bpm(void) {
+    reset();
+    arp_set_beats(&a, 1, 2); arp_set_swing(&a, 1);                     /* 16S: pair = 1/2 beat = 250 ms */
+    arp_enable(&a, 1);
+    chord_ceg();
+    ticks(1000);
+    CHECK(n_on() == 9);
+    CHECK(on_tick(0) == 0 && on_tick(1) == 167 && on_tick(2) == 250 && on_tick(3) == 417 && on_tick(4) == 500);
+    CHECK(on_tick(8) == 1000);
+    CHECK(off_tick(0) == 84 && off_tick(1) == 209);
+}
+
+static void test_swing_start_rule_begins_a_pair_and_settings_keep_the_half(void) {
+    reset();
+    arp_set_beats(&a, 1, 1); arp_set_swing(&a, 1);
+    arp_enable(&a, 1);
+    on(C3);                                                            /* 0 long, 334 short */
+    ticks(400);
+    off(C3);                                                           /* emptied during the short step */
+    ticks(50);
+    clear_log();
+    on(C3);                                                            /* start rule at 450: long first */
+    ticks(600);
+    CHECK(on_tick(0) == 450 && on_tick(1) == 784 && on_tick(2) == 950);
+    reset();
+    arp_set_beats(&a, 1, 1); arp_set_swing(&a, 1);
+    enabled_with_ceg();                                                /* resets: plain 1/8 again */
+    CHECK(a.swing == 0);
+    arp_set_beats(&a, 1, 1); arp_set_swing(&a, 1);
+    arp_enable(&a, 0); arp_enable(&a, 1);                              /* switching on begins a pair */
+    clear_log();
+    ticks(100);
+    arp_set_mode(&a, ARP_DOWN);                                        /* in the long step: keeps it */
+    ticks(300);
+    arp_set_octaves(&a, 2);                                            /* in the short step: keeps it */
+    ticks(500);
+    CHECK(on_tick(0) == 334 && on_tick(1) == 500 && on_tick(2) == 834);
+    arp_set_swing(&a, 0);                                              /* plain again: 1 beat steps */
+    clear_log();
+    ticks(1100);
+    CHECK(n_on() == 2 && on_tick(1) - on_tick(0) == 500);
+}
+
+/* clocks numbered from Start: each clock is logged at t = its index */
+static void numbered_clocks(int from, int n) { for (int i = 0; i < n; i++) { now = from + i; arp_realtime(&a, 0xF8, 0); } }
+
+static void test_swing_under_midi_clock(void) {
+    enabled_with_ceg(); arp_set_ext(&a, 1);
+    arp_set_beats(&a, 1, 1); arp_set_swing(&a, 1);                     /* 8S: 24-clock pairs, 16 + 8 */
+    arp_realtime(&a, 0xFA, 0);
+    clear_log();
+    numbered_clocks(0, 49);
+    CHECK(on_tick(0) == 0 && on_tick(1) == 16 && on_tick(2) == 24 && on_tick(3) == 40 && on_tick(4) == 48);
+    CHECK(n_on() == 5);
+    CHECK(off_tick(0) == 8 && off_tick(1) == 20 && off_tick(2) == 32 && off_tick(3) == 44);   /* half of 16, of 8 */
+    CHECK(strcmp(ons(), "48 52 55 48 52 ") == 0);
+    enabled_with_ceg(); arp_set_ext(&a, 1);
+    arp_set_beats(&a, 1, 2); arp_set_swing(&a, 1);                     /* 16S: 12-clock pairs, 8 + 4 */
+    arp_realtime(&a, 0xFA, 0);
+    clear_log();
+    numbered_clocks(0, 25);
+    CHECK(on_tick(0) == 0 && on_tick(1) == 8 && on_tick(2) == 12 && on_tick(3) == 20 && on_tick(4) == 24);
+    CHECK(n_on() == 5);
+    CHECK(off_tick(0) == 4 && off_tick(1) == 10 && off_tick(2) == 16 && off_tick(3) == 22);   /* half of 8, of 4 */
+    /* a mid-run change lands on the pair grid from Start */
+    enabled_with_ceg(); arp_set_ext(&a, 1);
+    arp_realtime(&a, 0xFA, 0);
+    clear_log();
+    numbered_clocks(0, 13);                                            /* 1/8: steps at 0 and 12 */
+    arp_set_beats(&a, 1, 1); arp_set_swing(&a, 1);                     /* 8S from clock 13 */
+    numbered_clocks(13, 28);                                           /* 13..40 */
+    CHECK(n_on() == 5 && on_tick(2) == 16 && on_tick(3) == 24 && on_tick(4) == 40);
+}
+
 /* ---- seq ----------------------------------------------------------------------------- */
 static void record_cege(void) {
     arp_seq_record(&a, 1);
@@ -471,6 +562,10 @@ int main(void) {
     test_notes_never_reset_the_grid_under_ext();
     test_clock_loss_and_port_lock();
     test_beats_change_under_ext_realigns_from_start();
+    test_swing_8s_internal_at_120_bpm();
+    test_swing_16s_internal_at_120_bpm();
+    test_swing_start_rule_begins_a_pair_and_settings_keep_the_half();
+    test_swing_under_midi_clock();
     test_seq_records_sounds_directly_and_plays_transposed();
     test_seq_octaves_modes_and_clear();
     test_seq_restarts_on_fresh_key_and_latches();

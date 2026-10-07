@@ -65,6 +65,7 @@ static void apply_rate(arpui_t *u, arp_t *a)
     int num, den;
     rate_beats(&u->rate, &num, &den);
     arp_set_beats(a, num, den);
+    arp_set_swing(a, rate_swing(&u->rate));
 }
 
 /* --- patch memory ------------------------------------------------------------------------ */
@@ -72,16 +73,16 @@ static void apply_rate(arpui_t *u, arp_t *a)
 static void store_patch(const arpui_t *u, const arp_t *a)
 {
     plat_param_store(ARPUI_PARAM_OCT, a->octaves);
-    plat_param_store(ARPUI_PARAM_PACK, (a->enabled ? 1 : 0) | (a->mode << 1) | (rate_index(&u->rate) << 3));
+    plat_param_store(ARPUI_PARAM_PACK, (a->enabled ? 1 : 0) | (a->mode << 1) | (rate_code(rate_index(&u->rate)) << 3));
 }
 
 void arpui_program_loaded(arpui_t *u, arp_t *a)
 {
     int oct = plat_param_read(ARPUI_PARAM_OCT), pack = plat_param_read(ARPUI_PARAM_PACK);
-    int note = (pack >> 3) & 15, mode = (pack >> 1) & 3, on = pack & 1;
+    int note = rate_index_from_code((pack >> 3) & 15), mode = (pack >> 1) & 3, on = pack & 1;
     if (u->kill)
         return;
-    if (oct < 1 || oct > 4 || pack < 0 || pack > 127 || note >= RATE_COUNT) {
+    if (oct < 1 || oct > 4 || pack < 0 || pack > 127 || note < 0) {
         arp_enable(a, 0);                                  /* no arp data: off, settings untouched */
         return;
     }
@@ -204,15 +205,17 @@ void arpui_note(arpui_t *u, arp_t *a, int src, int note, int vel)
 }
 
 /* --- Glide Rate -------------------------------------------------------------------------- */
-static int glide_is_tempo(const arpui_t *u, const arp_t *a, int pot)
+/* A440 + Glide Rate = tempo; Glide Rate alone is always stock glide */
+static int glide_is_tempo(const arpui_t *u, int pot)
 {
-    return pot == ARPUI_POT_GLIDE && !u->kill && a->enabled && !a->ext;
+    return pot == ARPUI_POT_GLIDE && !u->kill && u->a440_held;
 }
 
 int arpui_pot_store(arpui_t *u, arp_t *a, int pot, int raw)
 {
-    if (!glide_is_tempo(u, a, pot))
+    if (!glide_is_tempo(u, pot))
         return 0;
+    u->a440_used = 1;                                      /* the pot used the hold: no toggle */
     if (raw < 0) raw = 0;
     if (raw > 1023) raw = 1023;
     arp_set_bpm(a, 40 + (260 * raw + 511) / 1023);
@@ -222,7 +225,11 @@ int arpui_pot_store(arpui_t *u, arp_t *a, int pot, int raw)
 
 int arpui_pot_change(arpui_t *u, arp_t *a, int pot)
 {
-    return glide_is_tempo(u, a, pot);
+    (void)a;
+    if (!glide_is_tempo(u, pot))
+        return 0;
+    u->a440_used = 1;
+    return 1;
 }
 
 /* --- tick -------------------------------------------------------------------------------- */

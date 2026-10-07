@@ -189,16 +189,21 @@ this engine deliberately differs it is marked **(change)** with the reason.
   on A440 release. Held-repeat events (value 3) are ignored. A combo button whose release
   arrives after A440 has been released is still consumed **(change: V5 leaked the orphan
   release to stock)**.
-- **Glide Rate** sets the tempo, 40–300 BPM (`BPM = 40 + round(260 · raw / 1023)`, raw
-  0–1023), only while the arp is on *and* the clock source is internal **(change: V5 captured
-  the pot whenever the arp was on, so under `Syn` glide was dead and BPM changed silently)**.
-  Otherwise Glide Rate is the normal glide control, and tempo changes never disturb the
-  patch's glide value.
+- **A440 + Glide Rate** sets the tempo `[HW: unverified]`: while A440 is held, turning Glide
+  Rate sets the BPM of the internal clock, 40–300 (`BPM = 40 + round(260 · raw / 1023)`, raw
+  0–1023), whether the arp is on or off and whichever clock source is selected (under `Syn`
+  the new BPM applies when the clock source returns to `int`). The display shows the BPM while
+  the pot turns (a display message like any other). Turning the pot counts as using the A440
+  hold, so the A440 release does not toggle the arp. Both pot hooks (raw store and change
+  post) are consumed exactly while A440 is held (and the kill switch is not engaged); the
+  patch's glide value is not touched. **Glide Rate alone is always the normal glide control**,
+  also while the arp is running. **(change: V5, and this engine before 2026-10-07, captured
+  the pot as tempo whenever the arp was on, which made glide unusable with the arp running.)**
 - **Display**: transient messages (mode, octaves, clock, note value, BPM while the pot
-  moves, step count, shift, readout) show for 1.2 s, then the display returns to the stock
+  moves, step count, shift, readout) show for 1.5 s, then the display returns to the stock
   program display **(change: V5 left `OFF` / BPM / `Syn` on the display for as long as the
-  arp was on)**. Switching the arp on shows the BPM (`Syn` under external clock) for 1.2 s;
-  switching it off shows `OFF` for 1.2 s.
+  arp was on)**. Switching the arp on shows the BPM (`Syn` under external clock) for 1.5 s;
+  switching it off shows `OFF` for 1.5 s.
 - **Globals menu**: while the stock Globals menu is open, every button including A440
   behaves exactly as stock (so the stock tuning tone is reachable from there); the arp keeps
   running with its current settings. Pressing GLOBALS while A440 is held abandons the hold:
@@ -249,8 +254,15 @@ this engine deliberately differs it is marked **(change)** with the reason.
 - **Internal**: step period = 60 s / BPM × beats per note value ("Note value" table),
   accumulated in 1 ms ticks with the remainder carried, so a long run does not drift.
   Changing BPM or note value takes effect from the next step without resetting the phase.
+  Swing values (`16S`, `8S`, "Note value") alternate a long and a short step, 2 : 1 within
+  each pair; a start-rule step or switching the arp on begins a pair (long step first);
+  pool, mode and octave changes do not change which half comes next. `[HW: unverified]`
 - **External (`Syn`)**: 24 clocks per quarter; one step every `24 × beats` clocks (1/8 = 12,
   1/16 = 6, 1/8T = 8, 1/16d = 9, 1/4 = 24 … 4 bars = 384); gate-off at half, rounded down.
+  Swing values split each pair of steps 2 : 1 with the pair boundary at multiples of the pair
+  length counted from Start (`16S`: 12-clock pairs, steps at 0, 8, 12, 20, 24 …; `8S`:
+  24-clock pairs, steps at 0, 16, 24, 40, 48 …), gate-off at half of each step, rounded
+  down. `[HW: unverified]`
   The clock count runs from Start: Start resets the count and the pattern position; Continue
   resumes both; Stop releases the sounding note and holds the position (no steps until
   Continue or Start). No clock → silence. 1 s without a clock releases the sounding note; the
@@ -342,9 +354,12 @@ this engine deliberately differs it is marked **(change)** with the reason.
    pass-through).
 4. Realisation: program parameters **93** (0–127) and **94** (0–4) of layer A, which the stock
    OS stores, dumps and loads verbatim but never reads: 94 = octaves 1–4 (**0 = no arp
-   data**); 93 = on/off (bit 0) | mode (bits 1–2) | note value index 0–12 (bits 3–6). Values
-   outside those ranges count as no arp data. Written through stock's plain parameter store
-   `0x2003CEF5(layer, param, value)` (no clamp, no NRPN echo) on every change; read with
+   data**); 93 = on/off (bit 0) | mode (bits 1–2) | note-value code 0–14 (bits 3–6). Values
+   outside those ranges count as no arp data. The note-value code is fixed per value and is
+   **not** the position in the "Note value" list, so programs saved before the swing values
+   were added keep their value: codes 0–12 = 1/32, 1/16T, 1/16, 1/8T, 1/16d, 1/8, 1/8d, 1/4,
+   1/4d, 1/2, 1, 2 bars, 4 bars; 13 = `16S`; 14 = `8S` `[HW: unverified for 13/14]`. Written
+   through stock's plain parameter store `0x2003CEF5(layer, param, value)` (no clamp, no NRPN echo) on every change; read with
    `0x2003CB69(layer, param)` from a hook on the unconditional `bl 0x2003B6B0` at
    `0x2003D15C` at the end of stock's program-apply routine, which every load path reaches
    with the live table final (the hook runs in the Prophet5 task and queues "program loaded"
@@ -355,23 +370,35 @@ this engine deliberately differs it is marked **(change)** with the reason.
 
 ### Note value (arp/seq step length) `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock and MIDI sync]`
 
-1. The step length is one of 13 values, shortest to longest: 1/32, 1/16T, 1/16, 1/8T,
-   1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1 (whole), 2 bars, 4 bars (a bar is four beats).
-   Power-up default is 1/8. Not saved with patches.
+1. The step length is one of 15 values, shortest to longest by average step length: 1/32,
+   1/16T, 1/16, `16S`, 1/8T, 1/16d, 1/8, `8S`, 1/8d, 1/4, 1/4d, 1/2, 1 (whole), 2 bars,
+   4 bars (a bar is four beats). Power-up default is 1/8. Saved with the program ("Patch
+   memory").
+   **Swing** `[HW: unverified]` (as the Prophet-6's 2 : 1 swing): `16S` and `8S` play steps in
+   pairs, the first step of a pair lasting 2/3 of the pair and the second 1/3. A `16S` pair is
+   two sixteenths (1/2 beat: 1/3 + 1/6 beat), an `8S` pair two eighths (one beat: 2/3 + 1/3
+   beat), so the average step equals the plain value. The pattern order is unaffected.
 2. A440 + **Program 8** selects the next shorter (faster) value, A440 + **Program 7** the
    next longer — think − / +, where + is faster (swapped from the first build on
    2026-10-07, verified the same day); the ends do not wrap. The display shows the new value:
-   `32`, `16t`, `16`, `8t`, `16d`, `8`, `8d`, `4`, `4d`, `2`, `1`, `2b`, `4b`
+   `32`, `16t`, `16`, `16S`, `8t`, `16d`, `8`, `8S`, `8d`, `4`, `4d`, `2`, `1`, `2b`, `4b`
    (right-aligned; glyphs as the panel font allows).
 3. Internal clock: the step period is the note value at the current BPM; the note is
-   released half-way through the step.
-4. MIDI sync: steps follow the incoming clock at the selected value — 3, 4, 6, 8, 9, 12,
-   18, 24, 36, 48, 96, 192 or 384 clocks per step for the list above, counted from Start,
-   so step boundaries fall exactly on clocks and stay on the DAW grid across a change.
+   released half-way through the step (each swing step at half of its own length). At
+   120 BPM an `8S` pair is 500 ms (steps 334 ms and 166 ms with the remainder carried), a
+   `16S` pair 250 ms.
+4. MIDI sync: steps follow the incoming clock at the selected value — 3, 4, 6, 8 + 4
+   (`16S`), 8, 9, 12, 16 + 8 (`8S`), 18, 24, 36, 48, 96, 192 or 384 clocks per step for the
+   list above, counted from Start (swing pairs start at multiples of
+   the pair length), so step boundaries fall exactly on clocks and stay on the DAW grid
+   across a change.
 5. A change takes effect from the next step. Applies to the arp and to seq alike.
 6. Realisation: `rate.c` maps each value to beats per step as a fraction (1/32 → 1/8 beat …
-   4 bars → 16 beats); the engine's internal period is `60 s / BPM × beats` with the
-   remainder carried, and the MIDI-clock step is `24 × beats` clocks (always integral).
+   4 bars → 16 beats) plus a swing flag — for a swing value the fraction is the pair length
+   (`16S` → 1/2, `8S` → 1) — and to its patch-memory code; the engine's internal period is
+   `60 s / BPM × beats` with the remainder carried (swing: 2/3 and 1/3 of the pair, exact in
+   integers), and the MIDI-clock step (pair) is `24 × beats` clocks (always integral, and a
+   multiple of 3 for swing pairs).
 
 ### Keyboard octave shift `[HW: verified 2026-10-07, Prophet-10 Rev4 — Lo Freq modifier, tap replay, shifted keys and MIDI Out]`
 
@@ -432,8 +459,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
 ### Display messages `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
 1. Every message the engine puts on the display — mode (`UP dn Ud rnd`), octaves
-   (`o N`), clock (`int`/`Syn`), `OFF`, BPM (while Glide Rate turns, and when the arp is
-   switched on), note value, seq step count, keyboard shift, button id — shows for 1.5 s
+   (`o N`), clock (`int`/`Syn`), `OFF`, BPM (while Glide Rate turns with A440 held, and when
+   the arp is switched on), note value, seq step count, keyboard shift, button id — shows for 1.5 s
    after the last change and then the display returns to the stock patch display (bank,
    group and program). Nothing stays on the display permanently. `(change from V5, which
    kept OFF / BPM / Syn up for as long as the arp was on)`

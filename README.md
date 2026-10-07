@@ -17,8 +17,8 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
 All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
 
 - **Arp** — tap **A440** to switch it on (LED). Modes Up, Down, Up/Down (ends not
-  repeated), Random; 1–4 octaves played **per pass** (C3 D4 | C4 D5); 40–300 BPM from the
-  Glide Rate pot while the arp is on with the internal clock; MIDI clock sync with
+  repeated), Random; 1–4 octaves played **per pass** (C3 D4 | C4 D5); A440 + Glide Rate
+  sets 40–300 BPM; Glide Rate alone is always glide `[HW: unverified]`; MIDI clock sync with
   Start/Stop/Continue, 1 s clock‑loss, the pattern always on the clock grid. One note
   sounds per step, also under HOLD.
 - **Re‑latch under HOLD** — with HOLD active, the first key after releasing all keys starts
@@ -28,8 +28,9 @@ All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
   tempo/sync, in the arp's direction mode, over the arp's octaves; HOLD latches it.
   A440 + Program 6 clears it.
 - **Note value** — A440 + Program 8 (shorter, +) / Program 7 (longer, −): 1/32, 1/16T,
-  1/16, 1/8T, 1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1, 2 bars, 4 bars, on the internal clock
-  and under MIDI sync. Default 1/8.
+  1/16, 16S, 1/8T, 1/16d, 1/8, 8S, 1/8d, 1/4, 1/4d, 1/2, 1, 2 bars, 4 bars, on the internal
+  clock and under MIDI sync. Default 1/8. `16S` / `8S` are sixteenth / eighth **swing**
+  (Prophet‑6 style 2 : 1 — each pair of steps split 2/3 + 1/3) `[HW: unverified]`.
 - **Keyboard octave shift** — hold the Osc B **Lo Freq** button, Bank = up, Group = down
   (±2; both together = 0). Applies to the keys you play and to MIDI Out; a plain tap still
   toggles Lo Freq (LED on release).
@@ -47,7 +48,7 @@ All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
 Controls follow the conventions established by Nicolas Maldonado's **Arp Mod V5**, the
 third‑party patch whose documented behaviour this engine was modelled on (A440 as the arp
 button, Bank/Group for modes, Program 1–5 for octaves and clock source, Glide Rate for
-tempo). Deliberate differences are listed in the spec.
+tempo — here only while A440 is held). Deliberate differences are listed in the spec.
 
 ## Inputs you must supply
 

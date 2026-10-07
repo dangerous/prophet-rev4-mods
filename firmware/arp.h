@@ -30,7 +30,9 @@ typedef struct {
     uint8_t  gate_open;               /* step note not yet released by the gate */
     uint8_t  at_start;                /* pattern position is "before the first step" */
     uint16_t bpm;
-    uint8_t  beats_num, beats_den;    /* beats per step, e.g. 1/2 for an eighth */
+    uint8_t  beats_num, beats_den;    /* beats per step (per pair of steps with swing), e.g. 1/2 for an eighth */
+    uint8_t  swing;                   /* 2:1 swing: steps alternate 2/3 and 1/3 of the pair */
+    uint8_t  swing_short;             /* internal clock: the current step is the pair's short one */
     uint32_t acc;                     /* internal clock accumulator, see arp.c */
     uint32_t clocks;                  /* MIDI clocks counted since Start */
     uint16_t loss;                    /* ticks since the last MIDI clock */
@@ -56,6 +58,7 @@ void arp_set_mode(arp_t *a, int mode);
 void arp_set_octaves(arp_t *a, int n);                   /* 1..4 */
 void arp_set_bpm(arp_t *a, int bpm);                     /* 40..300 */
 void arp_set_beats(arp_t *a, int num, int den);          /* beats per step */
+void arp_set_swing(arp_t *a, int on);                    /* 16S / 8S */
 void arp_set_ext(arp_t *a, int ext);                     /* clock source: 0 internal, 1 MIDI */
 
 /* Seq recording: notes played while recording sound directly and are appended (up to
