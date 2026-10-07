@@ -38,4 +38,8 @@ unpacks, patches and re-packs the OS SysEx image.
 ## Conventions
 - Python: stdlib only, 3.9+, `unittest`. C: C11, no libc dependence in firmware sources.
 - Never commit anything under `build/`. Never edit `fixtures/`.
+- `dist/*.syx` is git-ignored, so it is **per checkout**: after building in a worktree, copy
+  the images into the root checkout's `dist/` (that is where they are flashed from) and
+  check `cd dist && shasum -a 256 -c SHA256SUMS` there. Never delete dist files; superseded
+  builds go to `dist/old/` with a hash suffix.
 - Flashing is a human step; the tools only produce files.

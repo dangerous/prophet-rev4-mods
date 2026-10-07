@@ -10,8 +10,11 @@ behavioural source of truth; this file is the engineering context around it.
   with plain `git merge` from the root). An agent worktree
   `.claude/worktrees/agent-a8014a76fdbbe9479` holds the already-integrated octave fix; safe
   to remove.
-- `dist/` holds the two installable images + `SHA256SUMS` (written from inside `dist/`, so
-  verify with `cd dist && shasum -a 256 -c SHA256SUMS`). **Never delete dist files.**
+- `dist/` holds the installable images + `SHA256SUMS` (written from inside `dist/`, so
+  verify with `cd dist && shasum -a 256 -c SHA256SUMS`). **Never delete dist files.** The
+  `.syx` files are git-ignored and therefore per checkout: copy new builds from the
+  worktree's `dist/` to the root's `dist/` (David flashes from the root) — 2026-10-07 a
+  stale root `dist/` nearly got flashed.
 - Original inputs in `~/git/prophet` (stock 2.1.0, Panel 1.1.3, V5 arp mod, its PDF guide,
   an 800 MB Overview.MOV); copies of the `.syx`/guide in `fixtures/` (git-ignored — the
   repo ships only `fixtures/README.md` + `SHA256SUMS`; history was rewritten to drop them).
