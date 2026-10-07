@@ -173,7 +173,7 @@ V5's window record at `0x20089600`; that layout was verified on hardware.
   payloads as `image <n> record @0x<offset> ram 0x<lo>..0x<hi>: <n> bytes`, so a reviewer
   can see exactly what a build changed. Record-structure differences are reported as such.
 
-### Native arp engine (stock 2.1.0 base) `[HW: verified 2026-10-07, Prophet-10 Rev4 — first flash: boot, A440 toggle/LED/display, pattern incl. per-pass octaves, HOLD, kill switch (both ways)]`
+### Native arp engine (stock 2.1.0 base) `[HW: verified 2026-10-07, Prophet-10 Rev4 — the whole native checklist on the first flash; the Program 7/8 swap that followed is in the rebuilt image, not yet re-tested]`
 
 Replaces the dependency on Arp Mod V5: the base image becomes Sequential's stock Main OS
 2.1.0 and every arp behaviour below is this project's code. The behaviours specified elsewhere in
@@ -198,7 +198,7 @@ deviations are marked **(change)** with the reason.
 - **While A440 is held**: Bank = next mode, Group = previous mode (Up → Down → Up/Down →
   Random → Up…; display `UP`, `dn`, `Ud`, `rnd`); Program 1–4 = 1–4 octaves (`o 1`…`o 4`);
   Program 5 = toggle clock source (`int` / `Syn`); Program 6 = clear sequence; Program 7/8 =
-  note value shorter/longer; any other button = id readout. Any of these cancels the toggle
+  note value longer/shorter (− / +, + is faster); any other button = id readout. Any of these cancels the toggle
   on A440 release. Held-repeat events (value 3) are ignored. A combo button whose release
   arrives after A440 has been released is still consumed **(change: V5 leaked the orphan
   release to stock)**.
@@ -343,8 +343,9 @@ deviations are marked **(change)** with the reason.
 1. The step length is one of 13 values, shortest to longest: 1/32, 1/16T, 1/16, 1/8T,
    1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1 (whole), 2 bars, 4 bars (a bar is four beats).
    Power-up default is 1/8, which is exactly V5's behaviour. Not saved with patches.
-2. A440 + **Program 7** selects the next shorter value, A440 + **Program 8** the next
-   longer; the ends do not wrap. The display shows the new value for about a second:
+2. A440 + **Program 8** selects the next shorter (faster) value, A440 + **Program 7** the
+   next longer — think − / +, where + is faster (swapped from the first build on
+   2026-10-07); the ends do not wrap. The display shows the new value for about a second:
    `32`, `16t`, `16`, `8t`, `16d`, `8`, `8d`, `4`, `4d`, `2`, `1`, `2b`, `4b`
    (right-aligned; glyphs as the panel font allows).
 3. Internal clock: the step period is the note value at the current BPM (Glide pot, as in

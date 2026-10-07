@@ -23,7 +23,7 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
   first recorded note, in the arp's direction mode, over the arp's octave range. HOLD
   latches it; the first key after all‑up restarts it. A440 + Program 6 clears it.
   `[HW: verified 2026‑10‑06]`
-- **Note value** — A440 + Program 7 (shorter) / Program 8 (longer) steps through 1/32,
+- **Note value** — A440 + Program 8 (shorter, +) / Program 7 (longer, −) steps through 1/32,
   1/16T, 1/16, 1/8T, 1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1, 2 bars, 4 bars for the arp and
   seq, on internal clock and under MIDI sync. Display shows e.g. `16t`, `8d`, `2b`.
   Default 1/8 (V5's behaviour). `[HW: verified 2026‑10‑07, internal clock]`

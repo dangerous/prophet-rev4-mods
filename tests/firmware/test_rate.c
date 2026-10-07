@@ -104,22 +104,22 @@ static void test_clock_filter_keeps_steps_exactly_on_real_clocks(void) {
 
 static void test_buttons_change_rate_only_while_a440_held(void) {
     rate_init(&r); clear_log();
-    CHECK(rate_button(&r, 0, PROGRAM7, PRESS) == 0);          /* A440 not held: untouched */
+    CHECK(rate_button(&r, 0, PROGRAM8, PRESS) == 0);          /* A440 not held: untouched */
     CHECK(rate_index(&r) == 5 && nlog == 0);
-    CHECK(rate_button(&r, 1, PROGRAM7, PRESS) == 0);          /* forwarded so V5 marks A440 used */
+    CHECK(rate_button(&r, 1, PROGRAM8, PRESS) == 0);          /* forwarded so V5 marks A440 used */
     CHECK(rate_index(&r) == 4);
     CHECK(count_type(EV_D3) == 1 && count_type(EV_HOLD) == 1 && count_type(EV_ACC) == 1);
     ev_t *d = last_of(EV_D3);
     CHECK(d && d->a == 1 && d->b == 6 && d->c == D);           /* 16d */
-    CHECK(rate_button(&r, 1, PROGRAM7, REPEAT) == 0);          /* repeats ignored */
-    CHECK(rate_button(&r, 1, PROGRAM7, RELEASE) == 0);
+    CHECK(rate_button(&r, 1, PROGRAM8, REPEAT) == 0);          /* repeats ignored */
+    CHECK(rate_button(&r, 1, PROGRAM8, RELEASE) == 0);
     CHECK(rate_index(&r) == 4);
     clear_log();
-    CHECK(rate_button(&r, 1, PROGRAM8, PRESS) == 0);
+    CHECK(rate_button(&r, 1, PROGRAM7, PRESS) == 0);
     CHECK(rate_index(&r) == 5 && count_type(EV_ACC) == 1);
     clear_log();
     while (rate_step(&r, -1)) {}
-    rate_button(&r, 1, PROGRAM7, PRESS);                       /* at the shortest: show, no change */
+    rate_button(&r, 1, PROGRAM8, PRESS);                       /* at the shortest: show, no change */
     CHECK(rate_index(&r) == 0 && count_type(EV_D3) == 1 && count_type(EV_ACC) == 0);
 }
 

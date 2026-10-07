@@ -112,10 +112,10 @@ static void test_program_buttons_set_octaves_clock_and_note_value(void) {
     CHECK(a.ext == 1 && last_d3_is(CH_S, CH_Y, CH_N));
     btn(P5, PRESS); btn(P5, RELEASE);
     CHECK(a.ext == 0 && last_d3_is(CH_I, CH_N, CH_T));
-    btn(P7, PRESS); btn(P7, RELEASE);                                  /* shorter: 1/16d */
+    btn(P8, PRESS); btn(P8, RELEASE);                                  /* shorter (+): 1/16d */
     CHECK(rate_index(&u.rate) == RATE_DEFAULT_INDEX - 1 && a.beats_num == 3 && a.beats_den == 8);
     CHECK(last_d3_is(1, 6, CH_D));
-    btn(P8, PRESS); btn(P8, RELEASE); btn(P8, PRESS); btn(P8, RELEASE);  /* longer twice: 1/8d */
+    btn(P7, PRESS); btn(P7, RELEASE); btn(P7, PRESS); btn(P7, RELEASE);  /* longer (-) twice: 1/8d */
     CHECK(a.beats_num == 3 && a.beats_den == 4 && last_d3_is(BLANK, 8, CH_D));
     btn(A440, RELEASE);
     CHECK(!a.enabled);

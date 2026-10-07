@@ -76,9 +76,9 @@ Manual verification on the instrument. Record results against the spec markers i
 
 ## Note value (spec "Note value")
 
-- [ ] Arp on, internal clock, hold a chord. Hold A440, press Program 7: display `16d`,
+- [ ] Arp on, internal clock, hold a chord. Hold A440, press Program 8: display `16d`,
       pattern noticeably faster; again: `8t`, `16`, `16t`, `32`; once more: stays `32`.
-- [ ] A440 + Program 8 back up through `16t … 8 … 8d 4 4d 2 1 2b 4b`; stays at `4b`.
+- [ ] A440 + Program 7 back up through `16t … 8 … 8d 4 4d 2 1 2b 4b`; stays at `4b`.
       Each change takes effect from the next step; the display returns to BPM after ~1 s.
 - [ ] Release A440 after changing the value: the arp does **not** toggle.
 - [ ] Glide Rate still changes tempo at every value; `o 2` and modes still work.

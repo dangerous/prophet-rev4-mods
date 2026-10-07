@@ -103,7 +103,7 @@ int rate_button(rate_t *r, int a440_held, int id, int value)
         return 0;
     if (id == RB_PROGRAM7 || id == RB_PROGRAM8) {
         if (value == RB_PRESS) {
-            if (rate_step(r, id == RB_PROGRAM7 ? -1 : 1))
+            if (rate_step(r, id == RB_PROGRAM7 ? 1 : -1))      /* 7 = longer (-), 8 = shorter (+) */
                 plat_engine_reset_acc();
             show_rate(r);
         }

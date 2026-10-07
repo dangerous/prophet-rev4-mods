@@ -132,7 +132,9 @@ stock (A440 tuning tone reachable there); mode/octave change keeps the phase.
 
 ## Open items
 
-- Hardware-unverified: note values under MIDI sync, seq recording from MIDI-in, the full
-  image (clock filter — never installed), and everything in the native image.
+- Hardware-unverified: the Program 7/8 direction swap (rebuilt 2026-10-07 in all three
+  images), note values under MIDI sync on the V5-based build, seq recording from MIDI-in,
+  the V5-based full image (clock filter — never installed). The native image passed its whole
+  checklist on 2026-10-07.
 - Cosmetic: entering seq with the arp at o 2–4 flashes `o 1` over the step count.
 - Local-off mode shifting; rests in seq; display glyph for `o` vs `O` confirmed from V5.
