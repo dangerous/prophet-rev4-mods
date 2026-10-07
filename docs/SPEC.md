@@ -330,7 +330,7 @@ deviations are marked **(change)** with the reason.
   switch), `oct.c`, `rate.c`, `disp.c`, `vhold.c`. The V5-based images remain available
   (`make image`, `make image-internal`) until this section is hardware-verified.
 
-### Note value (arp/seq step length) `[HW: unverified]`
+### Note value (arp/seq step length) `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock; MIDI sync not exercised]`
 
 1. The step length is one of 13 values, shortest to longest: 1/32, 1/16T, 1/16, 1/8T,
    1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1 (whole), 2 bars, 4 bars (a bar is four beats).
@@ -363,7 +363,7 @@ deviations are marked **(change)** with the reason.
    clock so withheld clocks never trigger the timeout. While sync is active the (div, tps)
    fields hold V5's (2, 1000).
 
-### Keyboard octave shift `[HW: unverified]`
+### Keyboard octave shift `[HW: verified 2026-10-07, Prophet-10 Rev4 — Lo Freq modifier, tap replay, shifted keys and MIDI Out]`
 
 1. Hold the Osc B **Lo Freq** button (panel id 37) and press **Bank** to shift the
    keyboard up one octave, **Group** to shift it down; range −2…+2. (Lo Freq sits next to
@@ -397,7 +397,7 @@ deviations are marked **(change)** with the reason.
    a release with no shift command replays press+release of id 37 through V5's button
    entry (which forwards non-arp buttons to stock when A440 is not held).
 
-### HOLD while the arp is on `[HW: unverified]`
+### HOLD while the arp is on `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
 1. While the arp is on, HOLD (button, or sustain pedal in `HLd` mode) is the arp's latch and
    nothing else: the synth's own hold — the voice sustain that normally keeps released keys
@@ -420,7 +420,7 @@ deviations are marked **(change)** with the reason.
    transition with HOLD active posts the message itself (`0x2003D325`: off on enable, on on
    disable).
 
-### Display messages `[HW: unverified]`
+### Display messages `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
 1. Every message the arp or the wrapper puts on the display — mode (`UP dn Ud rnd`), octaves
    (`o N`), clock (`int`/`Syn`), `OFF`, BPM (while Glide Rate turns, and when the arp is
@@ -499,7 +499,7 @@ arp‑enabled byte at `0x200894D8`; V5 entry points local‑note `0x20088C51`, M
 `r4` as left by the stock caller), all‑notes‑off `0x20088E83`. Wrapper state lives in
 `0x20089E80–0x2008A000` inside the wrapper window and is zero after every boot.
 
-### Seq (step-recorded sequence) `[HW: verified 2026-10-06, Prophet-10 Rev4 — record, transposed playback, clear; octaves and MIDI-in recording not yet exercised]`
+### Seq (step-recorded sequence) `[HW: verified 2026-10-06/07, Prophet-10 Rev4 — record, transposed playback, clear, octaves (o N, no toggle on A440 release, Program 6); MIDI-in recording not exercised]`
 
 A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and playing.
 *Seq mode* is active exactly when a sequence exists. *Keys*, *HOLD active* and

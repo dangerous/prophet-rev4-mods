@@ -26,19 +26,19 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
 - **Note value** — A440 + Program 7 (shorter) / Program 8 (longer) steps through 1/32,
   1/16T, 1/16, 1/8T, 1/16d, 1/8, 1/8d, 1/4, 1/4d, 1/2, 1, 2 bars, 4 bars for the arp and
   seq, on internal clock and under MIDI sync. Display shows e.g. `16t`, `8d`, `2b`.
-  Default 1/8 (V5's behaviour). `[HW: unverified]`
+  Default 1/8 (V5's behaviour). `[HW: verified 2026‑10‑07, internal clock]`
 - **Button id readout** — hold A440 and press any button the arp doesn't use: its id is
   shown for a second. For mapping panel button ids. `[HW: verified 2026‑10‑07]`
 - **Keyboard octave shift** — hold the Osc B **Lo Freq** button, Bank = up, Group = down
   (±2; both together = 0); shown on the display. Applies to the keys you play, including
   what goes to MIDI Out (Local Control on or off); a plain tap still toggles Lo Freq (LED
-  on release). `[HW: unverified]`
+  on release). `[HW: verified 2026‑10‑07]`
 - **HOLD while the arp is on** — the synth's own sustain is suspended while the arp runs,
   so steps no longer pile up under HOLD (V5: C, then C+E, then C+E+G…); HOLD is purely the
-  arp's latch, and stock hold returns the moment the arp is switched off. `[HW: unverified]`
+  arp's latch, and stock hold returns the moment the arp is switched off. `[HW: verified 2026‑10‑07]`
 - **Display messages** — everything the arp or the wrapper shows (mode, `o N`, `int`/`Syn`,
   `OFF`, BPM, note value, step count, shift, button id) returns to the patch display after
-  1.5 s; nothing stays up permanently. `[HW: unverified]`
+  1.5 s; nothing stays up permanently. `[HW: verified 2026‑10‑07]`
 
 ## Inputs you must supply
 

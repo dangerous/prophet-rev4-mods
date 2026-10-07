@@ -28,10 +28,13 @@ behavioural source of truth; this file is the engineering context around it.
 - Flashed so far: re-latch-only (bug: hold flag), fixed re-latch (OK), relatch+seq
   (bugs: button repeat, seq octave). Built but **not installed**: the 2026-10-07 image
   (seq octave fix, note values, readout, octave shift on Lo Freq, MIDI Out hook fix, HOLD
-  suspension while the arp is on, display revert) — `dist/` holds it; the superseded
-  builds are kept in `dist/old/`.
-- Verified: loader path, boot, hooks, HOLD stub, re-latch, seq record/play/clear, note
-  value UI not yet reported, readout works (Keyboard id 36 read out).
+  suspension while the arp is on, display revert) — **installed and verified 2026-10-07**;
+  `dist/` holds it, the superseded builds are kept in `dist/old/`. Next flash: the native
+  image.
+- Verified (2026-10-06/07): loader path, boot, hooks, HOLD stub, re-latch, seq
+  record/play/clear/octaves, note values (internal clock), Lo Freq octave shift incl. MIDI
+  Out, HOLD suspended while the arp is on, display revert, readout (Keyboard 36, GLOBALS 13).
+  V5's pitch-sorted octave union (C4 C5 G5 G6) observed as expected; per-pass is native-only.
 - Rule we hold ourselves to: no wrapper code at boot; only proven entry points; nothing in
   the USB re-flash path unless unavoidable (the full image's parser-table trampoline is the
   one exception, deliberately NOT installed yet — the `_internal` variant omits it).
@@ -126,8 +129,7 @@ stock (A440 tuning tone reachable there); mode/octave change keeps the phase.
 
 ## Open items
 
-- Hardware-unverified in the 2026-10-07 image: note values, octave shift (Lo Freq), HOLD
-  while the arp is on, display revert, seq octave fix; full image (clock filter) never
-  installed.
+- Hardware-unverified: note values under MIDI sync, seq recording from MIDI-in, the full
+  image (clock filter — never installed), and everything in the native image.
 - Cosmetic: entering seq with the arp at o 2–4 flashes `o 1` over the step count.
 - Local-off mode shifting; rests in seq; display glyph for `o` vs `O` confirmed from V5.
