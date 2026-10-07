@@ -17,4 +17,8 @@ void plat_a440_mark_used(void);                   /* V5: this A440 hold was a mo
 void plat_engine_reset_acc(void);                 /* V5 engine: restart the internal step accumulator */
 void plat_orig_out(int ctx, int src, int on, int note, int vel);  /* V5's original note output */
 
+/* Native engine (arp.c): the stock voice allocator, note_on(src, note, vel) / note_off(src, note) */
+void plat_voice_on(int src, int note, int vel);
+void plat_voice_off(int src, int note);
+
 #endif

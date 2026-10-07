@@ -11,13 +11,18 @@ test-tooling:
 
 # Host-side harnesses for the wrapper's portable logic.
 test-firmware: $(BUILD)/test_relatch $(BUILD)/test_seq $(BUILD)/test_rate $(BUILD)/test_oct \
-               $(BUILD)/test_vhold $(BUILD)/test_disp
+               $(BUILD)/test_vhold $(BUILD)/test_disp $(BUILD)/test_arp
 	$(BUILD)/test_relatch
 	$(BUILD)/test_seq
 	$(BUILD)/test_rate
 	$(BUILD)/test_oct
 	$(BUILD)/test_vhold
 	$(BUILD)/test_disp
+	$(BUILD)/test_arp
+
+$(BUILD)/test_arp: tests/firmware/test_arp.c firmware/arp.c firmware/arp.h firmware/platform.h
+	@mkdir -p $(BUILD)
+	$(CC) -std=c11 -Wall -Wextra -Werror -Ifirmware -o $@ tests/firmware/test_arp.c firmware/arp.c
 
 $(BUILD)/test_vhold: tests/firmware/test_vhold.c firmware/vhold.c firmware/vhold.h
 	@mkdir -p $(BUILD)
