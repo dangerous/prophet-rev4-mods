@@ -35,20 +35,33 @@ Manual verification on the instrument. Record results against the spec markers i
 ## Arp engine (spec "Arp engine")
 
 - [ ] Arp on, HOLD off: play a chord, release, wait, play another: starts immediately.
-- [ ] A440 + Bank/Group: `dn` (G E C), `Ud` (C E G E C…), `rnd`, `UP`. A440 + Program 2:
+- [ ] A440 + Bank/Group: `dn` (G E C), `Ud` (C E G E C…), `rnd`, `ASS`, `UP`; Group goes
+      the other way (`UP` → `ASS` → `rnd`). A440 + Program 2:
       `o 2` → C E G C' E' G'. Hold C3 + D4 at `o 2`: C3 D4 C4 D5 (per pass).
 - [ ] Hold A440 and turn Glide Rate: BPM shown while turning, 40–300, the tempo follows,
       patch number back after 1.5 s; releasing A440 does **not** toggle the arp. Also with
-      the arp off (hold A440, turn, release: still off; tap on: the new BPM) and under `Syn`.
+      the arp off (hold A440, turn, release: still off; tap on: the new BPM). Under `Syn`:
+      hold A440 and turn Glide Rate → `Syn`, the tempo is unchanged, no toggle on release.
 - [ ] Tap tempo (spec "A440 + Unison is tap tempo"): hold A440, tap Unison four times at a
       steady ~120 BPM → `tAP` on the first tap, then ~120 (the tempo follows); tap at ~90 →
       ~90. Pause 3 s, tap once → `tAP`. Release A440: the arp does **not** toggle. Also with
       the arp off (then tap A440 on: the tapped BPM). Unison without A440 is stock Unison.
+      Under `Syn` (A440 + Program 5): A440 + Unison shows `Syn`, the tempo is unchanged, and
+      releasing A440 does not toggle the arp; back at `int` the next tap shows `tAP`.
+- [ ] Assign (spec "Pattern" — Assign): A440 + Bank to `ASS`. HOLD off, play G C E D (one
+      after another, keep them down): G C E D G C E D … (not sorted). Release E: G C D.
+- [ ] Assign + HOLD: hold G down and play C, E, D (releasing them): G C E D. Still holding G,
+      press C again: G C E D C. Release everything: keeps playing. Play a new chord: it
+      replaces the pattern (in the new order).
+- [ ] Assign at `o 2`: G C E D, then G C E D an octave up.
+- [ ] Assign with a recorded sequence: plays the recorded order (as `UP`).
 - [ ] Arp running, Glide Rate alone (no A440): it is **glide** — the step notes glide, the
       tempo does not change; the patch's glide value was not changed by the A440 + Glide
       turns before.
 - [ ] A440 + Program 5: `Syn`. DAW clock: steps on the grid, Start restarts, Stop silences,
       Continue resumes; pull the cable: silence after 1 s. A440 + Program 5: `int`.
+- [ ] `Syn` with the DAW at 100 BPM, run a few beats, A440 + Program 5 to `int`: the arp
+      continues at 100 (tap A440 off/on: shows `100`). Repeat at 140.
 - [ ] CC 123 from the DAW: pool cleared, HOLD LED unchanged. Program change while the arp
       runs: the pattern continues (HOLD drops its latched notes, as stock).
 - [ ] Globals menu open: Program buttons edit globals as stock even with A440 held;
@@ -65,6 +78,10 @@ Manual verification on the instrument. Record results against the spec markers i
       program: the arp comes up on.
 - [ ] Save a program with the arp **off** but `Ud`: loading it switches the arp off and sets
       `Ud`.
+- [ ] Save a program in `ASS` (arp on, e.g. `8t`, `o 3`). Load another program, reload it:
+      `ASS`, `8t`, `o 3`, on. Then `UP` again and re-save: reloads as `UP`.
+- [ ] Programs saved with arp settings by an earlier build (only the 2026-10-07 test saves)
+      need re-saving: they load with other settings.
 - [ ] MIDI program change from the DAW to the saved program: same as the panel.
 - [ ] Dump the program over SysEx and load it back: settings survive.
 - [ ] BPM, clock source and keyboard shift are **not** changed by loading.
@@ -121,8 +138,6 @@ Manual verification on the instrument. Record results against the spec markers i
       Under `Syn`: `8S` steps on clocks 0, 16, 24, 40 … and `16S` on 0, 8, 12, 20 … counted
       from Start (the long step falls on the beat).
 - [ ] Patch memory: save a program at `8S`, another at `16S`; both reload with their swing.
-      A program saved by an earlier build at `8` still loads at `8`; one saved at `16d`
-      loads at `16`, at `4d` at `4`, at `1` / `2b` / `4b` at `2`.
       Each change takes effect from the next step; the patch number returns after 1.5 s.
 - [ ] Release A440 after changing the value: the arp does **not** toggle.
 - [ ] `Syn` with DAW clock: `16` = sixteenths locked to the grid; `4` = quarters; `8d` =

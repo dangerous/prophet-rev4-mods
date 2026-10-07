@@ -9,10 +9,12 @@
 
 #define ARP_NONE 0xFF
 #define ARP_SEQ_MAX 32
+#define ARP_ASG_MAX 32                /* Assign: entries in note-on order */
 #define ARP_LOSS_TICKS 1000           /* 1 s without a MIDI clock releases the sounding note */
 #define ARP_PPQN 24
+#define ARP_BEAT_IVS 24               /* clock intervals measured for the followed BPM */
 
-enum { ARP_UP = 0, ARP_DOWN = 1, ARP_UPDOWN = 2, ARP_RANDOM = 3, ARP_MODES = 4 };
+enum { ARP_UP = 0, ARP_DOWN = 1, ARP_UPDOWN = 2, ARP_RANDOM = 3, ARP_ASSIGN = 4, ARP_MODES = 5 };
 enum { ARP_SRC_LOCAL = 1, ARP_SRC_MIDI = 2 };
 
 typedef struct {
@@ -37,9 +39,17 @@ typedef struct {
     uint32_t clocks;                  /* MIDI clocks counted since Start */
     uint16_t loss;                    /* ticks since the last MIDI clock */
     uint32_t rng;                     /* xorshift32 state for Random */
+    /* Syn: the BPM follows the clock, measured over the last ARP_BEAT_IVS clock intervals */
+    uint16_t clk_iv[ARP_BEAT_IVS];    /* ring of intervals (ticks) */
+    uint8_t  clk_n, clk_pos;          /* intervals held, next slot */
+    uint8_t  clk_prev;                /* a clock has been seen since the window restarted */
     /* seq: recorded steps, played transposed so step 0 lands on the trigger key */
     uint8_t  seq_len, seq_rec, seq_fresh, seq_trigger;
     uint8_t  seq_note[ARP_SEQ_MAX], seq_vel[ARP_SEQ_MAX];
+    /* Assign: the pool's notes in entered order, duplicates allowed */
+    uint8_t  asg_len;
+    uint8_t  asg_stay;                /* the entry at idx replaced the one just played: do not advance */
+    uint8_t  asg_note[ARP_ASG_MAX], asg_vel[ARP_ASG_MAX];
     uint8_t  order[128], ovel[128];   /* step() scratch: the base order and its velocities */
 } arp_t;
 

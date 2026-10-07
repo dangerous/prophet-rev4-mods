@@ -538,6 +538,182 @@ static void test_seq_restarts_on_fresh_key_and_latches(void) {
     CHECK(strcmp(ons(), "59 62 59 55 ") == 0);                         /* keeps playing, latched */
 }
 
+/* ---- assign -------------------------------------------------------------------------- */
+static void assign_on(void) { reset(); arp_enable(&a, 1); arp_set_mode(&a, ARP_ASSIGN); }
+
+static void test_assign_plays_the_entered_order_with_each_entrys_velocity(void) {
+    assign_on();
+    CHECK(ARP_ASSIGN == 4 && ARP_MODES == 5);
+    arp_note(&a, LOCAL, G3, 30); arp_note(&a, LOCAL, C3, 60);           /* G steps at once (start rule) */
+    arp_note(&a, MIDI, E3, 90); arp_note(&a, LOCAL, D3, 120);
+    ticks(1000);                                                       /* 0 G, 250 C, 500 E, 750 D, 1000 G */
+    CHECK(strcmp(ons(), "55 48 52 50 55 ") == 0);
+    CHECK(on_at(0)->vel == 30 && on_at(1)->vel == 60 && on_at(2)->vel == 90 && on_at(3)->vel == 120);
+    CHECK(on_tick(0) == 0 && on_tick(1) == 250);
+    reset(); arp_set_mode(&a, ARP_ASSIGN);                             /* entered while the arp is off */
+    on(G3); on(C3); on(E3); on(D3);
+    clear_log();
+    arp_enable(&a, 1);
+    ticks(750);
+    CHECK(strcmp(ons(), "55 48 52 50 ") == 0);
+}
+
+static void test_assign_duplicates_via_hold_and_relatch_replaces(void) {
+    assign_on();
+    arp_hold(&a, 1);
+    on(G3); on(C3); on(E3); on(D3);                                    /* HOLD: picked up at the next step */
+    off(C3); off(E3); off(D3);                                         /* latched; G still down */
+    arp_note(&a, LOCAL, C3, 40);                                       /* C again: a second entry */
+    ticks(1500);                                                       /* 250 G, 500 C, 750 E, 1000 D, 1250 C, 1500 G */
+    CHECK(strcmp(ons(), "55 48 52 50 48 55 ") == 0);
+    CHECK(on_at(1)->vel == 100 && on_at(4)->vel == 40);
+    off(C3); off(G3);                                                  /* all up: everything latched */
+    clear_log();
+    ticks(250);
+    CHECK(n_on() == 1);                                                /* keeps playing */
+    on(A4); on(F4);                                                    /* re-latch: replaces, A then F */
+    clear_log();
+    ticks(1000);
+    CHECK(strcmp(ons(), "69 65 69 65 ") == 0);
+}
+
+static void test_assign_release_without_hold_removes_the_pitch(void) {
+    assign_on();
+    on(G3); on(C3); on(E3); on(D3);
+    off(E3);
+    ticks(1000);
+    CHECK(strcmp(ons(), "55 48 50 55 48 ") == 0);                      /* G C D */
+    clear_log();                                                       /* C sounding (idx 1) */
+    off(G3);                                                           /* removed before the position */
+    ticks(750);
+    CHECK(strcmp(ons(), "50 48 50 ") == 0);                            /* D still follows C */
+    reset(); arp_enable(&a, 1); arp_set_mode(&a, ARP_ASSIGN);
+    on(G3); on(C3); on(E3); on(D3);
+    ticks(260);                                                        /* G, C sounding */
+    off(C3);                                                           /* the sounding entry goes */
+    clear_log();
+    ticks(500);
+    CHECK(strcmp(ons(), "52 50 ") == 0);                               /* E is next, not skipped */
+    off(G3); clear_log(); ticks(250);
+    CHECK(strcmp(ons(), "52 ") == 0);                                  /* E D: E follows D (wrap) */
+    reset(); arp_enable(&a, 1); arp_set_mode(&a, ARP_ASSIGN);
+    on(C3); on(E3); on(C3);                                            /* C pressed twice (second source) */
+    off(C3);                                                           /* every entry of C goes */
+    clear_log();
+    ticks(500);
+    CHECK(strcmp(ons(), "52 52 ") == 0);
+}
+
+static void test_assign_hold_off_drops_latched_entries(void) {
+    assign_on();
+    arp_hold(&a, 1);
+    on(G3); on(C3); on(E3);
+    off(C3);                                                           /* latched */
+    on(C3); off(C3);                                                   /* C twice, both latched */
+    arp_hold(&a, 0);                                                   /* G E remain */
+    ticks(1000);
+    CHECK(strcmp(ons(), "55 52 55 52 ") == 0);
+}
+
+static void test_assign_octaves_per_pass_and_all_notes_off(void) {
+    assign_on();
+    arp_set_octaves(&a, 2);
+    on(G3); on(C3); on(E3); on(D3);
+    ticks(2000);
+    CHECK(strcmp(ons(), "55 48 52 50 67 60 64 62 55 ") == 0);
+    arp_all_notes_off(&a);
+    clear_log();
+    on(E3);                                                            /* list was cleared: E alone */
+    ticks(500);
+    CHECK(strcmp(ons(), "52 64 52 ") == 0);
+}
+
+static void test_assign_with_a_sequence_plays_the_recorded_order(void) {
+    reset(); arp_enable(&a, 1);
+    record_cege();
+    arp_set_mode(&a, ARP_ASSIGN);
+    on(C4);
+    ticks(1000);
+    CHECK(strcmp(ons(), "60 64 67 64 60 ") == 0);
+}
+
+static void test_assign_list_holds_32_entries(void) {
+    assign_on();
+    for (int k = 0; k < 33; k++) on(40 + k);                           /* 33 notes; 40 steps at once */
+    CHECK(arp_pool_count(&a) == 33);
+    ticks(250 * 32);                                                   /* 41..71, then 40 again */
+    char want[512]; int p = 0;
+    for (int k = 0; k < 32; k++) p += sprintf(want + p, "%d ", 40 + k);
+    sprintf(want + p, "40 ");
+    CHECK(strcmp(ons(), want) == 0);                                   /* 72 is in the pool, not the order */
+}
+
+/* ---- BPM follows the MIDI clock ------------------------------------------------------ */
+/* n clocks, each after `ms` ticks; ms 0 = the 120 BPM pattern 21 21 21 21 21 20 (500 per 24) */
+static void spaced_clocks(int n, int ms) {
+    static int k;
+    while (n-- > 0) { ticks(ms ? ms : (k++ % 6 == 5 ? 20 : 21)); arp_realtime(&a, 0xF8, 0); }
+}
+
+static void test_bpm_follows_the_midi_clock_over_a_beat(void) {
+    reset(); arp_set_bpm(&a, 77);
+    arp_set_ext(&a, 1);
+    arp_realtime(&a, 0xFA, 0);
+    spaced_clocks(24, 0);                                              /* 23 intervals: not yet a beat */
+    CHECK(a.bpm == 77);
+    spaced_clocks(1, 0);                                               /* 24 intervals = 500 ms */
+    CHECK(a.bpm == 120);
+    spaced_clocks(23, 0);
+    CHECK(a.bpm == 120);                                               /* steady */
+    spaced_clocks(24, 25);                                             /* rolling: 600 ms per beat */
+    CHECK(a.bpm == 100);
+    arp_set_ext(&a, 0);                                                /* back to int: continues at 100 */
+    arp_enable(&a, 1);
+    clear_log();
+    on(C3); on(E3);
+    ticks(600);
+    CHECK(n_on() == 3 && on_tick(1) - on_tick(0) == 300 && on_tick(2) - on_tick(1) == 300);   /* 1/8 at 100 */
+}
+
+static void test_bpm_window_restarts_on_transport_and_loss(void) {
+    reset(); arp_enable(&a, 1);                                        /* also measured with the arp on */
+    arp_set_ext(&a, 1);
+    arp_realtime(&a, 0xFA, 0);
+    spaced_clocks(25, 0);
+    CHECK(a.bpm == 120);
+    arp_realtime(&a, 0xFA, 0);                                         /* Start: a new window */
+    spaced_clocks(24, 25);
+    CHECK(a.bpm == 120);
+    spaced_clocks(1, 25);
+    CHECK(a.bpm == 100);
+    arp_realtime(&a, 0xFC, 0);                                         /* Stop */
+    spaced_clocks(24, 20);
+    CHECK(a.bpm == 100);
+    spaced_clocks(1, 20);                                              /* clocks while stopped still measure */
+    CHECK(a.bpm == 125);
+    arp_realtime(&a, 0xFB, 0);                                         /* Continue */
+    spaced_clocks(24, 25);
+    CHECK(a.bpm == 125);
+    spaced_clocks(1, 25);
+    CHECK(a.bpm == 100);
+    ticks(1000);                                                       /* clock lost */
+    spaced_clocks(24, 20);
+    CHECK(a.bpm == 100);
+    spaced_clocks(1, 20);
+    CHECK(a.bpm == 125);
+    arp_set_ext(&a, 0); arp_set_ext(&a, 1);                            /* source toggle */
+    spaced_clocks(24, 25);
+    CHECK(a.bpm == 125);
+    reset(); arp_set_ext(&a, 1);                                       /* arp off: measured too; clamped */
+    spaced_clocks(25, 5);                                              /* 120 ms per beat = 500 BPM */
+    CHECK(a.bpm == 300);
+    spaced_clocks(24, 70);                                             /* 1680 ms = 35.7 BPM */
+    CHECK(a.bpm == 40);
+    arp_set_ext(&a, 0);                                                /* int: clocks are ignored */
+    spaced_clocks(30, 25);
+    CHECK(a.bpm == 40);
+}
+
 int main(void) {
     test_defaults();
     test_disabled_passes_notes_straight_through();
@@ -566,9 +742,18 @@ int main(void) {
     test_swing_16s_internal_at_120_bpm();
     test_swing_start_rule_begins_a_pair_and_settings_keep_the_half();
     test_swing_under_midi_clock();
+    test_bpm_follows_the_midi_clock_over_a_beat();
+    test_bpm_window_restarts_on_transport_and_loss();
     test_seq_records_sounds_directly_and_plays_transposed();
     test_seq_octaves_modes_and_clear();
     test_seq_restarts_on_fresh_key_and_latches();
+    test_assign_plays_the_entered_order_with_each_entrys_velocity();
+    test_assign_duplicates_via_hold_and_relatch_replaces();
+    test_assign_release_without_hold_removes_the_pitch();
+    test_assign_hold_off_drops_latched_entries();
+    test_assign_octaves_per_pass_and_all_notes_off();
+    test_assign_with_a_sequence_plays_the_recorded_order();
+    test_assign_list_holds_32_entries();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;
 }

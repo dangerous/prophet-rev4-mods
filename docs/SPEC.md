@@ -185,7 +185,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
   available in play mode. **(change)** It remains available from the Globals menu, where all
   buttons behave as stock (below).
 - **While A440 is held**: Bank = next mode, Group = previous mode (Up → Down → Up/Down →
-  Random → Up…; display `UP`, `dn`, `Ud`, `rnd`); Program 1–4 = 1–4 octaves (`o 1`…`o 4`);
+  Random → Assign → Up…, Group the other way; display `UP`, `dn`, `Ud`, `rnd`, `ASS` —
+  Assign `[HW: unverified]`); Program 1–4 = 1–4 octaves (`o 1`…`o 4`);
   Program 5 = toggle clock source (`int` / `Syn`); Program 6 = clear sequence; Program 7/8 =
   note value longer/shorter (− / +, + is faster); Unison = tempo tap (below); any other button = id readout. Any of these cancels the toggle
   on A440 release. Held-repeat events (value 3) are ignored. A combo button whose release
@@ -193,10 +194,11 @@ this engine deliberately differs it is marked **(change)** with the reason.
   release to stock)**.
 - **A440 + Glide Rate** sets the tempo `[HW: verified 2026-10-07, Prophet-10 Rev4]`: while
   A440 is held, turning Glide Rate sets the BPM of the internal clock, 40–300 (`BPM = 40 + round(260 · raw / 1023)`, raw
-  0–1023), whether the arp is on or off and whichever clock source is selected (under `Syn`
-  the new BPM applies when the clock source returns to `int`). The display shows the BPM while
+  0–1023), whether the arp is on or off. **Under external clock (`Syn`) it does nothing to
+  the BPM** `[HW: unverified]` (the tempo follows the clock, "Clock"): the display shows
+  `Syn` as the hint instead. The display shows the BPM while
   the pot turns (a display message like any other). Turning the pot counts as using the A440
-  hold, so the A440 release does not toggle the arp. Both pot hooks (raw store and change
+  hold, so the A440 release does not toggle the arp, also under `Syn`. Both pot hooks (raw store and change
   post) are consumed exactly while A440 is held (and the kill switch is not engaged); the
   patch's glide value is not touched. **Glide Rate alone is always the normal glide control**,
   also while the arp is running. **(change: V5, and this engine before 2026-10-07, captured
@@ -213,11 +215,14 @@ this engine deliberately differs it is marked **(change)** with the reason.
   gap (releasing A440 in between does not end it). A tap counts as using the A440 hold, so the
   A440 release does not toggle the arp; Unison's press, held repeats and release are
   consumed like any combo button, and Unison without A440 held is always stock Unison. Taps
-  work whether the arp is on or off and whichever clock source is selected (they set the BPM
-  of the internal clock; under `Syn` it applies when the clock source returns to `int`). The
+  work whether the arp is on or off. **Under external clock (`Syn`) a tap does nothing** but
+  show `Syn` as a hint (a display message like any other): the BPM is unchanged and no
+  series is started or continued (a running series ends, so the next tap under `int` shows
+  `tAP`); the press still counts as using the A440 hold and is consumed with its repeats
+  and release as usual (A440 + Glide Rate is inert under `Syn` the same way). The
   BPM is not saved with the program (see above).
 - **Display**: transient messages (mode, octaves, clock, note value, BPM while the pot
-  moves or on a tempo tap, `tAP`, step count, shift, readout) show for 1.5 s, then the display returns to the stock
+  moves or on a tempo tap, `tAP`, `Syn` for a tempo gesture under external clock, step count, shift, readout) show for 1.5 s, then the display returns to the stock
   program display **(change: V5 left `OFF` / BPM / `Syn` on the display for as long as the
   arp was on)**. Switching the arp on shows the BPM (`Syn` under external clock) for 1.5 s;
   switching it off shows `OFF` for 1.5 s.
@@ -254,13 +259,27 @@ this engine deliberately differs it is marked **(change)** with the reason.
   descending without repeating the top and bottom notes (C E G E C E G …); Random = each
   step picks uniformly from the pattern, independently of the previous step; Seq = the
   recorded order ("Seq").
+- **Assign** (as the Prophet-6's Assign mode) `[HW: unverified]`: the pool notes in the
+  **order they were entered** (note-on order), each with the velocity of its own entry:
+  play G C E D → G C E D G C E D … Duplicates are allowed: with HOLD active a latched
+  pitch pressed again (while another key is down, so no re-latch) becomes a further entry
+  (G C E D, then C again → G C E D C). Releasing a key with HOLD off removes every entry
+  of that pitch (G C E D, release E → G C D); switching HOLD off removes the entries of the
+  latched pitches (keys no longer down); a re-latch replaces the entries with the new
+  notes, as it replaces the pool; MIDI CC 123–127 clears them. Direction is forward only
+  (Assign is itself the order). Octaves apply per pass over the whole ordered pattern
+  (G C E D at `o 2` → G C E D, then each +12). With a recorded sequence active, Assign
+  plays the recorded order (as Up does). Up to 32 entries: a note entered while 32 exist
+  still joins the pool (it counts for the start rule, re-latch and the other modes) but is
+  not added to the Assign order.
 - **Octaves N**: the pattern is played in the base octave, then transposed +12 for each
   further pass, N passes in all (2 octaves: C3 D4 | C4 D5). Down plays the highest pass
   first. Up/Down bounces over the whole N-pass sequence. Random picks over all N passes.
   **(change: V5 merged the transpositions into one pitch-sorted set, giving C3 C4 D4 D5.)**
   Transposed notes above 127 are skipped.
 - A single pool note repeats every step. Changing the pool mid-pattern keeps the current
-  pass and position (position clamped to the new pool size). Changing mode or octaves
+  pass and position (position clamped to the new pool size; in Assign removing entries
+  never skips one: the entry that followed the note just played is still the next step). Changing mode or octaves
   restarts the pattern at its first step on the next step boundary without disturbing the
   phase **(change: V5 forced an immediate step)**.
 - Each step releases the previous step note and plays the new one with the pool note's own
@@ -281,6 +300,15 @@ this engine deliberately differs it is marked **(change)** with the reason.
   length counted from Start (16th S: 12-clock pairs, steps at 0, 8, 12, 20, 24 …; 8th S:
   24-clock pairs, steps at 0, 16, 24, 40, 48 …), gate-off at half of each step, rounded
   down. `[HW: unverified]`
+  **The BPM follows the external clock** `[HW: unverified]`, measured over each beat on the
+  1 ms tick: the intervals between accepted clocks are summed over the most recent 24 (one
+  beat), and once a full beat has been measured BPM = round(60000 / beat ms), clamped to
+  40–300, updated with every further clock (a rolling window). It has no effect while
+  synced (steps follow the clocks); it is what the internal clock resumes at when the clock
+  source returns to `int` (DAW at 100 BPM, switch to `int`: the arp continues at 100).
+  Start, Continue, Stop, clock loss (1 s) and a clock-source toggle restart the
+  measurement (a full beat is measured again before the BPM changes); the clocks while
+  stopped still count towards it.
   The clock count runs from Start: Start resets the count and the pattern position; Continue
   resumes both; Stop releases the sounding note and holds the position (no steps until
   Continue or Start). No clock → silence. 1 s without a clock releases the sounding note; the
@@ -352,7 +380,11 @@ this engine deliberately differs it is marked **(change)** with the reason.
   the former act on the engine directly. The lazy init runs under `cpsid i` / `cpsie i`
   with the previous state restored; hooks never block.
 - Build: `make image` (alias `make image-native`) → `build/prophet10_native.syx` from
-  `firmware/native.c` (`fwbuild`) and `firmware/hooks_native.json`. Sources: `arp.c`
+  `firmware/native.c` (`fwbuild`) and `firmware/hooks_native.json`. Engine state stays
+  within 0x400 bytes. Assign keeps an entry list of up to 32 (pitch, velocity) pairs next
+  to the pool, maintained on every note-on/off (also while the arp is off, so switching it
+  on with keys held plays them in entered order); in Assign mode with no sequence it is the
+  base order, stepped by index like the sequence. Sources: `arp.c`
   (engine), `arpui.c` (controls, display, LED, kill switch), `oct.c`, `rate.c`, `disp.c`,
   `vhold.c`.
 
@@ -372,14 +404,13 @@ this engine deliberately differs it is marked **(change)** with the reason.
    pass-through).
 4. Realisation: program parameters **93** (0–127) and **94** (0–4) of layer A, which the stock
    OS stores, dumps and loads verbatim but never reads: 94 = octaves 1–4 (**0 = no arp
-   data**); 93 = on/off (bit 0) | mode (bits 1–2) | note-value code 0–14 (bits 3–6). Values
-   outside those ranges (code 15 included) count as no arp data. The note-value code is
-   fixed per value and is **not** the position in the "Note value" list, so programs saved
-   by earlier builds keep their value. Written: 0 = 32nd, 1 = 16th T, 2 = 16th, 3 = 8th T,
-   5 = 8th, 6 = 8th D, 7 = Qtr, 9 = Half, 13 = 16th S, 14 = 8th S `[HW: unverified for
-   13/14]`. Read only (legacy codes of values no longer in the list, loaded as the nearest
-   remaining value): 4 (dotted 16th) → 16th, 8 (dotted quarter) → Qtr, 10, 11, 12 (whole,
-   2 bars, 4 bars) → Half `[HW: unverified]`. Written
+   data**); **93 = note value × 10 + mode × 2 + on/off**, where note value is the position
+   in the "Note value" list (0 = Half … 9 = 32nd), mode 0–4 = Up, Down, Up/Down, Random,
+   Assign, and on/off 0/1 — so 0–99. A 93 above 99 or a 94 outside 1–4 counts as no arp
+   data. `[HW: unverified — the arithmetic packing; the slots themselves verified]`
+   Programs saved under the earlier bitfield layout of 93 (on/off | mode << 1 | note code
+   << 3 — only test saves made on 2026-10-07) are not converted: they load with the wrong
+   settings (or as no arp data) and must be re-saved. Written
    through stock's plain parameter store `0x2003CEF5(layer, param, value)` (no clamp, no NRPN echo) on every change; read with
    `0x2003CB69(layer, param)` from a hook on the unconditional `bl 0x2003B6B0` at
    `0x2003D15C` at the end of stock's program-apply routine, which every load path reaches
@@ -396,8 +427,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
    (dotted eighth, 3/4 beat), **8th** (1/2 beat), **8th S** (eighth swing), **8th T**
    (eighth triplet, 1/3 beat), **16th** (1/4 beat), **16th S** (sixteenth swing), **16th T**
    (1/6 beat), **32nd** (1/8 beat) `[HW: verified 2026-10-07, Prophet-10 Rev4]`. Power-up default is 8th. Saved with
-   the program ("Patch memory"). (Dotted 16th, dotted quarter, whole, 2 bars and 4 bars of
-   the earlier list are gone; programs saved at them load at the nearest remaining value.)
+   the program ("Patch memory").
    **Swing** `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock]` (as the
    Prophet-6's 2 : 1 swing): 8th S and 16th S play steps in pairs, the first step of a pair
    lasting 2/3 of the pair and the second 1/3. A 16th S pair is two sixteenths (1/2 beat:
@@ -422,8 +452,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
 6. Realisation: `rate.c` holds the list in the order above (index 0 = Half … 9 = 32nd;
    `rate_step(dir)` moves −1 = longer / Program 7, +1 = shorter / Program 8) and maps each
    value to beats per step as a fraction (Half → 2 … 32nd → 1/8 beat) plus a swing flag —
-   for a swing value the fraction is the pair length (16th S → 1/2, 8th S → 1) — and to its
-   patch-memory code; the engine's internal period is `60 s / BPM × beats` with the
+   for a swing value the fraction is the pair length (16th S → 1/2, 8th S → 1); the index
+   is what patch memory stores. The engine's internal period is `60 s / BPM × beats` with the
    remainder carried (swing: 2/3 and 1/3 of the pair, exact in integers), and the MIDI-clock
    step (pair) is `24 × beats` clocks (always integral, and a multiple of 3 for swing pairs).
 
@@ -576,8 +606,8 @@ A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and 
    step and stays in effect even if that key is released while others remain down.
 6. A step whose transposed pitch falls outside 0–127 is silent.
 7. Direction, tempo, clock source and MIDI sync are the arp's: `UP` plays the steps in
-   recorded order, `dn` reversed, `Ud` forward then back, `rnd` shuffled; one step per arp
-   step.
+   recorded order, `dn` reversed, `Ud` forward then back, `rnd` shuffled, `ASS` in recorded
+   order (as `UP`); one step per arp step.
 8. With the arp disabled, keys play normally (no sequence runs). With HOLD inactive,
    releasing all keys stops the sequence; switching HOLD off with no keys down stops it.
 9. MIDI CC 123 (All Notes Off) stops the sequence; the next key starts it again.

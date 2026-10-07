@@ -20,7 +20,8 @@
 #define ARPUI_UNISON 0x19           /* A440 + Unison = tap tempo */
 #define ARPUI_TAP_MAX_MS 2000         /* a longer gap starts a new tap series */
 #define ARPUI_TAP_IVS 4               /* intervals averaged */
-#define ARPUI_PARAM_PACK 93           /* patch slot: on/off | mode << 1 | note value << 3 */
+#define ARPUI_PARAM_PACK 93           /* patch slot: note value * 10 + mode * 2 + on/off */
+#define ARPUI_PACK_MAX 99             /* larger values of 93 are not arp data */
 #define ARPUI_PARAM_OCT 94            /* patch slot: octaves 1..4, 0 = no arp data */
 #define ARPUI_BOOT_TICKS 3000         /* kill-switch window after power-on (3 s; the panel link comes up late) */
 

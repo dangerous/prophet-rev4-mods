@@ -37,8 +37,8 @@ behavioural source of truth; this file is the engineering context around it.
   shorter/+) verified the same day. A440 + Glide Rate tempo (Glide Rate alone = glide with
   the arp running) and the `16S` / `8S` swing values (internal clock) verified 2026-10-07.
   The Prophet-6 ten-value note-value list and order (Program 7/8 walk, display) verified
-  2026-10-07. Pending: A440 + Unison tap tempo (added 2026-10-07, unflashed), the
-  legacy-code mapping on load (programs saved at 16d / 4d / 1 / 2b / 4b), and swing
+  2026-10-07. Pending: A440 + Unison tap tempo (added 2026-10-07, unflashed), Assign mode
+  and the arithmetic packing of parameter 93 (added 2026-10-07, unflashed), and swing
   under `Syn`.
 - First native flash attempt stalled the loader at `100` with the eight Program LEDs lit:
   the payload was an exact multiple of 7 and our encoder omitted the empty tail group's MS
@@ -129,13 +129,28 @@ behavioural source of truth; this file is the engineering context around it.
 - Seq: recording routes notes directly to voices and appends; playback substitutes the
   recorded steps (transposed onto the trigger key) for the pitch-sorted pool as the pattern's
   base order; pitch-anchored stepping for the pool, index-anchored for the sequence.
+- Assign (`ASS`, mode 4): `arp_t` keeps an entry list (`asg_note`/`asg_vel`, up to 32) in
+  note-on order beside the pitch-indexed pool, since the pool arrays cannot hold order or
+  duplicates. Note-on appends (also while the arp is off); note-off without HOLD and HOLD
+  off remove entries of pitches that left the pool; re-latch and all-notes-off clear it.
+  Stepped by index like the sequence; removing an entry before the position moves the
+  position back with it, removing the current one sets `asg_stay` so the next step does not
+  advance past its successor. A sequence, when present, still wins as the base order.
 - Timing: internal `acc += bpm*den` per tick, step at `60000*num`, gate at half; MIDI clock
   `24*num/den` per step counted from Start; 1 s loss releases and resets the count.
+- Under `Syn` the BPM follows the clock: each accepted F8 samples `loss` (ticks since the
+  previous clock) into a 24-entry ring; with a full ring BPM = round(60000 / sum). Start /
+  Continue / Stop / loss / clock-source toggle empty the ring. Both tempo gestures (A440 +
+  Glide Rate, A440 + Unison) are consumed but inert under `Syn` (show `Syn`), decided
+  2026-10-07 with the clock-follow so the DAW tempo carries over to `int`.
 - Note value (`rate.c`): the Prophet-6's ten values in its panel order, index 0 = Half …
   9 = 32nd, so `rate_step(+1)` = shorter = Program 8. The order is not monotonic in average
-  length (8S between 8 and 8t, 16S between 16 and 16t) — by design, as on the P6. Patch codes
-  are fixed per value (never the index); codes 4, 8, 10–12 of removed values are read-only
-  and map to the nearest remaining value.
+  length (8S between 8 and 8t, 16S between 16 and 16t) — by design, as on the P6.
+- Patch memory: 93 = note index × 10 + mode × 2 + on (0–99), 94 = octaves (0 = no data).
+  Parameter 93's earlier bitfield (2-bit mode, fixed note codes with a legacy table) had no
+  room for a fifth mode; David chose (2026-10-07) to re-pack without compatibility, as only
+  test programs had been saved. Using program-name character 84 as a flag was considered
+  and dropped.
 
 ## Lessons
 

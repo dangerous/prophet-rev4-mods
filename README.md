@@ -17,13 +17,17 @@ Spec: [`docs/SPEC.md`](docs/SPEC.md). Hardware verification: [`docs/hardware-che
 All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
 
 - **Arp** — tap **A440** to switch it on (LED). Modes Up, Down, Up/Down (ends not
-  repeated), Random; 1–4 octaves played **per pass** (C3 D4 | C4 D5); A440 + Glide Rate
+  repeated), Random, Assign (`ASS`: the notes in the order you played them, repeats
+  allowed — `[HW: unverified]`); 1–4 octaves played **per pass** (C3 D4 | C4 D5); A440 + Glide Rate
   sets 40–300 BPM, A440 + Unison taps it; Glide Rate alone is always glide; MIDI clock sync with
-  Start/Stop/Continue, 1 s clock‑loss, the pattern always on the clock grid. One note
+  Start/Stop/Continue, 1 s clock‑loss, the pattern always on the clock grid; under sync the
+  BPM follows the DAW (switch back to internal and it carries on at that tempo) and the two
+  tempo gestures just show `Syn` `[HW: unverified]`. One note
   sounds per step, also under HOLD.
 - **Tap tempo** `[HW: unverified]` — hold A440 and tap Unison: the first tap shows `tAP`,
   each further tap sets the BPM from the mean of the last (up to 4) intervals, 40–300; a gap
-  of more than 2 s starts a new series. Works with the arp on or off; BPM isn't saved.
+  of more than 2 s starts a new series. Works with the arp on or off; under MIDI clock
+  (`Syn`) a tap just shows `Syn` (the tempo follows the clock); BPM isn't saved.
 - **Re‑latch under HOLD** — with HOLD active, the first key after releasing all keys starts
   a fresh chord instead of adding to the latched one.
 - **Seq** — hold A440 and play up to 32 notes (releases ignored, so timing is free).
@@ -35,9 +39,7 @@ All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
   8th S, 8th T, 16th, 16th S, 16th T, 32nd (display `2 4 8d 8 8S 8t 16 16S 16t 32`), on the
   internal clock and under MIDI sync. Default 8th. 8th S / 16th S are eighth / sixteenth
   **swing** (Prophet‑6 style 2 : 1 — each pair of steps split 2/3 + 1/3; verified on the
-  internal clock). The ten-value list and order `[HW: verified 2026-10-07, Prophet-10 Rev4]`; programs saved at a
-  removed value (dotted 16th, dotted quarter, whole, 2 or 4 bars) load at the nearest
-  remaining one.
+  internal clock). The ten-value list and order `[HW: verified 2026-10-07, Prophet-10 Rev4]`.
 - **Keyboard octave shift** — hold the Osc B **Lo Freq** button, Bank = up, Group = down
   (±2; both together = 0). Applies to the keys you play and to MIDI Out; a plain tap still
   toggles Lo Freq (LED on release).
@@ -46,7 +48,8 @@ All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
 - **Button id readout** — hold A440 and press an unused button to see its id.
 - **Patch memory** — the arp's on/off, mode, octaves and note value are saved with the
   program (two spare parameter slots, carried in SysEx dumps too) and restored when it is
-  loaded; programs without arp data load with the arp off.
+  loaded; programs without arp data load with the arp off. (The slot layout changed when
+  Assign was added: programs saved with arp settings before then must be re-saved.)
 - **Kill switch** — hold A440 while powering on and every hook passes straight through to
   stock for that session (a tap after power‑on is just a tap).
 - **Globals menu** is pure stock while it is open, so Sequential's A440 tuning tone is still

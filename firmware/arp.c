@@ -56,8 +56,36 @@ static int held_count(const arp_t *a)
     return n;
 }
 
-/* The base order: the recorded sequence transposed onto the trigger key, else the pool
- * ascending by pitch. Entries outside 0..127 are marked 0xFF and skipped when stepping. */
+/* --- Assign entry list ------------------------------------------------------------------ */
+static void asg_add(arp_t *a, int note, int vel)
+{
+    if (a->asg_len < ARP_ASG_MAX) {
+        a->asg_note[a->asg_len] = (uint8_t)note;
+        a->asg_vel[a->asg_len] = (uint8_t)vel;
+        a->asg_len++;
+    }
+}
+
+/* drop the entries whose pitch has left the pool, keeping the pattern position on the
+ * entry that follows the one just played */
+static void asg_prune(arp_t *a)
+{
+    int n = 0, track = a->mode == ARP_ASSIGN && !a->seq_len && !a->at_start;
+    for (int i = 0; i < a->asg_len; i++) {
+        if (in_pool(a, a->asg_note[i])) {
+            a->asg_note[n] = a->asg_note[i];
+            a->asg_vel[n++] = a->asg_vel[i];
+        } else if (track && n < a->idx) {
+            a->idx--;                                      /* removed before the position */
+        } else if (track && n == a->idx) {
+            a->asg_stay = 1;                               /* the current entry: its successor is next */
+        }
+    }
+    a->asg_len = (uint8_t)n;
+}
+
+/* The base order: the recorded sequence transposed onto the trigger key, else the Assign
+ * entries in Assign mode, else the pool ascending by pitch. Entries outside 0..127 are marked 0xFF and skipped when stepping. */
 static int base_order(const arp_t *a, uint8_t order[ARP_SEQ_MAX > 128 ? ARP_SEQ_MAX : 128],
                       uint8_t vel[ARP_SEQ_MAX > 128 ? ARP_SEQ_MAX : 128])
 {
@@ -69,6 +97,13 @@ static int base_order(const arp_t *a, uint8_t order[ARP_SEQ_MAX > 128 ? ARP_SEQ_
             int p = a->seq_note[i] - a->seq_note[0] + a->seq_trigger;
             order[n] = (p < 0 || p > 127) ? 0xFF : (uint8_t)p;
             vel[n++] = a->seq_vel[i];
+        }
+        return n;
+    }
+    if (a->mode == ARP_ASSIGN) {
+        for (int i = 0; i < a->asg_len; i++) {
+            order[n] = a->asg_note[i];
+            vel[n++] = a->asg_vel[i];
         }
         return n;
     }
@@ -94,6 +129,7 @@ static void reset_pattern(arp_t *a)
 {
     a->at_start = 1;
     a->dir = 1;
+    a->asg_stay = 0;
 }
 
 /* --- pattern --------------------------------------------------------------------------- */
@@ -159,6 +195,15 @@ static void choose(arp_t *a, const uint8_t *order, int n, int seq)
             if (!up_next(a, order, n, seq, &idx) && oct > 1) { pass = 1; idx = 0; }
         }
         break;
+    case ARP_ASSIGN:                                       /* forward only, by index */
+        if (a->at_start) { pass = 0; idx = 0; }
+        else if (a->asg_stay && !a->seq_len) {
+            idx = a->idx;                                  /* already on the successor */
+            if (idx >= n) { pass = pass + 1 < oct ? pass + 1 : 0; idx = 0; }
+        }
+        else if (!up_next(a, order, n, 1, &idx)) { pass = pass + 1 < oct ? pass + 1 : 0; idx = 0; }
+        a->asg_stay = 0;
+        break;
     case ARP_RANDOM: {
         uint32_t k = xorshift(&a->rng) % (uint32_t)(n * oct);
         pass = (int)(k / (uint32_t)n);
@@ -176,7 +221,7 @@ static void step(arp_t *a)
 {
     uint8_t *order = a->order, *vel = a->ovel;
     int n = base_order(a, order, vel);
-    int seq = a->seq_len != 0;
+    int seq = a->seq_len != 0 || a->mode == ARP_ASSIGN;
     release(a);
     if (n == 0) {
         reset_pattern(a);
@@ -241,9 +286,11 @@ void arp_note(arp_t *a, int src, int note, int vel)
         if (vel > 0) {
             a->held[note] = (uint8_t)vel;
             a->direct[note] = (uint8_t)vel;
+            asg_add(a, note, vel);
             plat_voice_on(src, note, vel);
         } else {
             a->held[note] = 0;
+            asg_prune(a);
             if (a->direct[note]) {
                 a->direct[note] = 0;
                 plat_voice_off(src, note);
@@ -255,11 +302,13 @@ void arp_note(arp_t *a, int src, int note, int vel)
         int was_empty = arp_pool_count(a) == 0;
         if (a->hold && held_count(a) == 0 && !was_empty) {   /* re-latch: replaces the pool */
             zero(a->latched, sizeof a->latched);
+            a->asg_len = 0;
             release(a);
             reset_pattern(a);
         }
         a->held[note] = (uint8_t)vel;
         a->latched[note] = 0;
+        asg_add(a, note, vel);
         a->seq_trigger = (uint8_t)note;
         if (was_empty) {
             reset_pattern(a);
@@ -276,8 +325,10 @@ void arp_note(arp_t *a, int src, int note, int vel)
     if (a->hold)
         a->latched[note] = a->held[note];
     a->held[note] = 0;
-    if (!a->hold)
+    if (!a->hold) {
+        asg_prune(a);
         pool_changed(a);
+    }
 }
 
 void arp_hold(arp_t *a, int on)
@@ -285,6 +336,7 @@ void arp_hold(arp_t *a, int on)
     a->hold = (uint8_t)(on != 0);
     if (!a->hold) {
         zero(a->latched, sizeof a->latched);
+        asg_prune(a);
         if (a->enabled)
             pool_changed(a);
     }
@@ -299,6 +351,7 @@ void arp_all_notes_off(arp_t *a)
     zero(a->held, sizeof a->held);
     zero(a->latched, sizeof a->latched);
     zero(a->direct, sizeof a->direct);
+    a->asg_len = 0;
     reset_pattern(a);
     a->seq_trigger = ARP_NONE;
 }
@@ -333,6 +386,8 @@ void arp_enable(arp_t *a, int on)
 }
 
 /* --- settings -------------------------------------------------------------------------- */
+static void beat_reset(arp_t *a);
+
 void arp_set_mode(arp_t *a, int mode)
 {
     if (mode < 0 || mode >= ARP_MODES)
@@ -384,6 +439,7 @@ void arp_set_ext(arp_t *a, int ext)
     a->running = 1;                                        /* clocks alone drive it until a Stop */
     a->port = ARP_NONE;
     a->loss = ARP_LOSS_TICKS;                              /* no loss event before a clock arrives */
+    beat_reset(a);
 }
 
 /* --- seq recording --------------------------------------------------------------------- */
@@ -408,6 +464,37 @@ void arp_seq_clear(arp_t *a)
 }
 
 /* --- clocks ---------------------------------------------------------------------------- */
+static void beat_reset(arp_t *a)
+{
+    a->clk_n = 0;
+    a->clk_pos = 0;
+    a->clk_prev = 0;
+}
+
+/* an accepted clock: `loss` is the ticks since the previous one; with a full beat of
+ * intervals the BPM becomes round(60000 / beat ms), 40..300 */
+static void beat_measure(arp_t *a)
+{
+    uint32_t sum = 0;
+    int bpm;
+    if (a->clk_prev) {
+        a->clk_iv[a->clk_pos] = a->loss;
+        a->clk_pos = (uint8_t)((a->clk_pos + 1) % ARP_BEAT_IVS);
+        if (a->clk_n < ARP_BEAT_IVS)
+            a->clk_n++;
+    }
+    a->clk_prev = 1;
+    if (a->clk_n < ARP_BEAT_IVS)
+        return;
+    for (int i = 0; i < ARP_BEAT_IVS; i++)
+        sum += a->clk_iv[i];
+    bpm = sum ? (int)((120000u + sum) / (2 * sum)) : 300;
+    if (bpm < 40) bpm = 40;
+    if (bpm > 300) bpm = 300;
+    if (bpm != a->bpm)
+        arp_set_bpm(a, bpm);
+}
+
 static unsigned step_clocks(const arp_t *a)
 {
     unsigned c = (unsigned)ARP_PPQN * a->beats_num / a->beats_den;
@@ -431,6 +518,7 @@ void arp_realtime(arp_t *a, int byte, int port)
          * pair boundary at multiples of sc from Start */
         unsigned sc = step_clocks(a), m = a->clocks % sc;
         unsigned lng = a->swing ? sc / 3 * 2 : sc;
+        beat_measure(a);
         a->loss = 0;
         if (!a->running)
             return;
@@ -444,15 +532,18 @@ void arp_realtime(arp_t *a, int byte, int port)
         break;
     }
     case 0xFA:
+        beat_reset(a);
         a->clocks = 0;
         a->running = 1;
         release(a);
         reset_pattern(a);
         break;
     case 0xFB:
+        beat_reset(a);
         a->running = 1;
         break;
     case 0xFC:
+        beat_reset(a);
         a->running = 0;
         release(a);
         break;
@@ -461,16 +552,17 @@ void arp_realtime(arp_t *a, int byte, int port)
 
 void arp_tick(arp_t *a)
 {
-    if (!a->enabled)
-        return;
-    if (a->ext) {
+    if (a->ext) {                                          /* also with the arp off: the BPM follows */
         if (a->loss < ARP_LOSS_TICKS && ++a->loss == ARP_LOSS_TICKS) {
             release(a);                                    /* clock lost: silence, wait for clocks */
             a->port = ARP_NONE;
             a->clocks = 0;
+            beat_reset(a);
         }
         return;
     }
+    if (!a->enabled)
+        return;
     a->acc += 3u * a->bpm * a->beats_den;
     if (a->gate_open && a->acc >= step_units(a) / 2)
         release(a);

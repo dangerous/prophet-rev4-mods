@@ -94,9 +94,15 @@ static void test_bank_group_cycle_modes_with_names(void) {
     btn(BANK, PRESS); btn(BANK, RELEASE);
     CHECK(a.mode == ARP_RANDOM && last_d3_is(CH_R, CH_N, CH_D));
     btn(BANK, PRESS); btn(BANK, RELEASE);
+    CHECK(a.mode == ARP_ASSIGN && last_d3_is(CH_A, CH_S, CH_S));      /* ASS */
+    btn(BANK, PRESS); btn(BANK, RELEASE);
     CHECK(a.mode == ARP_UP && last_d3_is(CH_U, CH_P, BLANK));
     btn(GROUP, PRESS); btn(GROUP, RELEASE);
-    CHECK(a.mode == ARP_RANDOM);
+    CHECK(a.mode == ARP_ASSIGN && last_d3_is(CH_A, CH_S, CH_S));
+    btn(GROUP, PRESS); btn(GROUP, RELEASE);
+    CHECK(a.mode == ARP_RANDOM && last_d3_is(CH_R, CH_N, CH_D));
+    btn(GROUP, PRESS); btn(GROUP, RELEASE);
+    CHECK(a.mode == ARP_UPDOWN);
     btn(A440, RELEASE);
     CHECK(!a.enabled);
 }
@@ -232,12 +238,19 @@ static void test_glide_is_tempo_only_with_a440_held(void) {
     int bpm = a.bpm;
     CHECK(a.enabled && arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 1023) == 0);   /* no A440: glide */
     CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0 && a.bpm == bpm);
-    arp_set_ext(&a, 1);                                                /* under Syn, A440 held: still tempo */
+    arp_set_ext(&a, 1);                                                /* under Syn, A440 held: consumed, inert */
     btn(A440, PRESS);
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 100) == 1 && a.bpm == 40 + (260 * 100 + 511) / 1023);
-    CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 1);
+    clear_log();
+    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 100) == 1 && a.bpm == bpm);
+    CHECK(last_d3_is(CH_S, CH_Y, CH_N) && count_type(EV_INT) == 0);   /* Syn as the hint */
+    CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 1 && a.bpm == bpm);
     btn(A440, RELEASE);
     CHECK(a.enabled);                                                  /* no toggle */
+    arp_set_ext(&a, 0);
+    btn(A440, PRESS);                                                  /* int again: tempo */
+    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 100) == 1 && a.bpm == 40 + (260 * 100 + 511) / 1023);
+    btn(A440, RELEASE);
+    arp_set_ext(&a, 1);
     CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 600) == 0 && arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0);
     btn(A440, PRESS);                                                  /* Globals opened mid-hold: stock */
     fake_globals_open = 1;
@@ -342,11 +355,30 @@ static void test_tap_tempo_consumption_and_scope(void) {
     CHECK(a.bpm == 120 && count_type(EV_PARAM) == n);
     btn(A440, RELEASE);
     CHECK(a.enabled);                                                  /* arp on: still on */
-    arp_set_ext(&a, 1);                                                /* under Syn: sets the BPM too */
+    arp_set_ext(&a, 1);                                                /* under Syn: taps do nothing */
     btn(A440, PRESS);
     ticks(3000);
-    tap(); ticks(1000); tap();
-    CHECK(a.bpm == 60 && a.ext && last_is_int(60));
+    clear_log();
+    CHECK(tap() == 1 && last_d3_is(CH_S, CH_Y, CH_N) && a.bpm == 120); /* Syn shown as the hint */
+    ticks(1000);
+    CHECK(btn(UNISON, PRESS) == 1 && btn(UNISON, REPEAT) == 1 && btn(UNISON, RELEASE) == 1);
+    CHECK(a.bpm == 120 && a.ext && last_d3_is(CH_S, CH_Y, CH_N) && count_type(EV_INT) == 0);
+    CHECK(count_type(EV_PARAM) == 0);                                  /* nothing stored either */
+    btn(A440, RELEASE);
+    CHECK(a.enabled);                                                  /* the tap used the hold: no toggle */
+    arp_set_ext(&a, 0);                                                /* a series under int ... */
+    btn(A440, PRESS);
+    tap(); ticks(500); tap();
+    CHECK(a.bpm == 120);
+    arp_set_ext(&a, 1);
+    ticks(500); tap();                                                 /* ... is ended by a tap under Syn */
+    CHECK(a.bpm == 120 && last_d3_is(CH_S, CH_Y, CH_N));
+    arp_set_ext(&a, 0);
+    ticks(250); clear_log(); tap();                                    /* back under int: a new series */
+    CHECK(last_is_tap() && a.bpm == 120);
+    ticks(1000); tap();
+    CHECK(a.bpm == 60);                                                /* from this series only */
+    arp_set_bpm(&a, 120);
     btn(A440, RELEASE);
     CHECK(a.enabled);
     fake_globals_open = 1;                                             /* Globals menu: stock */
@@ -428,114 +460,112 @@ static void test_a440_pressed_after_power_on_is_just_a_press(void) {
 
 /* ---- patch memory ------------------------------------------------------------------- */
 static int stores(void) { return count_type(EV_PARAM); }
+/* 93 = note-value index * 10 + mode * 2 + on/off */
+static int pack(int note, int mode, int on) { return note * 10 + mode * 2 + on; }
+enum { N_HALF, N_QTR, N_8D, N_8, N_8S, N_8T, N_16, N_16S, N_16T, N_32 };
 
 static void test_settings_are_written_to_the_patch_slots(void) {
     reset();
     CHECK(stores() == 0);
-    tap_a440();                                                        /* on, Up, 1 octave, 1/8 */
-    CHECK(params[ARPUI_PARAM_OCT] == 1 && params[ARPUI_PARAM_PACK] == (1 | (0 << 1) | (5 << 3)));
+    tap_a440();                                                        /* on, Up, 1 octave, 8th */
+    CHECK(params[ARPUI_PARAM_OCT] == 1 && params[ARPUI_PARAM_PACK] == pack(N_8, ARP_UP, 1));
     btn(A440, PRESS); btn(BANK, PRESS); btn(BANK, RELEASE);            /* Down */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (5 << 3)));
+    CHECK(params[ARPUI_PARAM_PACK] == pack(N_8, ARP_DOWN, 1));
     btn(P3, PRESS); btn(P3, RELEASE);                                  /* 3 octaves */
     CHECK(params[ARPUI_PARAM_OCT] == 3);
-    btn(P8, PRESS); btn(P8, RELEASE);                                  /* shorter: 8th S, code 14 */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (14 << 3)));
-    btn(P8, PRESS); btn(P8, RELEASE); btn(P8, PRESS); btn(P8, RELEASE);  /* 8th T, 16th: code 2 */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (2 << 3)));
-    btn(P8, PRESS); btn(P8, RELEASE);                                  /* 16th S: code 13 */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (13 << 3)));
-    btn(P8, PRESS); btn(P8, RELEASE); btn(P8, PRESS); btn(P8, RELEASE);  /* 16th T, 32nd: code 0 */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (0 << 3)));
-    for (int i = 0; i < 9; i++) { btn(P7, PRESS); btn(P7, RELEASE); }  /* longer to Half: code 9 */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (9 << 3)));
-    btn(P8, PRESS); btn(P8, RELEASE);                                  /* Qtr: code 7 */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (7 << 3)));
-    btn(P8, PRESS); btn(P8, RELEASE); btn(P8, PRESS); btn(P8, RELEASE);  /* 8th D, 8th: code 5 */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (5 << 3)));
-    btn(P7, PRESS); btn(P7, RELEASE);                                  /* 8th D: code 6 */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (6 << 3)));
-    btn(P8, PRESS); btn(P8, RELEASE); btn(P8, PRESS); btn(P8, RELEASE);  /* 8th, 8th S: code 14 */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (14 << 3)));
-    btn(P8, PRESS); btn(P8, RELEASE);                                  /* 8th T: code 3 */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (3 << 3)));
+    btn(P8, PRESS); btn(P8, RELEASE);                                  /* shorter: 8th S */
+    CHECK(params[ARPUI_PARAM_PACK] == pack(N_8S, ARP_DOWN, 1));
+    for (int i = 0; i < 5; i++) { btn(P8, PRESS); btn(P8, RELEASE); }  /* to 32nd */
+    CHECK(params[ARPUI_PARAM_PACK] == pack(N_32, ARP_DOWN, 1) && params[ARPUI_PARAM_PACK] == 93);
+    for (int i = 0; i < 9; i++) { btn(P7, PRESS); btn(P7, RELEASE); }  /* longer to Half */
+    CHECK(params[ARPUI_PARAM_PACK] == pack(N_HALF, ARP_DOWN, 1));
+    btn(P8, PRESS); btn(P8, RELEASE);                                  /* Qtr */
+    CHECK(params[ARPUI_PARAM_PACK] == pack(N_QTR, ARP_DOWN, 1));
+    btn(GROUP, PRESS); btn(GROUP, RELEASE); btn(GROUP, PRESS); btn(GROUP, RELEASE);   /* Up, Assign */
+    CHECK(a.mode == ARP_ASSIGN && params[ARPUI_PARAM_PACK] == pack(N_QTR, ARP_ASSIGN, 1));
+    btn(BANK, PRESS); btn(BANK, RELEASE);                              /* Assign -> Up */
+    CHECK(a.mode == ARP_UP && params[ARPUI_PARAM_PACK] == pack(N_QTR, ARP_UP, 1));
+    btn(GROUP, PRESS); btn(GROUP, RELEASE);                            /* Assign again */
     int n = stores();
     btn(P5, PRESS); btn(P5, RELEASE);                                  /* clock source: not saved */
     btn(A440, RELEASE);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 900);                     /* BPM: not saved (ext on now) */
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 900);                     /* BPM: not saved */
     arp_set_ext(&a, 0);
     arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 900);
     CHECK(stores() == n);
     tap_a440();                                                        /* off: remembered as off */
-    CHECK(params[ARPUI_PARAM_PACK] == (0 | (1 << 1) | (3 << 3)) && params[ARPUI_PARAM_OCT] == 3);
+    CHECK(params[ARPUI_PARAM_PACK] == pack(N_QTR, ARP_ASSIGN, 0) && params[ARPUI_PARAM_OCT] == 3);
+    for (int p = 0; p < 99; p++)                                       /* only the two slots are written */
+        CHECK(p == ARPUI_PARAM_PACK || p == ARPUI_PARAM_OCT || params[p] == 0);
+}
+
+/* every mode x note value x on/off x octaves: what a store writes, a load restores */
+static void test_patch_round_trip_for_every_setting(void) {
+    int bad = 0;
+    reset();
+    for (int mode = 0; mode < ARP_MODES; mode++)
+        for (int note = 0; note < RATE_COUNT; note++)
+            for (int on = 0; on < 2; on++)
+                for (int oct = 1; oct <= 4; oct++) {
+                    int num, den;
+                    arp_set_mode(&a, mode); arp_set_octaves(&a, oct); arp_enable(&a, on);
+                    rate_set_index(&u.rate, note);
+                    btn(A440, PRESS); btn(P1 + oct - 1, PRESS); btn(P1 + oct - 1, RELEASE); btn(A440, RELEASE);
+                    if (params[ARPUI_PARAM_PACK] != pack(note, mode, on) || params[ARPUI_PARAM_OCT] != oct) bad++;
+                    arp_set_mode(&a, (mode + 2) % ARP_MODES); arp_set_octaves(&a, oct % 4 + 1);   /* disturb */
+                    arp_enable(&a, !on); rate_set_index(&u.rate, (note + 3) % RATE_COUNT);
+                    arpui_program_loaded(&u, &a);
+                    rate_beats(&u.rate, &num, &den);
+                    if (a.mode != mode || rate_index(&u.rate) != note || a.enabled != on || a.octaves != oct
+                        || a.beats_num != num || a.beats_den != den || a.swing != rate_swing(&u.rate)) bad++;
+                }
+    CHECK(bad == 0);
+    CHECK(pack(N_32, ARP_ASSIGN, 1) == 99);                            /* the largest value written */
 }
 
 static void test_program_load_applies_saved_state(void) {
     reset();
     params[ARPUI_PARAM_OCT] = 2;
-    params[ARPUI_PARAM_PACK] = 1 | (2 << 1) | (7 << 3);                /* on, Up/Down, Qtr */
+    params[ARPUI_PARAM_PACK] = pack(N_QTR, ARP_UPDOWN, 1);
     int n = stores();
     arpui_program_loaded(&u, &a);
-    CHECK(a.enabled && a.mode == ARP_UPDOWN && a.octaves == 2 && rate_index(&u.rate) == 1);   /* code 7 */
+    CHECK(a.enabled && a.mode == ARP_UPDOWN && a.octaves == 2 && rate_index(&u.rate) == N_QTR);
     CHECK(a.beats_num == 1 && a.beats_den == 1 && a.swing == 0);
     CHECK(stores() == n);                                              /* loading does not write back */
     ticks(1);
     CHECK(last_led() == 1);
-    params[ARPUI_PARAM_PACK] = 0 | (1 << 1) | (3 << 3);                /* saved with the arp off, Down, 8th T */
+    params[ARPUI_PARAM_PACK] = pack(N_8T, ARP_ASSIGN, 0);              /* saved off, Assign, 8th T */
     params[ARPUI_PARAM_OCT] = 4;
     arpui_program_loaded(&u, &a);
-    CHECK(!a.enabled && a.mode == ARP_DOWN && a.octaves == 4 && rate_index(&u.rate) == 5);   /* code 3 */
-    params[ARPUI_PARAM_PACK] = 1 | (14 << 3);                         /* 8th S */
+    CHECK(!a.enabled && a.mode == ARP_ASSIGN && a.octaves == 4 && rate_index(&u.rate) == N_8T);
+    params[ARPUI_PARAM_PACK] = pack(N_8S, ARP_UP, 1);
     arpui_program_loaded(&u, &a);
-    CHECK(a.enabled && rate_index(&u.rate) == 4 && a.beats_num == 1 && a.beats_den == 1 && a.swing == 1);
-    params[ARPUI_PARAM_PACK] = 1 | (13 << 3);                         /* 16th S */
+    CHECK(a.enabled && a.mode == ARP_UP && rate_index(&u.rate) == N_8S && a.beats_num == 1 && a.beats_den == 1 && a.swing == 1);
+    params[ARPUI_PARAM_PACK] = pack(N_16S, ARP_UP, 1);
     arpui_program_loaded(&u, &a);
-    CHECK(rate_index(&u.rate) == 7 && a.beats_num == 1 && a.beats_den == 2 && a.swing == 1);
-    params[ARPUI_PARAM_PACK] = 1 | (5 << 3);                          /* 8th: swing off again */
+    CHECK(rate_index(&u.rate) == N_16S && a.beats_num == 1 && a.beats_den == 2 && a.swing == 1);
+    params[ARPUI_PARAM_PACK] = pack(N_8, ARP_UP, 1);                   /* swing off again */
     arpui_program_loaded(&u, &a);
     CHECK(rate_index(&u.rate) == RATE_DEFAULT_INDEX && a.beats_num == 1 && a.beats_den == 2 && a.swing == 0);
-}
-
-/* programs saved by earlier builds at a value no longer in the list load at the nearest one */
-static void test_legacy_note_value_codes_load_at_the_nearest_value(void) {
-    static const int LEGACY[][4] = {    /* code, index, num, den */
-        { 4, 6, 1, 4 },                 /* 1/16d -> 16th */
-        { 8, 1, 1, 1 },                 /* 1/4d -> Qtr */
-        { 10, 0, 2, 1 }, { 11, 0, 2, 1 }, { 12, 0, 2, 1 } };   /* whole, 2 bars, 4 bars -> Half */
-    reset();
-    for (int i = 0; i < 5; i++) {
-        params[ARPUI_PARAM_OCT] = 1;
-        params[ARPUI_PARAM_PACK] = 1 | (LEGACY[i][0] << 3);
-        rate_set_index(&u.rate, RATE_DEFAULT_INDEX);
-        int n = stores();
-        arpui_program_loaded(&u, &a);
-        CHECK(a.enabled && rate_index(&u.rate) == LEGACY[i][1]);
-        CHECK(a.beats_num == LEGACY[i][2] && a.beats_den == LEGACY[i][3] && a.swing == 0);
-        CHECK(stores() == n && params[ARPUI_PARAM_PACK] == (1 | (LEGACY[i][0] << 3)));   /* not rewritten */
-    }
-    btn(A440, PRESS); btn(BANK, PRESS); btn(BANK, RELEASE); btn(A440, RELEASE);   /* an edit writes */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (9 << 3)));                  /* Half's own code */
-    params[ARPUI_PARAM_PACK] = 1 | (4 << 3);
-    arpui_program_loaded(&u, &a);
-    btn(A440, PRESS); btn(P7, PRESS); btn(P7, RELEASE); btn(A440, RELEASE);       /* 16th -> 8th T */
-    CHECK(rate_index(&u.rate) == 5 && params[ARPUI_PARAM_PACK] == (1 | (0 << 1) | (3 << 3)));
 }
 
 static void test_program_without_arp_data_switches_off_and_leaves_settings(void) {
     reset();
     tap_a440();
-    btn(A440, PRESS); btn(GROUP, PRESS); btn(GROUP, RELEASE); btn(P2, PRESS); btn(P2, RELEASE); btn(A440, RELEASE);
-    CHECK(a.enabled && a.mode == ARP_RANDOM && a.octaves == 2);
+    btn(A440, PRESS); btn(GROUP, PRESS); btn(GROUP, RELEASE); btn(P2, PRESS); btn(P2, RELEASE);
+    btn(P8, PRESS); btn(P8, RELEASE); btn(A440, RELEASE);
+    CHECK(a.enabled && a.mode == ARP_ASSIGN && a.octaves == 2 && rate_index(&u.rate) == N_8S);
     params[ARPUI_PARAM_OCT] = 0; params[ARPUI_PARAM_PACK] = 0;         /* a factory program */
     arpui_program_loaded(&u, &a);
-    CHECK(!a.enabled && a.mode == ARP_RANDOM && a.octaves == 2);       /* off, untouched */
-    tap_a440();
-    params[ARPUI_PARAM_OCT] = 5; params[ARPUI_PARAM_PACK] = 1;         /* out of range: no data */
-    arpui_program_loaded(&u, &a);
-    CHECK(!a.enabled && a.mode == ARP_RANDOM);
-    tap_a440();
-    params[ARPUI_PARAM_OCT] = 1; params[ARPUI_PARAM_PACK] = 1 | (15 << 3);   /* note-value code 15: no data */
-    arpui_program_loaded(&u, &a);
-    CHECK(!a.enabled && a.mode == ARP_RANDOM);
+    CHECK(!a.enabled && a.mode == ARP_ASSIGN && a.octaves == 2 && rate_index(&u.rate) == N_8S);   /* off, untouched */
+    static const int BAD[][2] = { { 0, 99 }, { 5, 1 }, { -1, 1 }, { 1, 100 }, { 1, 127 }, { 1, -1 } };   /* (94, 93) */
+    for (int i = 0; i < 6; i++) {
+        tap_a440();
+        CHECK(a.enabled);
+        params[ARPUI_PARAM_OCT] = BAD[i][0]; params[ARPUI_PARAM_PACK] = BAD[i][1];
+        arpui_program_loaded(&u, &a);
+        CHECK(!a.enabled && a.mode == ARP_ASSIGN && a.octaves == 2 && rate_index(&u.rate) == N_8S);
+    }
 }
 
 int main(void) {
@@ -560,7 +590,7 @@ int main(void) {
     test_a440_pressed_after_power_on_is_just_a_press();
     test_settings_are_written_to_the_patch_slots();
     test_program_load_applies_saved_state();
-    test_legacy_note_value_codes_load_at_the_nearest_value();
+    test_patch_round_trip_for_every_setting();
     test_program_without_arp_data_switches_off_and_leaves_settings();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;

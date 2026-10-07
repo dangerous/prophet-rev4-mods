@@ -26,10 +26,5 @@ void rate_beats(const rate_t *r, int *num, int *den);
 void rate_display(const rate_t *r, uint8_t out[3]);
 /* 1 for a swing value (8th S, 16th S): rate_beats is then the length of a pair of steps */
 int  rate_swing(const rate_t *r);
-/* fixed patch-memory code of the value at index i ("Patch memory"), -1 if out of range */
-int  rate_code(int i);
-/* index of the value with patch-memory code c (0..14; the codes of removed values map to the
- * nearest remaining one), -1 if none */
-int  rate_index_from_code(int c);
 
 #endif

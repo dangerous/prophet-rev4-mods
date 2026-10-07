@@ -10,7 +10,8 @@ static const uint8_t MODE_TEXT[ARP_MODES][3] = {
     { UC_U, UC_P, UC_BLANK },        /* UP  */
     { UC_D, UC_N, UC_BLANK },        /* dn  */
     { UC_U, UC_D, UC_BLANK },        /* Ud  */
-    { UC_R, UC_N, UC_D },         /* rnd */
+    { UC_R, UC_N, UC_D },            /* rnd */
+    { UC_A, UC_S, UC_S },            /* ASS */
 };
 
 void arpui_init(arpui_t *u)
@@ -69,23 +70,27 @@ static void apply_rate(arpui_t *u, arp_t *a)
 }
 
 /* --- patch memory ------------------------------------------------------------------------ */
-/* the saved settings live in two spare program parameters ("Patch memory") */
+/* the saved settings live in two spare program parameters ("Patch memory"):
+ * 93 = note-value index * 10 + mode * 2 + on/off (0..99), 94 = octaves (0 = no arp data) */
 static void store_patch(const arpui_t *u, const arp_t *a)
 {
     plat_param_store(ARPUI_PARAM_OCT, a->octaves);
-    plat_param_store(ARPUI_PARAM_PACK, (a->enabled ? 1 : 0) | (a->mode << 1) | (rate_code(rate_index(&u->rate)) << 3));
+    plat_param_store(ARPUI_PARAM_PACK, rate_index(&u->rate) * 10 + a->mode * 2 + (a->enabled ? 1 : 0));
 }
 
 void arpui_program_loaded(arpui_t *u, arp_t *a)
 {
     int oct = plat_param_read(ARPUI_PARAM_OCT), pack = plat_param_read(ARPUI_PARAM_PACK);
-    int note = rate_index_from_code((pack >> 3) & 15), mode = (pack >> 1) & 3, on = pack & 1;
+    int note, mode, on;
     if (u->kill)
         return;
-    if (oct < 1 || oct > 4 || pack < 0 || pack > 127 || note < 0) {
+    if (oct < 1 || oct > 4 || pack < 0 || pack > ARPUI_PACK_MAX) {
         arp_enable(a, 0);                                  /* no arp data: off, settings untouched */
         return;
     }
+    note = pack / 10;
+    mode = pack % 10 / 2;
+    on = pack & 1;
     arp_set_octaves(a, oct);
     arp_set_mode(a, mode);
     rate_set_index(&u->rate, note);
@@ -98,6 +103,11 @@ static void tempo_tap(arpui_t *u, arp_t *a)
 {
     uint32_t iv = u->ms - u->tap_last, sum = 0;
     int bpm;
+    if (a->ext) {                                          /* synced: the clock sets the tempo */
+        u->tap_on = 0;
+        show_clock(u, a);
+        return;
+    }
     u->tap_last = u->ms;
     if (!u->tap_on || iv > ARPUI_TAP_MAX_MS) {             /* first tap of a series */
         u->tap_on = 1;
@@ -245,6 +255,10 @@ int arpui_pot_store(arpui_t *u, arp_t *a, int pot, int raw)
     if (!glide_is_tempo(u, pot))
         return 0;
     u->a440_used = 1;                                      /* the pot used the hold: no toggle */
+    if (a->ext) {                                          /* synced: the clock sets the tempo */
+        show_clock(u, a);
+        return 1;
+    }
     if (raw < 0) raw = 0;
     if (raw > 1023) raw = 1023;
     arp_set_bpm(a, 40 + (260 * raw + 511) / 1023);
