@@ -1,16 +1,16 @@
 #include "arpui.h"
 #include "platform.h"
 
-enum { PRESS = 1, RELEASE = 2 };
-enum { CH_U = 0x1E, CH_P = 0x19, CH_D = 0x0D, CH_N = 0x17, CH_R = 0x1B, CH_I = 0x12, CH_T = 0x1D,
-       CH_S = 0x1C, CH_Y = 0x22, CH_O = 0x18, CH_F = 0x0F, CH_LO = 0x24, BLANK = 0x25 };
+enum { UI_PRESS = 1, UI_RELEASE = 2 };
+enum { UC_U = 0x1E, UC_P = 0x19, UC_D = 0x0D, UC_N = 0x17, UC_R = 0x1B, UC_I = 0x12, UC_T = 0x1D,
+       UC_S = 0x1C, UC_Y = 0x22, UC_O = 0x18, UC_F = 0x0F, UC_LO = 0x24, UC_BLANK = 0x25 };
 enum { P1 = 0, P4 = 3, P5 = 4, P6 = 5, P7 = 6, P8 = 7 };
 
 static const uint8_t MODE_TEXT[ARP_MODES][3] = {
-    { CH_U, CH_P, BLANK },        /* UP  */
-    { CH_D, CH_N, BLANK },        /* dn  */
-    { CH_U, CH_D, BLANK },        /* Ud  */
-    { CH_R, CH_N, CH_D },         /* rnd */
+    { UC_U, UC_P, UC_BLANK },        /* UP  */
+    { UC_D, UC_N, UC_BLANK },        /* dn  */
+    { UC_U, UC_D, UC_BLANK },        /* Ud  */
+    { UC_R, UC_N, UC_D },         /* rnd */
 };
 
 void arpui_init(arpui_t *u)
@@ -38,22 +38,22 @@ static void show_int(arpui_t *u, int v)
 static void show_clock(arpui_t *u, const arp_t *a)
 {
     if (a->ext)
-        show3(u, CH_S, CH_Y, CH_N);
+        show3(u, UC_S, UC_Y, UC_N);
     else
-        show3(u, CH_I, CH_N, CH_T);
+        show3(u, UC_I, UC_N, UC_T);
 }
 
 static void show_status(arpui_t *u, const arp_t *a)
 {
     if (!a->enabled)
-        show3(u, CH_O, CH_F, CH_F);
+        show3(u, UC_O, UC_F, UC_F);
     else if (a->ext)
-        show3(u, CH_S, CH_Y, CH_N);
+        show3(u, UC_S, UC_Y, UC_N);
     else
         show_int(u, a->bpm);
 }
 
-static void show_rate(arpui_t *u)
+static void ui_show_rate(arpui_t *u)
 {
     uint8_t d[3];
     rate_display(&u->rate, d);
@@ -89,7 +89,7 @@ static void combo(arpui_t *u, arp_t *a, int id)
         break;
     case P1: case P1 + 1: case P1 + 2: case P4:
         arp_set_octaves(a, id - P1 + 1);
-        show3(u, CH_LO, BLANK, a->octaves);
+        show3(u, UC_LO, UC_BLANK, a->octaves);
         break;
     case P5:
         arp_set_ext(a, !a->ext);
@@ -102,7 +102,7 @@ static void combo(arpui_t *u, arp_t *a, int id)
     case P8:
         if (rate_step(&u->rate, id == P7 ? -1 : 1))
             apply_rate(u, a);
-        show_rate(u);
+        ui_show_rate(u);
         break;
     default:
         show_int(u, id);                                   /* button id readout */
@@ -112,21 +112,21 @@ static void combo(arpui_t *u, arp_t *a, int id)
 
 int arpui_button(arpui_t *u, arp_t *a, int id, int value)
 {
-    uint64_t bit;
+    uint8_t bit;
     if (u->kill || id < 0 || id > 63)
         return 0;
-    bit = 1ull << id;
+    bit = (uint8_t)(1u << (id & 7));
     if (plat_globals_open()) {                             /* the Globals menu is pure stock */
         if (u->a440_held)
             end_hold(u, a);
         return 0;
     }
     if (id == ARPUI_A440) {
-        if (value == PRESS) {
+        if (value == UI_PRESS) {
             u->a440_held = 1;
             u->a440_used = 0;
             arp_seq_record(a, 1);
-        } else if (value == RELEASE && u->a440_held) {
+        } else if (value == UI_RELEASE && u->a440_held) {
             end_hold(u, a);
             if (!u->a440_used) {
                 arp_enable(a, !a->enabled);
@@ -140,14 +140,14 @@ int arpui_button(arpui_t *u, arp_t *a, int id, int value)
             end_hold(u, a);
         return 0;
     }
-    if (u->swallow & bit) {                                /* press was ours: repeats and release too */
-        if (value == RELEASE)
-            u->swallow &= ~bit;
+    if (u->swallow[id >> 3] & bit) {                       /* press was ours: repeats and release too */
+        if (value == UI_RELEASE)
+            u->swallow[id >> 3] &= (uint8_t)~bit;
         return 1;
     }
-    if (!u->a440_held || value != PRESS)
+    if (!u->a440_held || value != UI_PRESS)
         return 0;
-    u->swallow |= bit;
+    u->swallow[id >> 3] |= bit;
     combo(u, a, id);
     return 1;
 }

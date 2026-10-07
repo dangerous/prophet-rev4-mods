@@ -138,6 +138,35 @@ Manual verification on the instrument. Record results against the spec markers i
       Preset, Record, Unison = 25): display shows its id — note it down.
 - [ ] Release A440: the arp does not toggle; the buttons do nothing else while A440 is held.
 
+## Native image (spec "Native arp engine (stock 2.1.0 base)")
+
+`build/prophet10_native.syx` (also in `dist/`). The file is a complete Main OS, so it
+installs over V5 or stock alike. First flash of a new engine — test in this order and stop
+at the first surprise:
+
+- [ ] **Kill switch first**: power off, hold A440, power on, keep holding ~2 s. Everything
+      must be pure stock: keys sound, A440 plays the tuning tone, Glide Rate is glide, HOLD
+      sustains. Power cycle without holding anything.
+- [ ] Arp off: play, HOLD, sustain pedal, MIDI in, program change — all as stock. A440 does
+      **not** play the tuning tone (it is the arp button); Globals → A440 still does.
+- [ ] Tap A440: LED on, display shows `120` then the patch number after 1.5 s. Hold C‑E‑G:
+      C E G C… at 120 BPM, eighths, one note at a time. Tap A440: `OFF`, keys sound again.
+- [ ] Arp on, HOLD off: play a chord, release, wait, play another: starts immediately.
+      HOLD on: the chord latches, one note at a time; play a new chord after releasing all:
+      replaces at the next step (no hiccup). Release keys: still latched. HOLD off: drops.
+- [ ] A440 + Bank/Group: `dn` (G E C), `Ud` (C E G E C…), `rnd`, `UP`. A440 + Program 2:
+      `o 2` → C E G C' E' G'. Hold C3 + D4 at `o 2`: C3 D4 C4 D5.
+- [ ] Glide Rate while on: BPM shown while turning, 40–300, patch number back after 1.5 s;
+      arp off: Glide Rate is glide again and the patch's glide value was not changed.
+- [ ] A440 + Program 7/8 note values (`16d`, `16`, …, `4b`); A440 + Program 5: `Syn`;
+      DAW clock: steps on the grid, Start/Stop/Continue; pull the cable: silence after 1 s.
+- [ ] Seq: hold A440, play C E G E (display 1 2 3 4), release; press D: D F# A F#; HOLD
+      latches it; A440 + Program 6 clears. Lo Freq + Bank/Group: keyboard shift ±2, MIDI
+      Out shifted. A440 + Unison: `25` (readout).
+- [ ] CC 123 from the DAW: pool cleared, HOLD LED unchanged. Program change while the arp
+      runs: the pattern continues (HOLD drops its latched notes, as stock).
+- [ ] Globals menu open: Program buttons edit globals as stock even with A440 held.
+
 ## If something is wrong
 
 - The wrapper only runs inside the arp's hook paths. If a hook misbehaves, the synth still

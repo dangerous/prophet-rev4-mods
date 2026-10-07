@@ -93,18 +93,21 @@ def _patch_code_record(code: records.Record, symbols: Dict[str, int], hooks: Lis
 
 
 def build_payload(base_payload: bytes, wrapper: bytes, symbols: Dict[str, int],
-                  hooks: List[dict]) -> bytes:
+                  hooks: List[dict], rec_base: int = WRAPPER_REC_BASE,
+                  rec_size: int = WRAPPER_REC_SIZE) -> bytes:
+    """Patch the hook sites and append the wrapper as one COPY record at rec_base/rec_size
+    (V5 base: 0x2008A000/0x2000; stock base: 0x20088000/0x8000)."""
     images = records.parse_images(base_payload)
     image_a = images[0]
 
-    if len(wrapper) > WRAPPER_REC_SIZE:
+    if len(wrapper) > rec_size:
         raise BuildError("wrapper binary (%d bytes) exceeds the wrapper record (0x%X bytes)"
-                         % (len(wrapper), WRAPPER_REC_SIZE))
+                         % (len(wrapper), rec_size))
     for rec in image_a.records:
-        if rec.type in (records.COPY, records.FILL) and rec.w1 < WRAPPER_REC_BASE + WRAPPER_REC_SIZE \
-                and rec.w1 + rec.w2 > WRAPPER_REC_BASE:
+        if rec.type in (records.COPY, records.FILL) and rec.w1 < rec_base + rec_size \
+                and rec.w1 + rec.w2 > rec_base:
             raise BuildError("base already has a record covering 0x%08X (at 0x%08X, %d bytes)"
-                             % (WRAPPER_REC_BASE, rec.w1, rec.w2))
+                             % (rec_base, rec.w1, rec.w2))
     code = next((r for r in image_a.records if r.type == records.COPY and r.w1 == STOCK_CODE_BASE), None)
     if code is None:
         raise BuildError("base has no stock code record at 0x%08X" % STOCK_CODE_BASE)
@@ -112,25 +115,26 @@ def build_payload(base_payload: bytes, wrapper: bytes, symbols: Dict[str, int],
     patched_code = _patch_code_record(code, symbols, hooks)
     head = image_a.records[0]
     new_records = [records.Record(head.type, head.family, head.w1, head.w2,
-                                  head.w3 + records.RECORD_SIZE + WRAPPER_REC_SIZE, b"", head.offset)]
+                                  head.w3 + records.RECORD_SIZE + rec_size, b"", head.offset)]
     for rec in image_a.records[1:]:
         if rec is code:
             rec = records.Record(rec.type, rec.family, rec.w1, rec.w2, rec.w3, patched_code, rec.offset)
         new_records.append(rec)
-    new_records.append(records.Record(records.COPY, image_a.family, WRAPPER_REC_BASE, WRAPPER_REC_SIZE, 0,
-                                      wrapper + bytes(WRAPPER_REC_SIZE - len(wrapper))))
+    new_records.append(records.Record(records.COPY, image_a.family, rec_base, rec_size, 0,
+                                      wrapper + bytes(rec_size - len(wrapper))))
     new_a = records.Image(image_a.family, image_a.entry, new_records[0].w3, image_a.offset, new_records)
     return records.serialize_images([new_a] + images[1:])
 
 
-def build_image(base: Path, wrapper: Path, map_path: Path, hooks_path: Path, out: Path) -> None:
+def build_image(base: Path, wrapper: Path, map_path: Path, hooks_path: Path, out: Path,
+                rec_base: int = WRAPPER_REC_BASE, rec_size: int = WRAPPER_REC_SIZE) -> None:
     base_raw = Path(base).read_bytes()
     container = syx.decode(base_raw)
     if container.target != "main":
         raise BuildError("base is not a Main OS file")
     payload = build_payload(container.payload, Path(wrapper).read_bytes(),
                             parse_map(Path(map_path).read_text()),
-                            json.loads(Path(hooks_path).read_text()))
+                            json.loads(Path(hooks_path).read_text()), rec_base, rec_size)
     Path(out).write_bytes(syx.encode(payload, "main"))
 
 

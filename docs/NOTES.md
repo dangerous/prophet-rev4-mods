@@ -106,7 +106,7 @@ behavioural source of truth; this file is the engineering context around it.
   pitches in the output callback; V5 kept at one octave while a sequence exists.
 - Re-latch/seq hold logic: hold re-assert after every clear while HOLD active.
 
-## Next: native arp engine (spec "Native arp engine (stock 2.1.0 base)")
+## Native arp engine (spec "Native arp engine (stock 2.1.0 base)") — built, HW-unverified
 
 Replace V5 with our own engine hooked straight into stock 2.1.0; RE reports in `docs/re/`
 (`v5-*.md` are git-ignored). David's rulings: octaves are per-pass transposition (C3 D4 |
@@ -114,8 +114,12 @@ C4 D5); a key into an empty pool starts a step immediately only with HOLD off an
 clock; under external clock the grid is never reset; all display messages revert to the
 patch display after 1.5 s; stock hold is suspended while the arp is on. Open decisions in
 the spec: Up/Down end repeat, random repeat avoidance, arp to MIDI Out, Globals handling,
-kill-switch button. Order of work: engine (pool, pattern, clock) host-tested first, then
-glue, then a minimal stock-based image.
+kill-switch button (ruled: A440 at power-on). Status: `firmware/arp.c` (engine), `arpui.c`
+(UI), `native.c` (glue, queue, stock table) built and host-tested (`test_arp` 97 checks,
+`test_arpui` 69, `test_native_image` 10); `make image-native` → `build/prophet10_native.syx`
+(5.6 KB code, record `0x20088000–0x20090000`, 17 stock sites). Not yet flashed. Decisions
+taken: Up/Down no end repeat; Random may repeat; no MIDI-Out toggle; Globals menu = pure
+stock (A440 tuning tone reachable there); mode/octave change keeps the phase.
 
 ## Open items
 

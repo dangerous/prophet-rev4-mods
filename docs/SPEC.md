@@ -154,7 +154,14 @@ V5's window record at `0x20089600`; that layout was verified on hardware.
 #### CLI
 
 - `python3 -m tools build --base BASE.syx --wrapper W.bin --map W.map --hooks hooks.json
-  -o OUT.syx` — performs the above and writes `OUT.syx` (trailer and header recomputed).
+  -o OUT.syx [--record BASE:SIZE]` — performs the above and writes `OUT.syx` (trailer and
+  header recomputed). `--record` selects the appended record: default `0x2008A000:0x2000`
+  (the V5-based build); the native build uses `0x20088000:0x8000`.
+- `python3 -m tools fwbuild SRC OUT [--profile v5|native]` cross-compiles and links the
+  wrapper for that record: `v5` (default) builds `SRC/wrapper.c` at `0x2008A000` with the
+  code limit `0x2008B800` and writes `wrapper.bin/.map/.layout`; `native` builds
+  `SRC/native.c` at `0x20088000` with the limit `0x2008E000` and writes `native.*`. Each
+  profile checks that its hook symbols are present.
   The map is `nm`-style text: `<hex address> <symbol>` per line. Each hook entry has an
   optional `"kind": "bl" | "word"` (default `bl`).
 - `python3 -m tools diff A.syx B.syx` — prints every differing byte span of the decoded
@@ -201,7 +208,9 @@ deviations are marked **(change)** with the reason.
   arp was on)**. Switching the arp on shows the BPM (`Syn` under external clock) for 1.2 s;
   switching it off shows `OFF` for 1.2 s.
 - **Globals menu**: while the stock Globals menu is open, every button including A440
-  behaves exactly as stock; the arp keeps running with its current settings.
+  behaves exactly as stock (so the stock tuning tone is reachable from there); the arp keeps
+  running with its current settings. Pressing GLOBALS while A440 is held abandons the hold:
+  nothing toggles on the A440 release, and a recording in progress is kept as recorded.
 
 #### Note pool
 
@@ -312,8 +321,14 @@ deviations are marked **(change)** with the reason.
   Glide Rate = pot id `0x16`.
 - Task contexts: the tick, local notes, panel buttons/pots and realtime bytes run in the
   FreeRTOS Timer Service task; MIDI notes, CC and hold run in the Prophet5 active-object
-  task. Only the latter are queued; the former act on the engine directly. Critical sections
-  use `cpsid i` / `cpsie i` with the previous state restored; hooks never block.
+  task. Only the latter are queued (a 64-entry single-producer ring drained by the tick);
+  the former act on the engine directly. The lazy init runs under `cpsid i` / `cpsie i`
+  with the previous state restored; hooks never block.
+- Build: `make image-native` → `build/prophet10_native.syx` from `firmware/native.c`
+  (`fwbuild --profile native`) and `firmware/hooks_native.json` (`build --record
+  0x20088000:0x8000`). Sources: `arp.c` (engine), `arpui.c` (controls, display, LED, kill
+  switch), `oct.c`, `rate.c`, `disp.c`, `vhold.c`. The V5-based images remain available
+  (`make image`, `make image-internal`) until this section is hardware-verified.
 
 ### Note value (arp/seq step length) `[HW: unverified]`
 

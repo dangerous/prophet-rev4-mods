@@ -1,0 +1,108 @@
+[
+  {
+    "site": "0x2003BE9C",
+    "expect": "0x2003D829",
+    "symbol": "hook_kbd_scan",
+    "note": "stock keyboard FIFO poll (1 ms timer): count = fifo_count(fifo) -> the engine tick"
+  },
+  {
+    "site": "0x2003BECC",
+    "expect": "0x2003EC5D",
+    "symbol": "hook_local_note",
+    "note": "stock keyboard FIFO consumer: note_on(1, note, vel) -> octave shift, seq recording, the pool"
+  },
+  {
+    "site": "0x2003BEFA",
+    "expect": "0x20033F85",
+    "symbol": "hook_local_midi_out_on",
+    "note": "stock keyboard FIFO consumer: local key note-on to MIDI Out (cable_mask, channel, note, vel) -> octave shift"
+  },
+  {
+    "site": "0x2003BF16",
+    "expect": "0x20033F39",
+    "symbol": "hook_local_midi_out_off",
+    "note": "stock keyboard FIFO consumer: local key note-off to MIDI Out (cable_mask, channel, note, vel) -> octave shift"
+  },
+  {
+    "site": "0x2003B07A",
+    "expect": "0x2003EC5D",
+    "symbol": "hook_midi_note_on",
+    "note": "stock MIDI 0x9n in the Prophet5 task: note_on(2, note, vel) -> queued to the tick"
+  },
+  {
+    "site": "0x2003B032",
+    "expect": "0x2003EEDD",
+    "symbol": "hook_midi_note_off",
+    "note": "stock MIDI 0x8n in the Prophet5 task: note_off(2, note) -> queued to the tick"
+  },
+  {
+    "site": "0x2003B294",
+    "expect": "0x2003EBE5",
+    "symbol": "hook_cc123",
+    "note": "stock MIDI CC 123: all_notes_off() -> stock first, then the pool is cleared"
+  },
+  {
+    "site": "0x2003B144",
+    "expect": "0x2003EBE5",
+    "symbol": "hook_cc123",
+    "note": "stock MIDI CC 124-127: all_notes_off() -> as CC 123"
+  },
+  {
+    "site": "0x200396CA",
+    "expect": "0x2003D325",
+    "symbol": "hook_hold",
+    "note": "stock hold handler: post 0x080D0000|state to the voice engine, r4 = merged HOLD state -> withheld while the arp is on; state queued"
+  },
+  {
+    "site": "0x2003C244",
+    "expect": "0x2003BC31",
+    "symbol": "hook_button",
+    "note": "stock panel decoder: post button (id, value 1 press / 2 release / 3 held) -> A440 combos, Lo Freq shift"
+  },
+  {
+    "site": "0x2003C292",
+    "expect": "0x20036B51",
+    "symbol": "hook_pot_store",
+    "note": "stock panel decoder: store pot raw (pot, raw 0..1023) -> Glide Rate is tempo while the arp is on (internal clock)"
+  },
+  {
+    "site": "0x2003C2A6",
+    "expect": "0x2003BC6D",
+    "symbol": "hook_pot_change",
+    "note": "stock panel decoder: post pot change (pot, old, new) -> swallowed for Glide Rate while it is tempo"
+  },
+  {
+    "site": "0x2003EACE",
+    "expect": "0x2003B695",
+    "symbol": "hook_hold_query",
+    "note": "stock note_off: is HOLD active? -> 'no' while the arp is on so steps release"
+  },
+  {
+    "kind": "word",
+    "site": "0x200343D8",
+    "expect": "0x20034343",
+    "symbol": "hook_rt_trampoline",
+    "note": "stock MIDI byte-parser status table F8 (clock) -> realtime trampoline, then the stock handler"
+  },
+  {
+    "kind": "word",
+    "site": "0x200343E0",
+    "expect": "0x20034343",
+    "symbol": "hook_rt_trampoline",
+    "note": "stock MIDI byte-parser status table FA (start)"
+  },
+  {
+    "kind": "word",
+    "site": "0x200343E4",
+    "expect": "0x20034343",
+    "symbol": "hook_rt_trampoline",
+    "note": "stock MIDI byte-parser status table FB (continue)"
+  },
+  {
+    "kind": "word",
+    "site": "0x200343E8",
+    "expect": "0x20034343",
+    "symbol": "hook_rt_trampoline",
+    "note": "stock MIDI byte-parser status table FC (stop)"
+  }
+]

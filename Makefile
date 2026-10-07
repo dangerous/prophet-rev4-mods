@@ -2,7 +2,7 @@ PYTHON ?= python3
 CC ?= cc
 BUILD := build
 
-.PHONY: test test-tooling test-firmware test-image image clean
+.PHONY: test test-tooling test-firmware test-image image image-internal image-native clean
 
 test: test-tooling test-firmware test-image
 
@@ -75,6 +75,17 @@ image-internal: $(BUILD)/wrapper.bin
 $(BUILD)/wrapper.bin: firmware/*.c firmware/*.h tools/fw.py tools/fwlink.py
 	@mkdir -p $(BUILD)
 	$(PYTHON) -m tools fwbuild firmware $(BUILD)
+
+# Our own arp engine hooked straight into stock 2.1.0 (no V5): one 32 KB record at 0x20088000.
+image-native: $(BUILD)/native.bin
+	$(PYTHON) -m tools build --base fixtures/prophet5_main_2.1.0.syx \
+		--wrapper $(BUILD)/native.bin --map $(BUILD)/native.map \
+		--hooks firmware/hooks_native.json --record 0x20088000:0x8000 \
+		-o $(BUILD)/prophet10_native.syx
+
+$(BUILD)/native.bin: firmware/*.c firmware/*.h tools/fw.py tools/fwlink.py
+	@mkdir -p $(BUILD)
+	$(PYTHON) -m tools fwbuild firmware $(BUILD) --profile native
 
 clean:
 	rm -rf $(BUILD)

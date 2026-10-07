@@ -28,7 +28,7 @@ typedef struct {
     uint8_t  kill;                    /* kill switch engaged: every hook passes to stock */
     uint16_t boot_ticks;              /* ticks seen since power-on, saturating at the window */
     uint8_t  pad[2];
-    uint64_t swallow;                 /* buttons whose press was consumed: consume the release too */
+    uint8_t  swallow[8];              /* bitmap of buttons whose press was consumed: consume the release too */
 } arpui_t;
 
 void arpui_init(arpui_t *u);

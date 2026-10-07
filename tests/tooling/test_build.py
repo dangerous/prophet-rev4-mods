@@ -13,10 +13,11 @@ from tools import build, records, syx, thumb
 
 ROOT = Path(__file__).resolve().parents[2]
 V5 = ROOT / "fixtures" / "V5_prophet5_main_2.1.0_arp_MIDI_SYNC.syx"
+MAIN = ROOT / "fixtures" / "prophet5_main_2.1.0.syx"
 
 
 def setUpModule():
-    fixture_check.require([V5.name])
+    fixture_check.require([V5.name, MAIN.name])
 
 REC_BASE, REC_SIZE = 0x2008A000, 0x2000
 STUB_SYMBOLS = {
@@ -36,6 +37,14 @@ HOOKS = [
     # V5's MIDI-parser table entry 1 (of 0,2 stock / 1,3,4,5 V5): a word, not a BL
     {"kind": "word", "site": "0x200343D8", "expect": "0x20089095", "symbol": "stub_tramp"},
 ]
+# the same stub against stock 2.1.0 (native build): stock targets at the sites
+STOCK_HOOKS = [
+    {"site": "0x2003BECC", "expect": "0x2003EC5D", "symbol": "hook_local_note"},
+    {"site": "0x2003B07A", "expect": "0x2003EC5D", "symbol": "hook_midi_note_on"},
+    {"site": "0x2003BE9C", "expect": "0x2003D829", "symbol": "hook_midi_note_off"},
+    {"kind": "word", "site": "0x200343D8", "expect": "0x20034343", "symbol": "stub_tramp"},
+]
+NATIVE_REC_BASE, NATIVE_REC_SIZE = 0x20088000, 0x8000
 BL_SITES = [int(h["site"], 16) for h in HOOKS if h.get("kind", "bl") == "bl"]
 WORD_SITES = [int(h["site"], 16) for h in HOOKS if h.get("kind") == "word"]
 
@@ -181,6 +190,55 @@ class BuildTests(unittest.TestCase):
         self.out.unlink()
         with self.assertRaisesRegex(build.BuildError, "already"):
             self._build()
+
+
+class RecordPlacementTests(unittest.TestCase):
+    """docs/SPEC.md "Wrapper record": the appended record's base and size follow the build
+    (V5 base 0x2008A000/0x2000, stock base 0x20088000/0x8000)."""
+
+    def test_default_record_is_the_v5_wrapper_window(self):
+        self.assertEqual((build.WRAPPER_REC_BASE, build.WRAPPER_REC_SIZE), (REC_BASE, REC_SIZE))
+
+    def test_stock_base_takes_a_32k_record_at_0x20088000(self):
+        base = syx.decode(MAIN.read_bytes()).payload
+        out = build.build_payload(base, STUB_BIN, STUB_SYMBOLS, STOCK_HOOKS,
+                                  rec_base=NATIVE_REC_BASE, rec_size=NATIVE_REC_SIZE)
+        a_b, a_o = records.parse_images(base)[0], records.parse_images(out)[0]
+        extra = a_o.records[-1]
+        self.assertEqual((extra.type, extra.w1, extra.w2, extra.w3),
+                         (records.COPY, NATIVE_REC_BASE, NATIVE_REC_SIZE, 0))
+        self.assertEqual(a_o.declared_len, a_b.declared_len + 16 + NATIVE_REC_SIZE)
+        self.assertEqual(build.read_ram(out, NATIVE_REC_BASE, len(STUB_BIN)), STUB_BIN)
+        self.assertEqual(build.read_ram(out, NATIVE_REC_BASE + len(STUB_BIN), NATIVE_REC_SIZE - len(STUB_BIN)),
+                         bytes(NATIVE_REC_SIZE - len(STUB_BIN)))
+        spans = build.image_diff(base, out)
+        self.assertEqual([(s.ram_lo, s.ram_hi) for s in spans if s.appended],
+                         [(NATIVE_REC_BASE, NATIVE_REC_BASE + NATIVE_REC_SIZE)])
+        self.assertEqual(sorted(s.ram_lo for s in spans if not s.appended),
+                         sorted(int(h["site"], 16) for h in STOCK_HOOKS))
+        # stock has nothing in the record range (its data ends below it)
+        for rec in a_b.records:
+            if rec.type in (records.COPY, records.FILL):
+                self.assertLessEqual(rec.w1 + rec.w2, NATIVE_REC_BASE)
+
+    def test_wrapper_larger_than_the_record_is_rejected(self):
+        base = syx.decode(MAIN.read_bytes()).payload
+        with self.assertRaisesRegex(build.BuildError, "exceeds"):
+            build.build_payload(base, bytes(NATIVE_REC_SIZE + 1), STUB_SYMBOLS, STOCK_HOOKS,
+                                rec_base=NATIVE_REC_BASE, rec_size=NATIVE_REC_SIZE)
+
+    def test_cli_record_option(self):
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t)
+            base, wbin, wmap, hooks = _write_inputs(d, hooks=STOCK_HOOKS, base=MAIN.read_bytes())
+            out = d / "out.syx"
+            r = _cli("build", "--base", base, "--wrapper", wbin, "--map", wmap, "--hooks", hooks,
+                     "-o", out, "--record", "0x20088000:0x8000")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            r = _cli("diff", base, out)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("appended record ram 0x20088000..0x20090000: 32768 bytes", r.stdout)
+            self.assertEqual(r.stdout.count("\n"), 5)   # 3 BL sites + 1 word + appended record
 
 
 class CliTests(unittest.TestCase):

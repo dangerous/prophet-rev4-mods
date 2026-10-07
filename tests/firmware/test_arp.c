@@ -62,7 +62,7 @@ static void test_defaults(void) {
     CHECK(!a.enabled && a.mode == ARP_UP && a.octaves == 1 && a.bpm == 120 && !a.ext && !a.hold);
     CHECK(a.beats_num == 1 && a.beats_den == 2);                      /* 1/8 */
     CHECK(a.sounding == ARP_NONE && a.seq_len == 0);
-    CHECK(sizeof(arp_t) <= 0x200);
+    CHECK(sizeof(arp_t) <= 0x400);
     ticks(5000);
     CHECK(nlog == 0);
 }

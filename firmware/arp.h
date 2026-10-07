@@ -38,6 +38,7 @@ typedef struct {
     /* seq: recorded steps, played transposed so step 0 lands on the trigger key */
     uint8_t  seq_len, seq_rec, seq_fresh, seq_trigger;
     uint8_t  seq_note[ARP_SEQ_MAX], seq_vel[ARP_SEQ_MAX];
+    uint8_t  order[128], ovel[128];   /* step() scratch: the base order and its velocities */
 } arp_t;
 
 void arp_init(arp_t *a);                                 /* power-up defaults, arp off */

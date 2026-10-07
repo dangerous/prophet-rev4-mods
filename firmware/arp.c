@@ -167,7 +167,7 @@ static void choose(arp_t *a, const uint8_t *order, int n, int seq)
 
 static void step(arp_t *a)
 {
-    uint8_t order[128], vel[128];
+    uint8_t *order = a->order, *vel = a->ovel;
     int n = base_order(a, order, vel);
     int seq = a->seq_len != 0;
     release(a);

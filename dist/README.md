@@ -11,6 +11,10 @@ make image-internal   # build/prophet10_v5_relatch_seq_internal.syx — note val
 make image            # build/prophet10_v5_relatch_seq.syx — also patches the MIDI-parser table for note values under MIDI sync
 ```
 
+```bash
+make image-native     # build/prophet10_native.syx — our own engine on stock 2.1.0, no V5 (hardware-unverified)
+```
+
 `SHA256SUMS` records the hashes of the images built at HEAD on the author's machine (Apple
 clang 21.0.0). The build is deterministic for a given compiler, so
 `shasum -a 256 build/*.syx` should match those lines; a different clang version may produce

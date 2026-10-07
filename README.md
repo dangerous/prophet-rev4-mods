@@ -64,6 +64,18 @@ out of the MIDI‑byte path that a USB re‑flash uses; the full variant adds th
 and has not been installed on hardware yet. [`dist/README.md`](dist/README.md) explains the
 checksums.
 
+### Native build — our own arp on stock 2.1.0, no V5 `[HW: unverified]`
+
+`make image-native` → `build/prophet10_native.syx`: the same features re‑implemented as
+one engine hooked straight into Sequential's stock OS (spec section "Native arp engine"),
+so nothing of the third‑party patch is needed. Behaviour follows V5's documented arp plus
+deliberate changes: octaves are per pass (C3 D4 | C4 D5), a key into an empty pool starts
+the pattern at once only with HOLD off on the internal clock, the MIDI‑clock grid is never
+reset by notes, Glide Rate is tempo only while the arp is on *and* on the internal clock,
+CC 123–127 clear the pool but keep HOLD, the queue never disables the arp, and holding
+**A440 at power‑on** switches every hook off for the session (kill switch). 5.6 KB of code
+in a 32 KB record at `0x20088000`; 17 stock sites retargeted (`firmware/hooks_native.json`).
+
 History: a re‑latch‑only image was installed on a Prophet‑10 Rev4 on 2026‑10‑06 and proved
 the loader path, boot, the hook mechanism and the HOLD stub; it had a bug (the arp's clear
 also dropped the arp's own hold flag, so a re‑latched chord did not stay latched), fixed by
