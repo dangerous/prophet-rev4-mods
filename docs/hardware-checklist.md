@@ -108,16 +108,17 @@ Manual verification on the instrument. Record results against the spec markers i
 
 ## Note value (spec "Note value")
 
-- [ ] Arp on, internal clock, hold a chord. Hold A440, press Program 8: `16d`, faster;
-      again: `8t`, `16S`, `16`, `16t`, `32`; once more: stays `32`.
-- [ ] A440 + Program 7 back up through `16t 16 16S 8t 16d 8 8S 8d 4 4d 2 1 2b 4b`; stays at
-      `4b`.
+- [ ] Arp on, internal clock, at the default `8`, hold a chord. Hold A440, press Program 8:
+      `8S`; again: `8t`, `16`, `16S`, `16t`, `32`; once more: stays `32`.
+- [ ] From `8` (reload the program or step back), A440 + Program 7: `8d`, `4`, `2`; once
+      more: stays `2`.
 - [ ] Swing: `8S` = long-short pairs, the pair one beat (triplet feel, long = 2 × short);
       `16S` = the same at sixteenths (pair = half a beat). The pattern order does not change.
       Under `Syn`: `8S` steps on clocks 0, 16, 24, 40 … and `16S` on 0, 8, 12, 20 … counted
       from Start (the long step falls on the beat).
 - [ ] Patch memory: save a program at `8S`, another at `16S`; both reload with their swing.
-      A program saved before this build at `8` or `16d` still loads at `8` / `16d`.
+      A program saved by an earlier build at `8` still loads at `8`; one saved at `16d`
+      loads at `16`, at `4d` at `4`, at `1` / `2b` / `4b` at `2`.
       Each change takes effect from the next step; the patch number returns after 1.5 s.
 - [ ] Release A440 after changing the value: the arp does **not** toggle.
 - [ ] `Syn` with DAW clock: `16` = sixteenths locked to the grid; `4` = quarters; `8d` =
@@ -143,7 +144,7 @@ Manual verification on the instrument. Record results against the spec markers i
 
 - [ ] Each of these shows for about 1.5 s and then the **patch number** returns: A440 +
       Bank (`UP`…), A440 + Program 2 (`o 2`), A440 + Program 5 (`int`/`Syn`), A440 +
-      Program 8 (`16d`), tap A440 on (BPM) and off (`OFF`), Lo Freq + Bank (`1`), A440 +
+      Program 8 (`8S`), tap A440 on (BPM) and off (`OFF`), Lo Freq + Bank (`1`), A440 +
       Unison (`25`), a seq step count.
 - [ ] A new message within the 1.5 s restarts the timing (e.g. Bank, Bank, Bank).
 

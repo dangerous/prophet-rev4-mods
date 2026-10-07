@@ -172,8 +172,10 @@ this engine deliberately differs it is marked **(change)** with the reason.
 
 #### Settings and defaults
 
-- Arp settings are global, not per patch, and not saved: power-up = arp off, internal
-  clock, 120 BPM, Up, 1 octave, note value 1/8, keyboard shift 0, no sequence.
+- On/off, mode, octaves and note value are stored with each program ("Patch memory"); BPM,
+  clock source, keyboard shift and the sequence are global and not saved. Power-up = the
+  recalled program's arp settings (off for a program without arp data), internal clock,
+  120 BPM, keyboard shift 0, no sequence.
 - Mode, octaves, clock source, BPM and note value survive the arp being switched off and on.
 
 #### Controls
@@ -189,8 +191,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
   on A440 release. Held-repeat events (value 3) are ignored. A combo button whose release
   arrives after A440 has been released is still consumed **(change: V5 leaked the orphan
   release to stock)**.
-- **A440 + Glide Rate** sets the tempo `[HW: unverified]`: while A440 is held, turning Glide
-  Rate sets the BPM of the internal clock, 40–300 (`BPM = 40 + round(260 · raw / 1023)`, raw
+- **A440 + Glide Rate** sets the tempo `[HW: verified 2026-10-07, Prophet-10 Rev4]`: while
+  A440 is held, turning Glide Rate sets the BPM of the internal clock, 40–300 (`BPM = 40 + round(260 · raw / 1023)`, raw
   0–1023), whether the arp is on or off and whichever clock source is selected (under `Syn`
   the new BPM applies when the clock source returns to `int`). The display shows the BPM while
   the pot turns (a display message like any other). Turning the pot counts as using the A440
@@ -254,13 +256,14 @@ this engine deliberately differs it is marked **(change)** with the reason.
 - **Internal**: step period = 60 s / BPM × beats per note value ("Note value" table),
   accumulated in 1 ms ticks with the remainder carried, so a long run does not drift.
   Changing BPM or note value takes effect from the next step without resetting the phase.
-  Swing values (`16S`, `8S`, "Note value") alternate a long and a short step, 2 : 1 within
-  each pair; a start-rule step or switching the arp on begins a pair (long step first);
-  pool, mode and octave changes do not change which half comes next. `[HW: unverified]`
-- **External (`Syn`)**: 24 clocks per quarter; one step every `24 × beats` clocks (1/8 = 12,
-  1/16 = 6, 1/8T = 8, 1/16d = 9, 1/4 = 24 … 4 bars = 384); gate-off at half, rounded down.
+  Swing values (16th S, 8th S, "Note value") alternate a long and a short step, 2 : 1
+  within each pair; a start-rule step or switching the arp on begins a pair (long step
+  first); pool, mode and octave changes do not change which half comes next.
+  `[HW: verified 2026-10-07, Prophet-10 Rev4]`
+- **External (`Syn`)**: 24 clocks per quarter; one step every `24 × beats` clocks (8th = 12,
+  16th = 6, 8th T = 8, 8th D = 18, Qtr = 24, Half = 48); gate-off at half, rounded down.
   Swing values split each pair of steps 2 : 1 with the pair boundary at multiples of the pair
-  length counted from Start (`16S`: 12-clock pairs, steps at 0, 8, 12, 20, 24 …; `8S`:
+  length counted from Start (16th S: 12-clock pairs, steps at 0, 8, 12, 20, 24 …; 8th S:
   24-clock pairs, steps at 0, 16, 24, 40, 48 …), gate-off at half of each step, rounded
   down. `[HW: unverified]`
   The clock count runs from Start: Start resets the count and the pattern position; Continue
@@ -355,10 +358,13 @@ this engine deliberately differs it is marked **(change)** with the reason.
 4. Realisation: program parameters **93** (0–127) and **94** (0–4) of layer A, which the stock
    OS stores, dumps and loads verbatim but never reads: 94 = octaves 1–4 (**0 = no arp
    data**); 93 = on/off (bit 0) | mode (bits 1–2) | note-value code 0–14 (bits 3–6). Values
-   outside those ranges count as no arp data. The note-value code is fixed per value and is
-   **not** the position in the "Note value" list, so programs saved before the swing values
-   were added keep their value: codes 0–12 = 1/32, 1/16T, 1/16, 1/8T, 1/16d, 1/8, 1/8d, 1/4,
-   1/4d, 1/2, 1, 2 bars, 4 bars; 13 = `16S`; 14 = `8S` `[HW: unverified for 13/14]`. Written
+   outside those ranges (code 15 included) count as no arp data. The note-value code is
+   fixed per value and is **not** the position in the "Note value" list, so programs saved
+   by earlier builds keep their value. Written: 0 = 32nd, 1 = 16th T, 2 = 16th, 3 = 8th T,
+   5 = 8th, 6 = 8th D, 7 = Qtr, 9 = Half, 13 = 16th S, 14 = 8th S `[HW: unverified for
+   13/14]`. Read only (legacy codes of values no longer in the list, loaded as the nearest
+   remaining value): 4 (dotted 16th) → 16th, 8 (dotted quarter) → Qtr, 10, 11, 12 (whole,
+   2 bars, 4 bars) → Half `[HW: unverified]`. Written
    through stock's plain parameter store `0x2003CEF5(layer, param, value)` (no clamp, no NRPN echo) on every change; read with
    `0x2003CB69(layer, param)` from a hook on the unconditional `bl 0x2003B6B0` at
    `0x2003D15C` at the end of stock's program-apply routine, which every load path reaches
@@ -368,37 +374,43 @@ this engine deliberately differs it is marked **(change)** with the reason.
    every other parameter in that mode (the stored ones are ignored). `[HW: 2026-10-07 — the
    voice engine receives 93/94 like every parameter and showed no audible reaction to them]`
 
-### Note value (arp/seq step length) `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock and MIDI sync]`
+### Note value (arp/seq step length) `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock and MIDI sync, with the earlier 15-value list; the Prophet-6 list and order below: unverified]`
 
-1. The step length is one of 15 values, shortest to longest by average step length: 1/32,
-   1/16T, 1/16, `16S`, 1/8T, 1/16d, 1/8, `8S`, 1/8d, 1/4, 1/4d, 1/2, 1 (whole), 2 bars,
-   4 bars (a bar is four beats). Power-up default is 1/8. Saved with the program ("Patch
-   memory").
-   **Swing** `[HW: unverified]` (as the Prophet-6's 2 : 1 swing): `16S` and `8S` play steps in
-   pairs, the first step of a pair lasting 2/3 of the pair and the second 1/3. A `16S` pair is
-   two sixteenths (1/2 beat: 1/3 + 1/6 beat), an `8S` pair two eighths (one beat: 2/3 + 1/3
-   beat), so the average step equals the plain value. The pattern order is unaffected.
-2. A440 + **Program 8** selects the next shorter (faster) value, A440 + **Program 7** the
-   next longer — think − / +, where + is faster (swapped from the first build on
-   2026-10-07, verified the same day); the ends do not wrap. The display shows the new value:
-   `32`, `16t`, `16`, `16S`, `8t`, `16d`, `8`, `8S`, `8d`, `4`, `4d`, `2`, `1`, `2b`, `4b`
-   (right-aligned; glyphs as the panel font allows).
+1. The step length is one of the Prophet-6's ten values, in the Prophet-6's order from
+   longest to shortest: **Half** (1/2 note, 2 beats), **Qtr** (1/4, 1 beat), **8th D**
+   (dotted eighth, 3/4 beat), **8th** (1/2 beat), **8th S** (eighth swing), **8th T**
+   (eighth triplet, 1/3 beat), **16th** (1/4 beat), **16th S** (sixteenth swing), **16th T**
+   (1/6 beat), **32nd** (1/8 beat) `[HW: unverified]`. Power-up default is 8th. Saved with
+   the program ("Patch memory"). (Dotted 16th, dotted quarter, whole, 2 bars and 4 bars of
+   the earlier list are gone; programs saved at them load at the nearest remaining value.)
+   **Swing** `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock]` (as the
+   Prophet-6's 2 : 1 swing): 8th S and 16th S play steps in pairs, the first step of a pair
+   lasting 2/3 of the pair and the second 1/3. A 16th S pair is two sixteenths (1/2 beat:
+   1/3 + 1/6 beat), an 8th S pair two eighths (one beat: 2/3 + 1/3 beat), so the average
+   step equals the plain value. The pattern order is unaffected.
+2. A440 + **Program 8** selects the next value in the list (shorter, +), A440 + **Program 7**
+   the previous one (longer, −) — + is faster; the ends do not wrap (Half and 32nd stay).
+   The list order is the Prophet-6's, so a step does not always change the length
+   monotonically: 8th S (average 1/2 beat) sits between 8th and 8th T, 16th S between 16th
+   and 16th T. The display shows the new value, right-aligned in three characters: `2`,
+   `4`, `8d`, `8`, `8S`, `8t`, `16`, `16S`, `16t`, `32` `[HW: unverified]`.
 3. Internal clock: the step period is the note value at the current BPM; the note is
    released half-way through the step (each swing step at half of its own length). At
-   120 BPM an `8S` pair is 500 ms (steps 334 ms and 166 ms with the remainder carried), a
-   `16S` pair 250 ms.
-4. MIDI sync: steps follow the incoming clock at the selected value — 3, 4, 6, 8 + 4
-   (`16S`), 8, 9, 12, 16 + 8 (`8S`), 18, 24, 36, 48, 96, 192 or 384 clocks per step for the
-   list above, counted from Start (swing pairs start at multiples of
-   the pair length), so step boundaries fall exactly on clocks and stay on the DAW grid
-   across a change.
+   120 BPM an 8th S pair is 500 ms (steps 334 ms and 166 ms with the remainder carried), a
+   16th S pair 250 ms.
+4. MIDI sync: steps follow the incoming clock at the selected value — Half 48, Qtr 24,
+   8th D 18, 8th 12, 8th S 24-clock pairs split 16 + 8, 8th T 8, 16th 6, 16th S 12-clock
+   pairs split 8 + 4, 16th T 4, 32nd 3 clocks per step — counted from Start (swing pairs
+   start at multiples of the pair length), so step boundaries fall exactly on clocks and stay
+   on the DAW grid across a change. `[HW: unverified for the swing values]`
 5. A change takes effect from the next step. Applies to the arp and to seq alike.
-6. Realisation: `rate.c` maps each value to beats per step as a fraction (1/32 → 1/8 beat …
-   4 bars → 16 beats) plus a swing flag — for a swing value the fraction is the pair length
-   (`16S` → 1/2, `8S` → 1) — and to its patch-memory code; the engine's internal period is
-   `60 s / BPM × beats` with the remainder carried (swing: 2/3 and 1/3 of the pair, exact in
-   integers), and the MIDI-clock step (pair) is `24 × beats` clocks (always integral, and a
-   multiple of 3 for swing pairs).
+6. Realisation: `rate.c` holds the list in the order above (index 0 = Half … 9 = 32nd;
+   `rate_step(dir)` moves −1 = longer / Program 7, +1 = shorter / Program 8) and maps each
+   value to beats per step as a fraction (Half → 2 … 32nd → 1/8 beat) plus a swing flag —
+   for a swing value the fraction is the pair length (16th S → 1/2, 8th S → 1) — and to its
+   patch-memory code; the engine's internal period is `60 s / BPM × beats` with the
+   remainder carried (swing: 2/3 and 1/3 of the pair, exact in integers), and the MIDI-clock
+   step (pair) is `24 × beats` clocks (always integral, and a multiple of 3 for swing pairs).
 
 ### Keyboard octave shift `[HW: verified 2026-10-07, Prophet-10 Rev4 — Lo Freq modifier, tap replay, shifted keys and MIDI Out]`
 

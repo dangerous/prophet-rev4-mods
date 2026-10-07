@@ -34,7 +34,11 @@ behavioural source of truth; this file is the engineering context around it.
   and then dropped (a normal tap soon after power-on killed the arp); the table check now
   excludes an A440 that was reported pressed — verified both ways 2026-10-07 (so the panel
   sends no synthetic press for a pre-held button). Program 7/8 direction swap (8 =
-  shorter/+) verified the same day. Nothing pending on hardware.
+  shorter/+) verified the same day. A440 + Glide Rate tempo (Glide Rate alone = glide with
+  the arp running) and the `16S` / `8S` swing values (internal clock) verified 2026-10-07.
+  Pending: the Prophet-6 ten-value note-value list and order (Program 7/8 walk, display),
+  the legacy-code mapping on load (programs saved at 16d / 4d / 1 / 2b / 4b), and swing
+  under `Syn`.
 - First native flash attempt stalled the loader at `100` with the eight Program LEDs lit:
   the payload was an exact multiple of 7 and our encoder omitted the empty tail group's MS
   byte, which the loader always reads. Nothing was written; power cycle recovered. Fixed in
@@ -122,6 +126,11 @@ behavioural source of truth; this file is the engineering context around it.
   base order; pitch-anchored stepping for the pool, index-anchored for the sequence.
 - Timing: internal `acc += bpm*den` per tick, step at `60000*num`, gate at half; MIDI clock
   `24*num/den` per step counted from Start; 1 s loss releases and resets the count.
+- Note value (`rate.c`): the Prophet-6's ten values in its panel order, index 0 = Half …
+  9 = 32nd, so `rate_step(+1)` = shorter = Program 8. The order is not monotonic in average
+  length (8S between 8 and 8t, 16S between 16 and 16t) — by design, as on the P6. Patch codes
+  are fixed per value (never the index); codes 4, 8, 10–12 of removed values are read-only
+  and map to the nearest remaining value.
 
 ## Lessons
 

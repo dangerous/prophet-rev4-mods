@@ -112,42 +112,39 @@ static void test_program_buttons_set_octaves_clock_and_note_value(void) {
     CHECK(a.ext == 1 && last_d3_is(CH_S, CH_Y, CH_N));
     btn(P5, PRESS); btn(P5, RELEASE);
     CHECK(a.ext == 0 && last_d3_is(CH_I, CH_N, CH_T));
-    btn(P8, PRESS); btn(P8, RELEASE);                                  /* shorter (+): 1/16d */
-    CHECK(rate_index(&u.rate) == RATE_DEFAULT_INDEX - 1 && a.beats_num == 3 && a.beats_den == 8);
-    CHECK(last_d3_is(1, 6, CH_D));
-    btn(P7, PRESS); btn(P7, RELEASE); btn(P7, PRESS); btn(P7, RELEASE);  /* longer (-) twice: 8S */
-    CHECK(a.beats_num == 1 && a.beats_den == 1 && a.swing == 1 && last_d3_is(BLANK, 8, CH_S));
-    btn(P7, PRESS); btn(P7, RELEASE);                                  /* 1/8d: swing off again */
+    btn(P8, PRESS); btn(P8, RELEASE);                                  /* shorter (+): 8th S */
+    CHECK(rate_index(&u.rate) == RATE_DEFAULT_INDEX + 1 && a.beats_num == 1 && a.beats_den == 1 && a.swing == 1);
+    CHECK(last_d3_is(BLANK, 8, CH_S));
+    btn(P7, PRESS); btn(P7, RELEASE); btn(P7, PRESS); btn(P7, RELEASE);  /* longer (-) twice: 8th, 8th D */
     CHECK(a.beats_num == 3 && a.beats_den == 4 && a.swing == 0 && last_d3_is(BLANK, 8, CH_D));
+    btn(P7, PRESS); btn(P7, RELEASE);                                  /* Qtr */
+    CHECK(a.beats_num == 1 && a.beats_den == 1 && a.swing == 0 && last_d3_is(BLANK, BLANK, 4));
     btn(A440, RELEASE);
     CHECK(!a.enabled);
 }
 
-/* from 1/8: Program 8 (shorter) and Program 7 (longer) step through the list with its display */
+/* from 8th: Program 8 (shorter, +) and Program 7 (longer, -) walk the Prophet-6 list with its display */
 static void test_program_7_8_step_through_every_value(void) {
-    static const int SHORTER[][5] = {   /* d0 d1 d2 num den, swing in the column below */
-        { 1, 6, CH_D, 3, 8 }, { BLANK, 8, CH_T, 1, 3 }, { 1, 6, CH_S, 1, 2 }, { BLANK, 1, 6, 1, 4 },
-        { 1, 6, CH_T, 1, 6 }, { BLANK, 3, 2, 1, 8 }, { BLANK, 3, 2, 1, 8 } };
-    static const int SHORTER_SWING[] = { 0, 0, 1, 0, 0, 0, 0 };
-    static const int LONGER[][5] = {
-        { BLANK, 8, CH_S, 1, 1 }, { BLANK, 8, CH_D, 3, 4 }, { BLANK, BLANK, 4, 1, 1 }, { BLANK, 4, CH_D, 3, 2 },
-        { BLANK, BLANK, 2, 2, 1 }, { BLANK, BLANK, 1, 4, 1 }, { BLANK, 2, 0x0B, 8, 1 }, { BLANK, 4, 0x0B, 16, 1 },
-        { BLANK, 4, 0x0B, 16, 1 } };
-    static const int LONGER_SWING[] = { 1, 0, 0, 0, 0, 0, 0, 0, 0 };
+    static const int SHORTER[][6] = {   /* d0 d1 d2 num den swing */
+        { BLANK, 8, CH_S, 1, 1, 1 }, { BLANK, 8, CH_T, 1, 3, 0 }, { BLANK, 1, 6, 1, 4, 0 },
+        { 1, 6, CH_S, 1, 2, 1 }, { 1, 6, CH_T, 1, 6, 0 }, { BLANK, 3, 2, 1, 8, 0 }, { BLANK, 3, 2, 1, 8, 0 } };
+    static const int LONGER[][6] = {
+        { BLANK, 8, CH_D, 3, 4, 0 }, { BLANK, BLANK, 4, 1, 1, 0 }, { BLANK, BLANK, 2, 2, 1, 0 },
+        { BLANK, BLANK, 2, 2, 1, 0 } };
     reset();
     btn(A440, PRESS);
-    for (int i = 0; i < 7; i++) {                                      /* 16d 8t 16S 16 16t 32, stays 32 */
+    for (int i = 0; i < 7; i++) {                                      /* 8S 8t 16 16S 16t 32, stays 32 */
         btn(P8, PRESS); btn(P8, RELEASE);
         CHECK(last_d3_is(SHORTER[i][0], SHORTER[i][1], SHORTER[i][2]));
-        CHECK(a.beats_num == SHORTER[i][3] && a.beats_den == SHORTER[i][4] && a.swing == SHORTER_SWING[i]);
+        CHECK(a.beats_num == SHORTER[i][3] && a.beats_den == SHORTER[i][4] && a.swing == SHORTER[i][5]);
     }
     btn(A440, RELEASE);
     reset();
     btn(A440, PRESS);
-    for (int i = 0; i < 9; i++) {                                      /* 8S 8d 4 4d 2 1 2b 4b, stays 4b */
+    for (int i = 0; i < 4; i++) {                                      /* 8d 4 2, stays 2 */
         btn(P7, PRESS); btn(P7, RELEASE);
         CHECK(last_d3_is(LONGER[i][0], LONGER[i][1], LONGER[i][2]));
-        CHECK(a.beats_num == LONGER[i][3] && a.beats_den == LONGER[i][4] && a.swing == LONGER_SWING[i]);
+        CHECK(a.beats_num == LONGER[i][3] && a.beats_den == LONGER[i][4] && a.swing == LONGER[i][5]);
     }
     btn(A440, RELEASE);
     CHECK(!a.enabled);
@@ -324,12 +321,26 @@ static void test_settings_are_written_to_the_patch_slots(void) {
     CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (5 << 3)));
     btn(P3, PRESS); btn(P3, RELEASE);                                  /* 3 octaves */
     CHECK(params[ARPUI_PARAM_OCT] == 3);
-    btn(P8, PRESS); btn(P8, RELEASE);                                  /* shorter: 1/16d, code 4 */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (4 << 3)));
-    btn(P8, PRESS); btn(P8, RELEASE); btn(P8, PRESS); btn(P8, RELEASE);  /* 1/8T, 16S: code 13 */
+    btn(P8, PRESS); btn(P8, RELEASE);                                  /* shorter: 8th S, code 14 */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (14 << 3)));
+    btn(P8, PRESS); btn(P8, RELEASE); btn(P8, PRESS); btn(P8, RELEASE);  /* 8th T, 16th: code 2 */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (2 << 3)));
+    btn(P8, PRESS); btn(P8, RELEASE);                                  /* 16th S: code 13 */
     CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (13 << 3)));
-    btn(P7, PRESS); btn(P7, RELEASE); btn(P7, PRESS); btn(P7, RELEASE);  /* 1/8T, 1/16d: code 4 */
-    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (4 << 3)));
+    btn(P8, PRESS); btn(P8, RELEASE); btn(P8, PRESS); btn(P8, RELEASE);  /* 16th T, 32nd: code 0 */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (0 << 3)));
+    for (int i = 0; i < 9; i++) { btn(P7, PRESS); btn(P7, RELEASE); }  /* longer to Half: code 9 */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (9 << 3)));
+    btn(P8, PRESS); btn(P8, RELEASE);                                  /* Qtr: code 7 */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (7 << 3)));
+    btn(P8, PRESS); btn(P8, RELEASE); btn(P8, PRESS); btn(P8, RELEASE);  /* 8th D, 8th: code 5 */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (5 << 3)));
+    btn(P7, PRESS); btn(P7, RELEASE);                                  /* 8th D: code 6 */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (6 << 3)));
+    btn(P8, PRESS); btn(P8, RELEASE); btn(P8, PRESS); btn(P8, RELEASE);  /* 8th, 8th S: code 14 */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (14 << 3)));
+    btn(P8, PRESS); btn(P8, RELEASE);                                  /* 8th T: code 3 */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (3 << 3)));
     int n = stores();
     btn(P5, PRESS); btn(P5, RELEASE);                                  /* clock source: not saved */
     btn(A440, RELEASE);
@@ -338,33 +349,58 @@ static void test_settings_are_written_to_the_patch_slots(void) {
     arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 900);
     CHECK(stores() == n);
     tap_a440();                                                        /* off: remembered as off */
-    CHECK(params[ARPUI_PARAM_PACK] == (0 | (1 << 1) | (4 << 3)) && params[ARPUI_PARAM_OCT] == 3);
+    CHECK(params[ARPUI_PARAM_PACK] == (0 | (1 << 1) | (3 << 3)) && params[ARPUI_PARAM_OCT] == 3);
 }
 
 static void test_program_load_applies_saved_state(void) {
     reset();
     params[ARPUI_PARAM_OCT] = 2;
-    params[ARPUI_PARAM_PACK] = 1 | (2 << 1) | (7 << 3);                /* on, Up/Down, 1/4 */
+    params[ARPUI_PARAM_PACK] = 1 | (2 << 1) | (7 << 3);                /* on, Up/Down, Qtr */
     int n = stores();
     arpui_program_loaded(&u, &a);
-    CHECK(a.enabled && a.mode == ARP_UPDOWN && a.octaves == 2 && rate_index(&u.rate) == 9);   /* code 7 */
+    CHECK(a.enabled && a.mode == ARP_UPDOWN && a.octaves == 2 && rate_index(&u.rate) == 1);   /* code 7 */
     CHECK(a.beats_num == 1 && a.beats_den == 1 && a.swing == 0);
     CHECK(stores() == n);                                              /* loading does not write back */
     ticks(1);
     CHECK(last_led() == 1);
-    params[ARPUI_PARAM_PACK] = 0 | (1 << 1) | (3 << 3);                /* saved with the arp off, Down, 1/8T */
+    params[ARPUI_PARAM_PACK] = 0 | (1 << 1) | (3 << 3);                /* saved with the arp off, Down, 8th T */
     params[ARPUI_PARAM_OCT] = 4;
     arpui_program_loaded(&u, &a);
-    CHECK(!a.enabled && a.mode == ARP_DOWN && a.octaves == 4 && rate_index(&u.rate) == 4);   /* code 3 */
-    params[ARPUI_PARAM_PACK] = 1 | (14 << 3);                         /* 8S */
+    CHECK(!a.enabled && a.mode == ARP_DOWN && a.octaves == 4 && rate_index(&u.rate) == 5);   /* code 3 */
+    params[ARPUI_PARAM_PACK] = 1 | (14 << 3);                         /* 8th S */
     arpui_program_loaded(&u, &a);
-    CHECK(a.enabled && rate_index(&u.rate) == 7 && a.beats_num == 1 && a.beats_den == 1 && a.swing == 1);
-    params[ARPUI_PARAM_PACK] = 1 | (13 << 3);                         /* 16S */
+    CHECK(a.enabled && rate_index(&u.rate) == 4 && a.beats_num == 1 && a.beats_den == 1 && a.swing == 1);
+    params[ARPUI_PARAM_PACK] = 1 | (13 << 3);                         /* 16th S */
     arpui_program_loaded(&u, &a);
-    CHECK(rate_index(&u.rate) == 3 && a.beats_num == 1 && a.beats_den == 2 && a.swing == 1);
-    params[ARPUI_PARAM_PACK] = 1 | (5 << 3);                          /* 1/8: swing off again */
+    CHECK(rate_index(&u.rate) == 7 && a.beats_num == 1 && a.beats_den == 2 && a.swing == 1);
+    params[ARPUI_PARAM_PACK] = 1 | (5 << 3);                          /* 8th: swing off again */
     arpui_program_loaded(&u, &a);
     CHECK(rate_index(&u.rate) == RATE_DEFAULT_INDEX && a.beats_num == 1 && a.beats_den == 2 && a.swing == 0);
+}
+
+/* programs saved by earlier builds at a value no longer in the list load at the nearest one */
+static void test_legacy_note_value_codes_load_at_the_nearest_value(void) {
+    static const int LEGACY[][4] = {    /* code, index, num, den */
+        { 4, 6, 1, 4 },                 /* 1/16d -> 16th */
+        { 8, 1, 1, 1 },                 /* 1/4d -> Qtr */
+        { 10, 0, 2, 1 }, { 11, 0, 2, 1 }, { 12, 0, 2, 1 } };   /* whole, 2 bars, 4 bars -> Half */
+    reset();
+    for (int i = 0; i < 5; i++) {
+        params[ARPUI_PARAM_OCT] = 1;
+        params[ARPUI_PARAM_PACK] = 1 | (LEGACY[i][0] << 3);
+        rate_set_index(&u.rate, RATE_DEFAULT_INDEX);
+        int n = stores();
+        arpui_program_loaded(&u, &a);
+        CHECK(a.enabled && rate_index(&u.rate) == LEGACY[i][1]);
+        CHECK(a.beats_num == LEGACY[i][2] && a.beats_den == LEGACY[i][3] && a.swing == 0);
+        CHECK(stores() == n && params[ARPUI_PARAM_PACK] == (1 | (LEGACY[i][0] << 3)));   /* not rewritten */
+    }
+    btn(A440, PRESS); btn(BANK, PRESS); btn(BANK, RELEASE); btn(A440, RELEASE);   /* an edit writes */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (9 << 3)));                  /* Half's own code */
+    params[ARPUI_PARAM_PACK] = 1 | (4 << 3);
+    arpui_program_loaded(&u, &a);
+    btn(A440, PRESS); btn(P7, PRESS); btn(P7, RELEASE); btn(A440, RELEASE);       /* 16th -> 8th T */
+    CHECK(rate_index(&u.rate) == 5 && params[ARPUI_PARAM_PACK] == (1 | (0 << 1) | (3 << 3)));
 }
 
 static void test_program_without_arp_data_switches_off_and_leaves_settings(void) {
@@ -403,6 +439,7 @@ int main(void) {
     test_a440_pressed_after_power_on_is_just_a_press();
     test_settings_are_written_to_the_patch_slots();
     test_program_load_applies_saved_state();
+    test_legacy_note_value_codes_load_at_the_nearest_value();
     test_program_without_arp_data_switches_off_and_leaves_settings();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;

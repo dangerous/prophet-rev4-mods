@@ -18,7 +18,7 @@ All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
 
 - **Arp** — tap **A440** to switch it on (LED). Modes Up, Down, Up/Down (ends not
   repeated), Random; 1–4 octaves played **per pass** (C3 D4 | C4 D5); A440 + Glide Rate
-  sets 40–300 BPM; Glide Rate alone is always glide `[HW: unverified]`; MIDI clock sync with
+  sets 40–300 BPM; Glide Rate alone is always glide; MIDI clock sync with
   Start/Stop/Continue, 1 s clock‑loss, the pattern always on the clock grid. One note
   sounds per step, also under HOLD.
 - **Re‑latch under HOLD** — with HOLD active, the first key after releasing all keys starts
@@ -27,10 +27,14 @@ All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
   Then play a key: the sequence runs transposed from the first recorded note, at the arp's
   tempo/sync, in the arp's direction mode, over the arp's octaves; HOLD latches it.
   A440 + Program 6 clears it.
-- **Note value** — A440 + Program 8 (shorter, +) / Program 7 (longer, −): 1/32, 1/16T,
-  1/16, 16S, 1/8T, 1/16d, 1/8, 8S, 1/8d, 1/4, 1/4d, 1/2, 1, 2 bars, 4 bars, on the internal
-  clock and under MIDI sync. Default 1/8. `16S` / `8S` are sixteenth / eighth **swing**
-  (Prophet‑6 style 2 : 1 — each pair of steps split 2/3 + 1/3) `[HW: unverified]`.
+- **Note value** — the Prophet‑6's ten values in its order, A440 + Program 8 stepping
+  towards the short end (+) and Program 7 towards the long end (−): Half, Qtr, 8th D, 8th,
+  8th S, 8th T, 16th, 16th S, 16th T, 32nd (display `2 4 8d 8 8S 8t 16 16S 16t 32`), on the
+  internal clock and under MIDI sync. Default 8th. 8th S / 16th S are eighth / sixteenth
+  **swing** (Prophet‑6 style 2 : 1 — each pair of steps split 2/3 + 1/3; verified on the
+  internal clock). The ten-value list and order `[HW: unverified]`; programs saved at a
+  removed value (dotted 16th, dotted quarter, whole, 2 or 4 bars) load at the nearest
+  remaining one.
 - **Keyboard octave shift** — hold the Osc B **Lo Freq** button, Bank = up, Group = down
   (±2; both together = 0). Applies to the keys you play and to MIDI Out; a plain tap still
   toggles Lo Freq (LED on release).

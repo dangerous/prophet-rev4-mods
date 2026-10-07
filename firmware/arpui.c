@@ -129,7 +129,7 @@ static void combo(arpui_t *u, arp_t *a, int id)
         break;
     case P7:
     case P8:
-        if (rate_step(&u->rate, id == P7 ? 1 : -1))          /* 7 = longer (-), 8 = shorter (+) */
+        if (rate_step(&u->rate, id == P7 ? -1 : 1))          /* 7 = longer (-), 8 = shorter (+) */
             apply_rate(u, a);
         ui_show_rate(u);
         store_patch(u, a);
