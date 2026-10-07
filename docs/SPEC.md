@@ -437,10 +437,13 @@ deviations are marked **(change)** with the reason.
 
 ### Button id readout `[HW: unverified]`
 
-While A440 is held, pressing a panel button that neither V5 nor the wrapper assigns
-(anything other than Program 1–8, Bank, Group, Lo Freq (id 37) and UNISON, id
-`0x19`, which V5 treats as a pass-through modifier) shows
-that button's id on the display for about a second and is otherwise ignored. An aid for
+While A440 is held, pressing a panel button that the arp does not assign — anything other
+than Program 1–8, Bank, Group, GLOBALS (id 13 / `0x0D`, which must still open its menu) and
+Lo Freq (id 37, consumed by the keyboard octave shift) — shows that button's id on the
+display and is otherwise ignored. `[HW: 2026-10-07 — ids read out as expected (GLOBALS
+shows 13); the V5-based image excludes UNISON (`0x19`) instead of GLOBALS, a leftover of
+the mis-identified id, so there Unison toggles and GLOBALS is read out; correct in the
+native build only]` An aid for
 mapping panel button ids when designing new combinations; V5 passed such presses to
 stock, where they had no defined meaning while A440 was held.
 
