@@ -17,7 +17,7 @@
 #define ARPUI_BANK 0x28
 #define ARPUI_LED_A440 0x24
 #define ARPUI_POT_GLIDE 0x16
-#define ARPUI_BOOT_TICKS 3000         /* kill-switch window after power-on (3 s) */
+#define ARPUI_BOOT_TICKS 3000         /* kill-switch window after power-on (3 s; the panel link comes up late) */
 
 typedef struct {
     rate_t   rate;
@@ -27,7 +27,8 @@ typedef struct {
     uint8_t  led_on;                  /* A440 LED as last set */
     uint8_t  kill;                    /* kill switch engaged: every hook passes to stock */
     uint16_t boot_ticks;              /* ticks seen since power-on, saturating at the window */
-    uint8_t  pad[2];
+    uint8_t  a440_seen;               /* an A440 press event has been reported since power-on */
+    uint8_t  pad;
     uint8_t  swallow[8];              /* bitmap of buttons whose press was consumed: consume the release too */
 } arpui_t;
 

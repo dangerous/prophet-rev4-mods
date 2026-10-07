@@ -30,8 +30,10 @@ behavioural source of truth; this file is the engineering context around it.
 - 2026-10-07, **engine** (`prophet10_native.syx`, stock 2.1.0 base): first flash passed the
   whole checklist (boot, A440, display revert, pattern incl. per-pass octaves, HOLD, seq,
   Glide tempo, note values, Syn, Lo Freq shift incl. MIDI Out, CC 123, program change,
-  Globals); kill switch verified both ways (A440 held at power-on, pressed within 3 s).
-  Pending re-test: the Program 7/8 direction swap (8 = shorter/+).
+  Globals); kill switch verified with a 3 s table window. A press-event trigger was added
+  and then dropped (a normal tap soon after power-on killed the arp); the table check now
+  excludes an A440 that was reported pressed. Pending re-test: that exclusion, and the
+  Program 7/8 direction swap (8 = shorter/+).
 - First native flash attempt stalled the loader at `100` with the eight Program LEDs lit:
   the payload was an exact multiple of 7 and our encoder omitted the empty tail group's MS
   byte, which the loader always reads. Nothing was written; power cycle recovered. Fixed in
@@ -109,7 +111,8 @@ behavioural source of truth; this file is the engineering context around it.
   address the code touches is in `stock_iface[]` (`native.c`), compared word for word by
   `test_image.py`; the code may reference nothing else outside its record.
 - Lazy init on the first hook (under `cpsid i`); kill switch checked in the tick before any
-  engine code; `UI->kill` makes every hook fall through to stock.
+  engine code (button-held table during the first 3 s, unless an A440 press event was seen);
+  `UI->kill` makes every hook fall through to stock.
 - HOLD while the arp is on: hook the hold query in `note_off`; withhold the voice-engine
   hold message while enabled; re-post it on enable/disable transitions (`vhold.c`).
 - Display: one 1.5 s timer (`disp.c`) restarted by every message; stock restore at expiry.
@@ -132,5 +135,6 @@ behavioural source of truth; this file is the engineering context around it.
 
 ## Open items
 
-- Re-test the Program 7/8 swap on hardware; seq recording from MIDI-in not yet exercised.
+- Re-test on hardware: the Program 7/8 swap, the kill switch with the press exclusion; seq
+  recording from MIDI-in not yet exercised.
 - Possible later features: arp to MIDI Out (for an external synth), rests in seq.

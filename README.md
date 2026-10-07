@@ -36,8 +36,8 @@ All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
 - **Display** — every message (mode, `o N`, `int`/`Syn`, `OFF`, BPM, note value, step
   count, shift, button id) returns to the patch display after 1.5 s.
 - **Button id readout** — hold A440 and press an unused button to see its id.
-- **Kill switch** — hold A440 at power‑on (or press it within 3 s) and every hook passes
-  straight through to stock for that session.
+- **Kill switch** — hold A440 while powering on and every hook passes straight through to
+  stock for that session (a tap after power‑on is just a tap).
 - **Globals menu** is pure stock while it is open, so Sequential's A440 tuning tone is still
   available from there.
 

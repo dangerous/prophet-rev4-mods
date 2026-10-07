@@ -246,17 +246,17 @@ static void test_a440_held_at_power_on_disables_everything(void) {
     CHECK(ARPUI_BOOT_TICKS == 3000);                                   /* the panel link can come up late */
 }
 
-static void test_a440_pressed_within_the_window_also_kills(void) {
+static void test_a440_pressed_after_power_on_is_just_a_press(void) {
     arpui_init(&u); arp_init(&a); clear_log();
-    ticks(2500);
-    CHECK(btn(A440, PRESS) == 0 && u.kill);                            /* the press reaches stock */
-    CHECK(btn(A440, RELEASE) == 0 && !a.enabled);
+    ticks(500);
+    CHECK(btn(A440, PRESS) == 1 && !u.kill);                           /* an ordinary press */
+    fake_a440_down = 1;                                                /* the table reflects it */
+    ticks(200);
+    CHECK(!u.kill);
+    fake_a440_down = 0;
+    CHECK(btn(A440, RELEASE) == 1 && a.enabled && !u.kill);           /* the tap toggled the arp */
     ticks(ARPUI_BOOT_TICKS);
-    CHECK(btn(A440, PRESS) == 0 && btn(A440, RELEASE) == 0 && !a.enabled);
-    arpui_init(&u); arp_init(&a); clear_log();
-    ticks(ARPUI_BOOT_TICKS + 1);                                       /* just after the window: a tap toggles */
-    tap_a440();
-    CHECK(!u.kill && a.enabled);
+    CHECK(!u.kill);
 }
 
 int main(void) {
@@ -273,7 +273,7 @@ int main(void) {
     test_messages_revert_to_patch_display_after_1500_ticks();
     test_led_follows_enabled_only_when_it_changes();
     test_a440_held_at_power_on_disables_everything();
-    test_a440_pressed_within_the_window_also_kills();
+    test_a440_pressed_after_power_on_is_just_a_press();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;
 }

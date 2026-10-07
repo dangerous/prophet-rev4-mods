@@ -23,9 +23,10 @@ Manual verification on the instrument. Record results against the spec markers i
 
 ## First things after a new build
 
-- [ ] **Kill switch**: power on and press A440 within 3 s (or hold it from before power-on).
-      Everything must be pure stock: keys sound, A440 plays the tuning tone, Glide Rate is
-      glide, HOLD sustains. Power cycle without touching anything.
+- [ ] **Kill switch**: hold A440 from before power-on, keep it ~3 s. Everything must be pure
+      stock: keys sound, A440 plays the tuning tone, Glide Rate is glide, HOLD sustains.
+      Power cycle; this time tap A440 about 1 s after power-on: it must **not** kill the arp
+      (tap again later: arp on as usual).
 - [ ] Arp off: play, HOLD, sustain pedal, MIDI in, program change — all as stock. A440 does
       **not** play the tuning tone (it is the arp button); Globals → A440 still does.
 - [ ] Tap A440: LED on, display `120`, patch number back after 1.5 s. Hold C‑E‑G: C E G C…
@@ -129,7 +130,7 @@ Manual verification on the instrument. Record results against the spec markers i
 
 ## If something is wrong
 
-- The engine only runs inside the hooked stock calls. The kill switch (A440 at power-on or
-  within 3 s) bypasses every hook for the session. If the synth misbehaves otherwise, the
+- The engine only runs inside the hooked stock calls. The kill switch (A440 held from before
+  power-on) bypasses every hook for the session. If the synth misbehaves otherwise, the
   USB OS-update path still works: re-send stock 2.1.0 over USB exactly as above. The DIN
   bootloader (`btl`, both wheels up at power-on) is only needed if the unit will not boot.

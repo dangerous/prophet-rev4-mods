@@ -282,13 +282,15 @@ this engine deliberately differs it is marked **(change)** with the reason.
 - Events from the other task are queued to the tick; the queue holds 64 events; if it ever
   fills, the newest events are dropped and the arp is **not** disabled **(change: V5 cleared
   and disabled the arp on overflow)**.
-- **Kill switch**: A440 held at power-on, **or pressed within the first 3 s after
-  power-on**, disables every arp hook for the session (all hooks fall straight through to
-  stock; the A440 press itself reaches stock too), so a misbehaving engine can be bypassed
-  without re-flashing. Detected two ways: the stock button-held table, and the A440 press
-  event itself. `[HW: verified 2026-10-07, Prophet-10 Rev4 — both ways; the original 1 s
-  table-only window missed a button held from before power-on because the panel link comes
-  up later than that, not because pre-held buttons go unreported]`
+- **Kill switch**: A440 **held from before power-on** disables every arp hook for the
+  session (all hooks fall straight through to stock), so a misbehaving engine can be
+  bypassed without re-flashing. A press after power-on — even within the first seconds —
+  is an ordinary A440 press. Realisation: during the first 3 s of ticks (the panel link
+  comes up later than 1 s) the stock button-held table is polled; A440 down there without
+  a press event having been reported since power-on means it was held from the start.
+  `[HW: 2026-10-07 — a 1 s table-only window missed the pre-held button, 3 s saw it; a
+  press-event trigger was tried and dropped because a normal A440 tap soon after power-on
+  also killed the arp; held-from-start with the press exclusion not yet re-tested]`
 - No code runs at boot; all state is zero in the image and initialised lazily by the first
   hook that runs.
 

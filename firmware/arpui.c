@@ -115,10 +115,6 @@ int arpui_button(arpui_t *u, arp_t *a, int id, int value)
     uint8_t bit;
     if (u->kill || id < 0 || id > 63)
         return 0;
-    if (id == ARPUI_A440 && value == UI_PRESS && u->boot_ticks < ARPUI_BOOT_TICKS) {
-        u->kill = 1;                                       /* kill switch: A440 soon after power-on */
-        return 0;
-    }
     bit = (uint8_t)(1u << (id & 7));
     if (plat_globals_open()) {                             /* the Globals menu is pure stock */
         if (u->a440_held)
@@ -127,6 +123,7 @@ int arpui_button(arpui_t *u, arp_t *a, int id, int value)
     }
     if (id == ARPUI_A440) {
         if (value == UI_PRESS) {
+            u->a440_seen = 1;                              /* a real press: not held from power-on */
             u->a440_held = 1;
             u->a440_used = 0;
             arp_seq_record(a, 1);
@@ -202,9 +199,9 @@ int arpui_pot_change(arpui_t *u, arp_t *a, int pot)
 void arpui_tick(arpui_t *u, arp_t *a)
 {
     int on;
-    if (u->boot_ticks < ARPUI_BOOT_TICKS) {                /* kill switch: A440 held after power-on */
+    if (u->boot_ticks < ARPUI_BOOT_TICKS) {                /* kill switch: A440 held from power-on */
         u->boot_ticks++;
-        if (plat_a440_down())
+        if (plat_a440_down() && !u->a440_seen)
             u->kill = 1;
     }
     if (u->kill)
