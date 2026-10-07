@@ -1,0 +1,215 @@
+#include "arpui.h"
+#include "platform.h"
+
+enum { PRESS = 1, RELEASE = 2 };
+enum { CH_U = 0x1E, CH_P = 0x19, CH_D = 0x0D, CH_N = 0x17, CH_R = 0x1B, CH_I = 0x12, CH_T = 0x1D,
+       CH_S = 0x1C, CH_Y = 0x22, CH_O = 0x18, CH_F = 0x0F, CH_LO = 0x24, BLANK = 0x25 };
+enum { P1 = 0, P4 = 3, P5 = 4, P6 = 5, P7 = 6, P8 = 7 };
+
+static const uint8_t MODE_TEXT[ARP_MODES][3] = {
+    { CH_U, CH_P, BLANK },        /* UP  */
+    { CH_D, CH_N, BLANK },        /* dn  */
+    { CH_U, CH_D, BLANK },        /* Ud  */
+    { CH_R, CH_N, CH_D },         /* rnd */
+};
+
+void arpui_init(arpui_t *u)
+{
+    uint8_t *p = (uint8_t *)u;
+    for (unsigned i = 0; i < sizeof *u; i++)
+        p[i] = 0;
+    rate_init(&u->rate);
+    disp_init(&u->disp);
+}
+
+/* --- display ---------------------------------------------------------------------------- */
+static void show3(arpui_t *u, int c0, int c1, int c2)
+{
+    plat_display3(c0, c1, c2);
+    disp_touch(&u->disp);
+}
+
+static void show_int(arpui_t *u, int v)
+{
+    plat_display_int(v);
+    disp_touch(&u->disp);
+}
+
+static void show_clock(arpui_t *u, const arp_t *a)
+{
+    if (a->ext)
+        show3(u, CH_S, CH_Y, CH_N);
+    else
+        show3(u, CH_I, CH_N, CH_T);
+}
+
+static void show_status(arpui_t *u, const arp_t *a)
+{
+    if (!a->enabled)
+        show3(u, CH_O, CH_F, CH_F);
+    else if (a->ext)
+        show3(u, CH_S, CH_Y, CH_N);
+    else
+        show_int(u, a->bpm);
+}
+
+static void show_rate(arpui_t *u)
+{
+    uint8_t d[3];
+    rate_display(&u->rate, d);
+    show3(u, d[0], d[1], d[2]);
+}
+
+static void apply_rate(arpui_t *u, arp_t *a)
+{
+    int num, den;
+    rate_beats(&u->rate, &num, &den);
+    arp_set_beats(a, num, den);
+}
+
+/* --- buttons ---------------------------------------------------------------------------- */
+static void end_hold(arpui_t *u, arp_t *a)
+{
+    u->a440_held = 0;
+    arp_seq_record(a, 0);
+}
+
+/* a button pressed while A440 is held */
+static void combo(arpui_t *u, arp_t *a, int id)
+{
+    u->a440_used = 1;
+    switch (id) {
+    case ARPUI_BANK:
+        arp_set_mode(a, (a->mode + 1) % ARP_MODES);
+        show3(u, MODE_TEXT[a->mode][0], MODE_TEXT[a->mode][1], MODE_TEXT[a->mode][2]);
+        break;
+    case ARPUI_GROUP:
+        arp_set_mode(a, (a->mode + ARP_MODES - 1) % ARP_MODES);
+        show3(u, MODE_TEXT[a->mode][0], MODE_TEXT[a->mode][1], MODE_TEXT[a->mode][2]);
+        break;
+    case P1: case P1 + 1: case P1 + 2: case P4:
+        arp_set_octaves(a, id - P1 + 1);
+        show3(u, CH_LO, BLANK, a->octaves);
+        break;
+    case P5:
+        arp_set_ext(a, !a->ext);
+        show_clock(u, a);
+        break;
+    case P6:
+        arp_seq_clear(a);
+        break;
+    case P7:
+    case P8:
+        if (rate_step(&u->rate, id == P7 ? -1 : 1))
+            apply_rate(u, a);
+        show_rate(u);
+        break;
+    default:
+        show_int(u, id);                                   /* button id readout */
+        break;
+    }
+}
+
+int arpui_button(arpui_t *u, arp_t *a, int id, int value)
+{
+    uint64_t bit;
+    if (u->kill || id < 0 || id > 63)
+        return 0;
+    bit = 1ull << id;
+    if (plat_globals_open()) {                             /* the Globals menu is pure stock */
+        if (u->a440_held)
+            end_hold(u, a);
+        return 0;
+    }
+    if (id == ARPUI_A440) {
+        if (value == PRESS) {
+            u->a440_held = 1;
+            u->a440_used = 0;
+            arp_seq_record(a, 1);
+        } else if (value == RELEASE && u->a440_held) {
+            end_hold(u, a);
+            if (!u->a440_used) {
+                arp_enable(a, !a->enabled);
+                show_status(u, a);
+            }
+        }
+        return 1;
+    }
+    if (id == ARPUI_GLOBALS) {                             /* opens the menu: the hold is abandoned */
+        if (u->a440_held)
+            end_hold(u, a);
+        return 0;
+    }
+    if (u->swallow & bit) {                                /* press was ours: repeats and release too */
+        if (value == RELEASE)
+            u->swallow &= ~bit;
+        return 1;
+    }
+    if (!u->a440_held || value != PRESS)
+        return 0;
+    u->swallow |= bit;
+    combo(u, a, id);
+    return 1;
+}
+
+/* --- notes ------------------------------------------------------------------------------ */
+void arpui_note(arpui_t *u, arp_t *a, int src, int note, int vel)
+{
+    if (u->kill) {
+        if (vel > 0)
+            plat_voice_on(src, note, vel);
+        else
+            plat_voice_off(src, note);
+        return;
+    }
+    if (u->a440_held) {                                    /* recording a sequence */
+        int n = arp_seq_record_note(a, src, note, vel);
+        u->a440_used = 1;
+        if (vel > 0)
+            show_int(u, n);
+        return;
+    }
+    arp_note(a, src, note, vel);
+}
+
+/* --- Glide Rate -------------------------------------------------------------------------- */
+static int glide_is_tempo(const arpui_t *u, const arp_t *a, int pot)
+{
+    return pot == ARPUI_POT_GLIDE && !u->kill && a->enabled && !a->ext;
+}
+
+int arpui_pot_store(arpui_t *u, arp_t *a, int pot, int raw)
+{
+    if (!glide_is_tempo(u, a, pot))
+        return 0;
+    if (raw < 0) raw = 0;
+    if (raw > 1023) raw = 1023;
+    arp_set_bpm(a, 40 + (260 * raw + 511) / 1023);
+    show_int(u, a->bpm);
+    return 1;
+}
+
+int arpui_pot_change(arpui_t *u, arp_t *a, int pot)
+{
+    return glide_is_tempo(u, a, pot);
+}
+
+/* --- tick -------------------------------------------------------------------------------- */
+void arpui_tick(arpui_t *u, arp_t *a)
+{
+    int on;
+    if (u->boot_ticks < ARPUI_BOOT_TICKS) {                /* kill switch: A440 held after power-on */
+        u->boot_ticks++;
+        if (plat_a440_down())
+            u->kill = 1;
+    }
+    if (u->kill)
+        return;
+    if (disp_tick(&u->disp))
+        plat_display_restore();
+    on = a->enabled != 0;
+    if (on != u->led_on) {
+        u->led_on = (uint8_t)on;
+        plat_led(ARPUI_LED_A440, on);
+    }
+}

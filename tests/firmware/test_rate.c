@@ -141,9 +141,26 @@ static void test_readout_shows_unassigned_button_ids(void) {
     CHECK(count_type(EV_INT) == 0);
 }
 
+static void test_beats_per_step_give_integral_midi_clocks(void) {
+    /* native engine: 1/32 1/16T 1/16 1/8T 1/16d 1/8 1/8d 1/4 1/4d 1/2 1 2bars 4bars */
+    static const int clocks[RATE_COUNT] = { 3, 4, 6, 8, 9, 12, 18, 24, 36, 48, 96, 192, 384 };
+    rate_t r; rate_init(&r);
+    while (rate_step(&r, -1)) {}
+    for (int i = 0; i < RATE_COUNT; i++) {
+        int num = 0, den = 0;
+        CHECK(rate_index(&r) == i);
+        rate_beats(&r, &num, &den);
+        CHECK(num >= 1 && den >= 1 && (24 * num) % den == 0 && 24 * num / den == clocks[i]);
+        rate_step(&r, 1);
+    }
+    rate_init(&r);
+    { int num, den; rate_beats(&r, &num, &den); CHECK(num == 1 && den == 2); }   /* 1/8 */
+}
+
 int main(void) {
     test_default_is_eighths_and_zero_state();
     test_table_params_and_display();
+    test_beats_per_step_give_integral_midi_clocks();
     test_clock_filter_keeps_steps_exactly_on_real_clocks();
     test_buttons_change_rate_only_while_a440_held();
     test_readout_shows_unassigned_button_ids();

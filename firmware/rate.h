@@ -20,6 +20,8 @@ int  rate_index(const rate_t *r);
 int  rate_step(rate_t *r, int dir);
 /* engine fields for the internal clock: divisions per beat and ticks per second */
 void rate_params(const rate_t *r, int *div, int *tps);
+/* native engine: beats per step as a fraction (1/8 note -> 1/2) */
+void rate_beats(const rate_t *r, int *num, int *den);
 /* three display character codes, right-aligned */
 void rate_display(const rate_t *r, uint8_t out[3]);
 /* MIDI realtime byte seen: how many copies to hand the arp (0..4 for F8, 1 otherwise).

@@ -20,5 +20,10 @@ void plat_orig_out(int ctx, int src, int on, int note, int vel);  /* V5's origin
 /* Native engine (arp.c): the stock voice allocator, note_on(src, note, vel) / note_off(src, note) */
 void plat_voice_on(int src, int note, int vel);
 void plat_voice_off(int src, int note);
+/* Native UI (arpui.c) */
+void plat_led(int led, int on);                   /* stock panel LED setter */
+void plat_display_restore(void);                  /* stock: redraw the patch display */
+int  plat_globals_open(void);                     /* stock Globals menu is open */
+int  plat_a440_down(void);                        /* stock button-held table: A440 is down */
 
 #endif
