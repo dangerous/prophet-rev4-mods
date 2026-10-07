@@ -78,6 +78,12 @@
     "note": "stock note_off: is HOLD active? -> 'no' while the arp is on so steps release"
   },
   {
+    "site": "0x2003D15C",
+    "expect": "0x2003B6B1",
+    "symbol": "hook_program_loaded",
+    "note": "stock program apply, end (every load path): hold off -> the program's arp settings are applied"
+  },
+  {
     "kind": "word",
     "site": "0x200343D8",
     "expect": "0x20034343",

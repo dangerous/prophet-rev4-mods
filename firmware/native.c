@@ -38,6 +38,9 @@ enum {
     NI_MIDI_OUT_ON,      /* 0x20033F85 local key note-on to MIDI Out (cable, ch, note, vel) */
     NI_MIDI_OUT_OFF,     /* 0x20033F39 local key note-off to MIDI Out (cable, ch, note, vel) */
     NI_PARSER_STATE,     /* 0x20034343 MIDI byte-parser state handler the trampoline continues to */
+    NI_PARAM_READ,       /* 0x2003CB69 live program parameter read(layer, param) -> u16 */
+    NI_PARAM_STORE,      /* 0x2003CEF5 plain program parameter store(layer, param, value) */
+    NI_HOLD_OFF,         /* 0x2003B6B1 hold off (both sources): original callee at the program-loaded hook */
     NI_COUNT
 };
 
@@ -61,6 +64,9 @@ const volatile uint32_t stock_iface[NI_COUNT] = {
     [NI_MIDI_OUT_ON] = 0x20033F85u,
     [NI_MIDI_OUT_OFF] = 0x20033F39u,
     [NI_PARSER_STATE] = 0x20034343u,
+    [NI_PARAM_READ] = 0x2003CB69u,
+    [NI_PARAM_STORE] = 0x2003CEF5u,
+    [NI_HOLD_OFF] = 0x2003B6B1u,
 };
 
 #define SFN(i, type) ((type)(uintptr_t)stock_iface[i])
@@ -78,6 +84,8 @@ typedef void (*pot3_fn)(int, int, int);
 typedef int (*query_fn)(void);
 typedef void (*word_fn)(uint32_t);
 typedef void (*ptr_fn)(void *);
+typedef int (*param_read_fn)(int, int);
+typedef void (*param_store_fn)(int, int, int);
 
 #define DSP_HOLD_MSG 0x080D0000u          /* the hold handler's voice-engine message | state */
 
@@ -88,7 +96,7 @@ typedef struct {
     uint8_t pad[2];
     qev_t ev[64];
 } queue_t;
-enum { Q_NOTE = 1, Q_HOLD = 2, Q_ANO = 3 };
+enum { Q_NOTE = 1, Q_HOLD = 2, Q_ANO = 3, Q_PROGRAM = 4 };
 
 #define ARP     ((arp_t *)0x2008E000u)
 #define UI      ((arpui_t *)0x2008E400u)
@@ -188,6 +196,7 @@ static void q_drain(void)
         case Q_NOTE: arpui_note(UI, ARP, e.a, e.b, e.c); break;
         case Q_HOLD: arp_hold(ARP, e.a); break;
         case Q_ANO:  arp_all_notes_off(ARP); break;
+        case Q_PROGRAM: arpui_program_loaded(UI, ARP); break;
         default: break;
         }
     }
@@ -203,6 +212,8 @@ void plat_display_restore(void) { SFN(NI_DISPLAY_RESTORE, ptr_fn)(SPTR(NI_UI, vo
 int  plat_globals_open(void) { return *SPTR(NI_GLOBALS_OPEN, volatile const uint32_t *) != 0; }
 int  plat_a440_down(void) { return *SPTR(NI_A440_HELD, volatile const uint16_t *) != 0; }
 void plat_display_hold(void) { disp_touch(&UI->disp); }   /* oct.c: the shift readout reverts too */
+int  plat_param_read(int param) { return SFN(NI_PARAM_READ, param_read_fn)(0, param); }          /* layer A */
+void plat_param_store(int param, int value) { SFN(NI_PARAM_STORE, param_store_fn)(0, param, value); }
 
 /* --- hooks: Timer Service task ----------------------------------------------------------- */
 /* stock 0x2003BE9C: the 1 ms keyboard poll. Everything the engine does happens here. */
@@ -373,6 +384,16 @@ __attribute__((naked)) void hook_hold(void)
         "mov   r1, r4\n"
         "bl    hook_hold_dispatch\n"
         "pop  {r4, pc}\n");
+}
+
+/* stock 0x2003D15C: the end of the program-apply routine (every load path): hold off, then
+ * the engine learns the program's arp settings ("Patch memory") */
+void hook_program_loaded(void)
+{
+    ensure_init();
+    SFN(NI_HOLD_OFF, void_fn)();
+    if (!killed())
+        q_push(Q_PROGRAM, 0, 0, 0);
 }
 
 /* stock 0x2003EACE: note_off asks whether HOLD is active (both tasks) */

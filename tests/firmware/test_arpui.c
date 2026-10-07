@@ -11,7 +11,7 @@ static int failures, checks;
     printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
 
 /* ---- fake platform ------------------------------------------------------------------ */
-enum { EV_VON, EV_VOFF, EV_D3, EV_INT, EV_RESTORE, EV_LED };
+enum { EV_VON, EV_VOFF, EV_D3, EV_INT, EV_RESTORE, EV_LED, EV_PARAM };
 typedef struct { int type, a, b, c; } ev_t;
 static ev_t log_[4096];
 static int nlog, fake_globals_open, fake_a440_down;
@@ -24,6 +24,9 @@ void plat_display_restore(void) { push(EV_RESTORE, 0, 0, 0); }
 void plat_led(int led, int on) { push(EV_LED, led, on, 0); }
 int  plat_globals_open(void) { return fake_globals_open; }
 int  plat_a440_down(void) { return fake_a440_down; }
+static int params[99];
+int  plat_param_read(int p) { return params[p]; }
+void plat_param_store(int p, int v) { params[p] = v; push(EV_PARAM, p, v, 0); }
 
 static int count_type(int t) { int n = 0; for (int i = 0; i < nlog; i++) n += log_[i].type == t; return n; }
 static ev_t *last_of(int t) { for (int i = nlog - 1; i >= 0; i--) if (log_[i].type == t) return &log_[i]; return 0; }
@@ -45,6 +48,7 @@ static arp_t a;
 static void reset(void) {
     arpui_init(&u); arp_init(&a);
     clear_log(); fake_globals_open = 0; fake_a440_down = 0;
+    memset(params, 0, sizeof params);
     for (int i = 0; i < ARPUI_BOOT_TICKS; i++) arpui_tick(&u, &a);     /* past the kill-switch window */
     clear_log();
 }
@@ -259,6 +263,66 @@ static void test_a440_pressed_after_power_on_is_just_a_press(void) {
     CHECK(!u.kill);
 }
 
+/* ---- patch memory ------------------------------------------------------------------- */
+static int stores(void) { return count_type(EV_PARAM); }
+
+static void test_settings_are_written_to_the_patch_slots(void) {
+    reset();
+    CHECK(stores() == 0);
+    tap_a440();                                                        /* on, Up, 1 octave, 1/8 */
+    CHECK(params[ARPUI_PARAM_OCT] == 1 && params[ARPUI_PARAM_PACK] == (1 | (0 << 1) | (5 << 3)));
+    btn(A440, PRESS); btn(BANK, PRESS); btn(BANK, RELEASE);            /* Down */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (5 << 3)));
+    btn(P3, PRESS); btn(P3, RELEASE);                                  /* 3 octaves */
+    CHECK(params[ARPUI_PARAM_OCT] == 3);
+    btn(P8, PRESS); btn(P8, RELEASE);                                  /* shorter: index 4 */
+    CHECK(params[ARPUI_PARAM_PACK] == (1 | (1 << 1) | (4 << 3)));
+    int n = stores();
+    btn(P5, PRESS); btn(P5, RELEASE);                                  /* clock source: not saved */
+    btn(A440, RELEASE);
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 900);                     /* BPM: not saved (ext on now) */
+    arp_set_ext(&a, 0);
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 900);
+    CHECK(stores() == n);
+    tap_a440();                                                        /* off: remembered as off */
+    CHECK(params[ARPUI_PARAM_PACK] == (0 | (1 << 1) | (4 << 3)) && params[ARPUI_PARAM_OCT] == 3);
+}
+
+static void test_program_load_applies_saved_state(void) {
+    reset();
+    params[ARPUI_PARAM_OCT] = 2;
+    params[ARPUI_PARAM_PACK] = 1 | (2 << 1) | (7 << 3);                /* on, Up/Down, 1/4 */
+    int n = stores();
+    arpui_program_loaded(&u, &a);
+    CHECK(a.enabled && a.mode == ARP_UPDOWN && a.octaves == 2 && rate_index(&u.rate) == 7);
+    CHECK(a.beats_num == 1 && a.beats_den == 1);
+    CHECK(stores() == n);                                              /* loading does not write back */
+    ticks(1);
+    CHECK(last_led() == 1);
+    params[ARPUI_PARAM_PACK] = 0 | (1 << 1) | (3 << 3);                /* saved with the arp off, Down, 1/8T */
+    params[ARPUI_PARAM_OCT] = 4;
+    arpui_program_loaded(&u, &a);
+    CHECK(!a.enabled && a.mode == ARP_DOWN && a.octaves == 4 && rate_index(&u.rate) == 3);
+}
+
+static void test_program_without_arp_data_switches_off_and_leaves_settings(void) {
+    reset();
+    tap_a440();
+    btn(A440, PRESS); btn(GROUP, PRESS); btn(GROUP, RELEASE); btn(P2, PRESS); btn(P2, RELEASE); btn(A440, RELEASE);
+    CHECK(a.enabled && a.mode == ARP_RANDOM && a.octaves == 2);
+    params[ARPUI_PARAM_OCT] = 0; params[ARPUI_PARAM_PACK] = 0;         /* a factory program */
+    arpui_program_loaded(&u, &a);
+    CHECK(!a.enabled && a.mode == ARP_RANDOM && a.octaves == 2);       /* off, untouched */
+    tap_a440();
+    params[ARPUI_PARAM_OCT] = 5; params[ARPUI_PARAM_PACK] = 1;         /* out of range: no data */
+    arpui_program_loaded(&u, &a);
+    CHECK(!a.enabled && a.mode == ARP_RANDOM);
+    tap_a440();
+    params[ARPUI_PARAM_OCT] = 1; params[ARPUI_PARAM_PACK] = 1 | (13 << 3);   /* note value 13: no data */
+    arpui_program_loaded(&u, &a);
+    CHECK(!a.enabled && a.mode == ARP_RANDOM);
+}
+
 int main(void) {
     test_tap_toggles_arp_with_status_and_led();
     test_repeats_are_ignored();
@@ -274,6 +338,9 @@ int main(void) {
     test_led_follows_enabled_only_when_it_changes();
     test_a440_held_at_power_on_disables_everything();
     test_a440_pressed_after_power_on_is_just_a_press();
+    test_settings_are_written_to_the_patch_slots();
+    test_program_load_applies_saved_state();
+    test_program_without_arp_data_switches_off_and_leaves_settings();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;
 }

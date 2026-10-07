@@ -108,7 +108,7 @@ behavioural source of truth; this file is the engineering context around it.
 
 ## Engine design notes
 
-- Hooks: 13 `BL` sites + 4 parser-table words (`firmware/hooks_native.json`); every stock
+- Hooks: 14 `BL` sites + 4 parser-table words (`firmware/hooks_native.json`); every stock
   address the code touches is in `stock_iface[]` (`native.c`), compared word for word by
   `test_image.py`; the code may reference nothing else outside its record.
 - Lazy init on the first hook (under `cpsid i`); kill switch checked in the tick before any
@@ -137,5 +137,9 @@ behavioural source of truth; this file is the engineering context around it.
 
 ## Open items
 
+- Patch memory (arp settings in program parameters 93/94) built, not yet flashed; verify
+  the voice engine ignores those slots. Possible follow-up: the sequence in the 29 spare
+  bytes of the flash record (pitches only, ~28 steps, not in SysEx dumps; hooks on the flash
+  serialiser/deserialiser — a 4 KB sector holds 32 programs, so backup first).
 - Seq recording from MIDI-in not yet exercised on hardware.
 - Possible later features: arp to MIDI Out (for an external synth), rests in seq.

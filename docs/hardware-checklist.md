@@ -47,6 +47,20 @@ Manual verification on the instrument. Record results against the spec markers i
       pressing GLOBALS while holding A440 abandons the hold (nothing toggles on release).
 - [ ] Power cycle: arp off, Up, 1 octave, internal, 120 BPM, 1/8, shift 0, no sequence.
 
+## Patch memory (spec "Patch memory")
+
+- [ ] Load a few factory programs with the arp running: it switches **off** each time; mode,
+      octaves and note value stay as they were. Listen for any change of sound with the arp
+      on at `o 1`…`o 4` (parameters 93/94 reach the voice engine; they should be inert).
+- [ ] Arp on, `dn`, `o 2`, `16`. Record it to a user program. Load another program (arp off),
+      then load the saved one: arp on, `dn`, `o 2`, `16` restored. Power cycle on that
+      program: the arp comes up on.
+- [ ] Save a program with the arp **off** but `Ud`: loading it switches the arp off and sets
+      `Ud`.
+- [ ] MIDI program change from the DAW to the saved program: same as the panel.
+- [ ] Dump the program over SysEx and load it back: settings survive.
+- [ ] BPM, clock source and keyboard shift are **not** changed by loading.
+
 ## HOLD while the arp is on (spec "HOLD while the arp is on")
 
 - [ ] Arp on, HOLD on. Hold C‑E‑G: **one note sounds at a time**. Release the keys: still

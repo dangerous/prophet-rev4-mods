@@ -67,6 +67,31 @@ static void apply_rate(arpui_t *u, arp_t *a)
     arp_set_beats(a, num, den);
 }
 
+/* --- patch memory ------------------------------------------------------------------------ */
+/* the saved settings live in two spare program parameters ("Patch memory") */
+static void store_patch(const arpui_t *u, const arp_t *a)
+{
+    plat_param_store(ARPUI_PARAM_OCT, a->octaves);
+    plat_param_store(ARPUI_PARAM_PACK, (a->enabled ? 1 : 0) | (a->mode << 1) | (rate_index(&u->rate) << 3));
+}
+
+void arpui_program_loaded(arpui_t *u, arp_t *a)
+{
+    int oct = plat_param_read(ARPUI_PARAM_OCT), pack = plat_param_read(ARPUI_PARAM_PACK);
+    int note = (pack >> 3) & 15, mode = (pack >> 1) & 3, on = pack & 1;
+    if (u->kill)
+        return;
+    if (oct < 1 || oct > 4 || pack < 0 || pack > 127 || note >= RATE_COUNT) {
+        arp_enable(a, 0);                                  /* no arp data: off, settings untouched */
+        return;
+    }
+    arp_set_octaves(a, oct);
+    arp_set_mode(a, mode);
+    rate_set_index(&u->rate, note);
+    apply_rate(u, a);
+    arp_enable(a, on);
+}
+
 /* --- buttons ---------------------------------------------------------------------------- */
 static void end_hold(arpui_t *u, arp_t *a)
 {
@@ -82,14 +107,17 @@ static void combo(arpui_t *u, arp_t *a, int id)
     case ARPUI_BANK:
         arp_set_mode(a, (a->mode + 1) % ARP_MODES);
         show3(u, MODE_TEXT[a->mode][0], MODE_TEXT[a->mode][1], MODE_TEXT[a->mode][2]);
+        store_patch(u, a);
         break;
     case ARPUI_GROUP:
         arp_set_mode(a, (a->mode + ARP_MODES - 1) % ARP_MODES);
         show3(u, MODE_TEXT[a->mode][0], MODE_TEXT[a->mode][1], MODE_TEXT[a->mode][2]);
+        store_patch(u, a);
         break;
     case P1: case P1 + 1: case P1 + 2: case P4:
         arp_set_octaves(a, id - P1 + 1);
         show3(u, UC_LO, UC_BLANK, a->octaves);
+        store_patch(u, a);
         break;
     case P5:
         arp_set_ext(a, !a->ext);
@@ -103,6 +131,7 @@ static void combo(arpui_t *u, arp_t *a, int id)
         if (rate_step(&u->rate, id == P7 ? 1 : -1))          /* 7 = longer (-), 8 = shorter (+) */
             apply_rate(u, a);
         ui_show_rate(u);
+        store_patch(u, a);
         break;
     default:
         show_int(u, id);                                   /* button id readout */
@@ -132,6 +161,7 @@ int arpui_button(arpui_t *u, arp_t *a, int id, int value)
             if (!u->a440_used) {
                 arp_enable(a, !a->enabled);
                 show_status(u, a);
+                store_patch(u, a);
             }
         }
         return 1;

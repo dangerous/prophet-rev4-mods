@@ -326,6 +326,34 @@ this engine deliberately differs it is marked **(change)** with the reason.
   (engine), `arpui.c` (controls, display, LED, kill switch), `oct.c`, `rate.c`, `disp.c`,
   `vhold.c`.
 
+### Patch memory `[HW: unverified]`
+
+1. Saved with a program: the arp **on/off**, **mode**, **octaves** and **note value**. Not
+   saved: BPM, clock source, keyboard octave shift, the sequence.
+2. Loading a program — from the panel, a MIDI program change, a SysEx program or edit-buffer
+   receive, the PRESET toggle or the power-on recall — applies the program's arp settings and
+   switches the arp on or off accordingly (on with keys held starts the pattern as "Arp
+   engine" says). A program **without arp data** (every factory program, and user programs
+   saved before this feature) loads with the arp **off** and mode, octaves and note value
+   **untouched**.
+3. Changing any saved setting edits the live program silently, as turning a knob does; the
+   stock Record flow stores it with the program, SysEx program dumps carry it, and a received
+   dump restores it. There is no "edited" indication (stock has none beyond the pot
+   pass-through).
+4. Realisation: program parameters **93** (0–127) and **94** (0–4) of layer A, which the stock
+   OS stores, dumps and loads verbatim but never reads: 94 = octaves 1–4 (**0 = no arp
+   data**); 93 = on/off (bit 0) | mode (bits 1–2) | note value index 0–12 (bits 3–6). Values
+   outside those ranges count as no arp data. Written through stock's plain parameter store
+   `0x2003CEF5(layer, param, value)` (no clamp, no NRPN echo) on every change; read with
+   `0x2003CB69(layer, param)` from a hook on the unconditional `bl 0x2003B6B0` at
+   `0x2003D15C` at the end of stock's program-apply routine, which every load path reaches
+   with the live table final (the hook runs in the Prophet5 task and queues "program loaded"
+   to the tick). Stock's own load clamps the slots to their maxima. With PRESET off, stock
+   restores the live table from its panel shadow on every load, so arp settings behave like
+   every other parameter in that mode (the stored ones are ignored). `[HW: the voice engine
+   receives 93/94 like every parameter; its use of them, if any, is unknown — listen for any
+   change with 94 = 1..4]`
+
 ### Note value (arp/seq step length) `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock and MIDI sync]`
 
 1. The step length is one of 13 values, shortest to longest: 1/32, 1/16T, 1/16, 1/8T,

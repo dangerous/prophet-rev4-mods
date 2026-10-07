@@ -42,6 +42,14 @@ int rate_step(rate_t *r, int dir)
     return 1;
 }
 
+int rate_set_index(rate_t *r, int i)
+{
+    if (i < 0 || i >= RATE_COUNT)
+        return 0;
+    r->delta = (int8_t)(i - RATE_DEFAULT_INDEX);
+    return 1;
+}
+
 void rate_beats(const rate_t *r, int *num, int *den)
 {
     *num = R[rate_index(r)].bn;

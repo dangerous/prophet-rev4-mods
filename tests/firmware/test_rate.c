@@ -68,8 +68,17 @@ static void test_steps_clamp_at_both_ends(void) {
     CHECK(rate_step(&r, -1) == 1 && rate_index(&r) == RATE_COUNT - 2);
 }
 
+static void test_set_index_validates(void) {
+    rate_init(&r);
+    CHECK(rate_set_index(&r, 7) == 1 && rate_index(&r) == 7);
+    CHECK(rate_set_index(&r, 13) == 0 && rate_index(&r) == 7);
+    CHECK(rate_set_index(&r, -1) == 0 && rate_index(&r) == 7);
+    CHECK(rate_set_index(&r, 0) == 1 && rate_index(&r) == 0);
+}
+
 int main(void) {
     test_default_is_eighths_and_zero_state();
+    test_set_index_validates();
     test_table_beats_give_integral_clocks_and_display();
     test_steps_clamp_at_both_ends();
     printf("%d checks, %d failures\n", checks, failures);

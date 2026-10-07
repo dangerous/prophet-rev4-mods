@@ -12,5 +12,7 @@ void plat_led(int led, int on);                   /* stock panel LED setter */
 void plat_display_restore(void);                  /* stock: redraw the patch display */
 int  plat_globals_open(void);                     /* stock Globals menu is open */
 int  plat_a440_down(void);                        /* stock button-held table: A440 is down */
+int  plat_param_read(int param);                  /* stock live program parameter, layer A */
+void plat_param_store(int param, int value);      /* stock plain parameter store, layer A */
 
 #endif

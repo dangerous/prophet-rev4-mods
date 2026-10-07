@@ -32,6 +32,7 @@ BL_SITES = {
     0x2003C292: 0x20036B51,   # pot raw store (pot, raw)
     0x2003C2A6: 0x2003BC6D,   # pot change post (pot, old, new)
     0x2003EACE: 0x2003B695,   # note_off's hold query
+    0x2003D15C: 0x2003B6B1,   # end of program apply: hold off -> "program loaded"
 }
 WORD_SITES = {0x200343D8: 0x20034343, 0x200343E0: 0x20034343,   # parser table F8 FA FB FC
               0x200343E4: 0x20034343, 0x200343E8: 0x20034343}
@@ -41,7 +42,7 @@ SYMBOLS = {
     0x2003B07A: "hook_midi_note_on", 0x2003B032: "hook_midi_note_off",
     0x2003B294: "hook_cc123", 0x2003B144: "hook_cc123", 0x200396CA: "hook_hold",
     0x2003C244: "hook_button", 0x2003C292: "hook_pot_store", 0x2003C2A6: "hook_pot_change",
-    0x2003EACE: "hook_hold_query",
+    0x2003EACE: "hook_hold_query", 0x2003D15C: "hook_program_loaded",
 }
 
 # firmware/native.c stock_iface order: every stock address the native code touches
@@ -65,6 +66,9 @@ IFACE = [
     0x20033F85,   # MIDI Out note-on
     0x20033F39,   # MIDI Out note-off
     0x20034343,   # parser state handler the trampoline continues to
+    0x2003CB69,   # live program parameter read(layer, param)
+    0x2003CEF5,   # plain program parameter store(layer, param, value)
+    0x2003B6B1,   # hold off (both sources): the original callee at the program-loaded hook
 ]
 
 
@@ -85,6 +89,16 @@ class NativeHookListTests(unittest.TestCase):
         for site, h in words.items():
             self.assertEqual(int(h["expect"], 16), WORD_SITES[site])
             self.assertEqual(h["symbol"], "hook_rt_trampoline")
+
+    def test_stock_patch_memory_facts(self):
+        payload = syx.decode(STOCK.read_bytes()).payload
+        # end of program apply: bl hold_off_both (unconditional, every load path)
+        self.assertEqual(thumb.decode_bl(0x2003D15C, build.read_ram(payload, 0x2003D15C, 4)), 0x2003B6B0)
+        # plain parameter store: cmp r1,#0x59 ; push {r3-r7,lr} (special cases 0x59/0x34, else strh [table + (99*layer+param)*2])
+        self.assertEqual(build.read_ram(payload, 0x2003CEF4, 4), bytes.fromhex("5929f8b5"))
+        self.assertEqual(build.read_ram(payload, 0x2003CF42, 10), bytes.fromhex("632303fb047425f81460"))
+        # parameter read: movs r3,#0x63 ; ldr r2,[pc] ; mla r1,r3,r0,r1 ; ldrh.w r0,[r2,r1,lsl #1]
+        self.assertEqual(build.read_ram(payload, 0x2003CB68, 12), bytes.fromhex("6323034a03fb001132f81100"))
 
     def test_stock_holds_the_expected_instructions_at_every_site(self):
         payload = syx.decode(STOCK.read_bytes()).payload
@@ -171,7 +185,7 @@ class NativeImageTests(unittest.TestCase):
 
     def test_rt_trampoline_continues_to_the_stock_parser_state(self):
         # last word of the trampoline path is loaded from the table entry for the parser state
-        self.assertEqual(IFACE[-1], 0x20034343)
+        self.assertEqual(IFACE[18], 0x20034343)
         self.assertEqual(self.symbols["hook_rt_trampoline"] & 1, 1)   # Thumb
 
 

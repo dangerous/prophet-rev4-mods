@@ -17,7 +17,7 @@ NAME = "native"
 REQUIRED_SYMBOLS = ("hook_kbd_scan", "hook_local_note", "hook_midi_note_on", "hook_midi_note_off",
                     "hook_cc123", "hook_hold", "hook_button", "hook_pot_store", "hook_pot_change",
                     "hook_hold_query", "hook_local_midi_out_on", "hook_local_midi_out_off",
-                    "hook_rt_trampoline", "stock_iface")
+                    "hook_rt_trampoline", "hook_program_loaded", "stock_iface")
 
 CFLAGS = [
     "-target", "thumbv7a-none-eabi", "-mcpu=cortex-a5", "-mthumb", "-mfloat-abi=soft",

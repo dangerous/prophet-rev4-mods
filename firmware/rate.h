@@ -16,6 +16,8 @@ void rate_init(rate_t *r);
 int  rate_index(const rate_t *r);
 /* dir -1 = shorter, +1 = longer; returns 1 if the value changed (ends do not wrap) */
 int  rate_step(rate_t *r, int dir);
+/* select by index 0..RATE_COUNT-1; returns 1 if valid */
+int  rate_set_index(rate_t *r, int i);
 /* beats per step as a fraction (1/8 note -> 1/2); 24 * num / den is the MIDI-clock step */
 void rate_beats(const rate_t *r, int *num, int *den);
 /* three display character codes, right-aligned */

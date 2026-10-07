@@ -17,6 +17,8 @@
 #define ARPUI_BANK 0x28
 #define ARPUI_LED_A440 0x24
 #define ARPUI_POT_GLIDE 0x16
+#define ARPUI_PARAM_PACK 93           /* patch slot: on/off | mode << 1 | note value << 3 */
+#define ARPUI_PARAM_OCT 94            /* patch slot: octaves 1..4, 0 = no arp data */
 #define ARPUI_BOOT_TICKS 3000         /* kill-switch window after power-on (3 s; the panel link comes up late) */
 
 typedef struct {
@@ -42,5 +44,7 @@ int  arpui_pot_store(arpui_t *u, arp_t *a, int pot, int raw);
 int  arpui_pot_change(arpui_t *u, arp_t *a, int pot);
 /* Every 1 ms: display revert, LED, kill-switch window. */
 void arpui_tick(arpui_t *u, arp_t *a);
+/* A program was loaded: apply its arp settings from the patch slots ("Patch memory"). */
+void arpui_program_loaded(arpui_t *u, arp_t *a);
 
 #endif

@@ -36,6 +36,9 @@ All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
 - **Display** — every message (mode, `o N`, `int`/`Syn`, `OFF`, BPM, note value, step
   count, shift, button id) returns to the patch display after 1.5 s.
 - **Button id readout** — hold A440 and press an unused button to see its id.
+- **Patch memory** — the arp's on/off, mode, octaves and note value are saved with the
+  program (two spare parameter slots, carried in SysEx dumps too) and restored when it is
+  loaded; programs without arp data load with the arp off. `[HW: unverified]`
 - **Kill switch** — hold A440 while powering on and every hook passes straight through to
   stock for that session (a tap after power‑on is just a tap).
 - **Globals menu** is pure stock while it is open, so Sequential's A440 tuning tone is still
@@ -56,7 +59,7 @@ with a warning; `make image` stops with the same message.
 ## The image (`dist/` — build it; hash in `dist/SHA256SUMS`)
 
 `make image` → `build/prophet10_native.syx`: stock 2.1.0 plus one 32 KB record at
-`0x20088000` (≈5.6 KB of code, state zero at boot) and 17 retargeted sites — 13 `BL`s and
+`0x20088000` (≈5.6 KB of code, state zero at boot) and 18 retargeted sites — 14 `BL`s and
 the 4 MIDI‑parser table words for F8/FA/FB/FC (`firmware/hooks_native.json`). Nothing else
 in the OS changes; `python3 -m tools diff fixtures/prophet5_main_2.1.0.syx build/…` lists
 exactly those spans. The engine runs only when the hooked stock calls fire — never at boot.
