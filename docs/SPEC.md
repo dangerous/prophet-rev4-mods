@@ -203,10 +203,11 @@ this engine deliberately differs it is marked **(change)** with the reason.
   the pot as tempo whenever the arp was on, which made glide unusable with the arp running.)**
 - **A440 + Unison is tap tempo** `[HW: unverified]`: while A440 is held, each press of
   Unison (button id 25 / `0x19`) is a tempo tap. The first tap of a series shows `tAP` and
-  records the time; the BPM is unchanged. Every further tap sets the BPM from the intervals
-  between taps: the mean of the most recent intervals (up to 4) of the series, `BPM =
-  round(60000 / mean ms)`, clamped to 40–300, and the display shows the new BPM (a display
-  message like any other). An interval of more than 2000 ms ends the series: that tap starts
+  records the time; the BPM is unchanged. The **second tap sets the tempo immediately** from
+  that single interval; each later tap uses a rolling mean of the most recent four
+  intervals of the series (so it steadies without resisting a deliberate change), `BPM =
+  round(60000 / mean ms)`, clamped to 40–300, and the display shows the new integer BPM (a
+  display message like any other). An interval of more than 2000 ms ends the series: that tap starts
   a new one (shows `tAP` again, BPM unchanged); an interval of exactly 2000 ms still counts
   (30 BPM → 40). Intervals are measured on the UI's 1 ms tick. The series only ends by such a
   gap (releasing A440 in between does not end it). A tap counts as using the A440 hold, so the
