@@ -99,12 +99,12 @@ typedef struct {
 enum { Q_NOTE = 1, Q_HOLD = 2, Q_ANO = 3, Q_PROGRAM = 4 };
 
 #define ARP     ((arp_t *)0x2008E000u)
-#define UI      ((arpui_t *)0x2008E400u)
-#define OCT     ((oct_t *)0x2008E440u)
-#define VHOLD   ((vhold_t *)0x2008E4E0u)
-#define QUEUE   ((queue_t *)0x2008E500u)
-#define INITED  ((volatile uint8_t *)0x2008E700u)
-_Static_assert(sizeof(arp_t) <= 0x400, "arp state too large");
+#define UI      ((arpui_t *)0x2008EA00u)
+#define OCT     ((oct_t *)0x2008EA40u)
+#define VHOLD   ((vhold_t *)0x2008EAE0u)
+#define QUEUE   ((queue_t *)0x2008EB00u)
+#define INITED  ((volatile uint8_t *)0x2008ED00u)
+_Static_assert(sizeof(arp_t) <= 0xA00, "arp state too large");
 _Static_assert(sizeof(arpui_t) <= 0x40, "ui state too large");
 _Static_assert(sizeof(oct_t) <= 0xA0, "oct state too large");
 _Static_assert(sizeof(vhold_t) <= 0x10, "vhold state too large");
@@ -194,7 +194,7 @@ static void q_drain(void)
         q->rd = (uint8_t)((q->rd + 1) & 63);
         switch (e.type) {
         case Q_NOTE: arpui_note(UI, ARP, e.a, e.b, e.c); break;
-        case Q_HOLD: arp_hold(ARP, e.a); break;
+        case Q_HOLD: arpui_hold(UI, ARP, e.a); break;
         case Q_ANO:  arp_all_notes_off(ARP); break;
         case Q_PROGRAM: arpui_program_loaded(UI, ARP); break;
         default: break;
@@ -225,7 +225,7 @@ int hook_kbd_scan(void *fifo)
     if (!killed()) {
         int post;
         q_drain();
-        post = vhold_tick(VHOLD, ARP->enabled, stock_hold_active());
+        post = vhold_tick(VHOLD, arpui_suspended(UI, ARP), stock_hold_active());
         if (post >= 0)
             dsp_post(DSP_HOLD_MSG | (uint32_t)post);       /* "HOLD while the arp is on" */
         arp_tick(ARP);
@@ -371,7 +371,7 @@ __attribute__((used)) void hook_hold_dispatch(uint32_t msg, int new_state)
 {
     int on = new_state & 1;
     ensure_init();
-    if (killed() || vhold_post_on_hold_change(ARP->enabled))
+    if (killed() || vhold_post_on_hold_change(arpui_suspended(UI, ARP)))
         dsp_post(msg);
     if (!killed())
         q_push(Q_HOLD, on, 0, 0);
@@ -402,5 +402,5 @@ int hook_hold_query(void)
     int stock;
     ensure_init();
     stock = stock_hold_active();
-    return killed() ? stock : vhold_query(ARP->enabled, stock);
+    return killed() ? stock : vhold_query(arpui_suspended(UI, ARP), stock);
 }

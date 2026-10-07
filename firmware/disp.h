@@ -14,6 +14,7 @@ typedef struct {
 
 void disp_init(disp_t *d);
 void disp_touch(disp_t *d);                       /* a message was shown: (re)start the timer */
+void disp_cancel(disp_t *d);                      /* drop a pending revert (the display was taken over) */
 int  disp_active(const disp_t *d);                /* timer running */
 int  disp_tick(disp_t *d);                        /* 1 exactly when the timer expires */
 

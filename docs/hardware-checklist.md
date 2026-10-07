@@ -111,21 +111,39 @@ Manual verification on the instrument. Record results against the spec markers i
 
 ## Seq (spec "Seq")
 
-- [ ] Arp on, HOLD off. Hold A440; play C, E, G, E (one at a time, any timing); display
-      counts `1 2 3 4`; the notes sound as you play them. Release A440 — the arp does
-      **not** toggle.
-- [ ] Press and hold C: C E G E repeating at the arp tempo. Release: stops.
-- [ ] Press D: D F# A F#. While holding D press F: from the next step the pattern is
-      transposed to F. Release F (D still down): stays on F.
+- [ ] Arp on, HOLD off. Hold A440, press Tune: display `r 0`, A440 LED blinks, no auto-tune
+      ran. Release A440: the arp does **not** toggle.
+- [ ] Play C, then E, then G, then E (one at a time): the notes sound as you play them;
+      display `r 1`…`r 4`.
+- [ ] Play a C-E-G chord (fingers landing in any order), release, then a single D: `r 5`,
+      `r 6` — the chord is one step.
+- [ ] With no key down press HOLD: `r 7` (a rest); HOLD LED unchanged. Hold a key and press
+      HOLD twice: `tiE` twice, then `r 8` again (a step three arp steps long).
+- [ ] Sustain pedal (`HLd` mode): pedal with no key down = rest, pedal with a key down = tie.
+- [ ] A440 + Bank while recording: `UP`… shows for 1.5 s, then `r N` returns.
+- [ ] Tap A440: the patch number returns, LED steady (arp still on). Press and hold C: the
+      sequence plays — single notes, the chord as a chord, the rest silent, the tied step
+      held for three steps — at the arp tempo. Release: stops.
+- [ ] Press D: transposed so the lowest note of the first step lands on D. While holding D
+      press F: from the next step transposed to F. Release F (D still down): stays on F.
 - [ ] HOLD on. Press C, release: keeps playing. Press G after releasing all: restarts from
       step 1 on G at the next step.
-- [ ] A440 + Bank / Group: `dn` plays E G E C, `rnd` shuffles, `Ud` bounces.
-- [ ] A440 + Program 2: `o 2` → C E G E then an octave up. Release A440: no toggle.
-- [ ] A440 + Program 6: sequence gone; keys play the normal arp again.
-- [ ] Hold A440, play 3 notes, release: a new sequence replaces the old one. A tap of A440
-      with no notes in between keeps the sequence and toggles the arp.
-- [ ] Arp off, sequence exists: keys play normally. Tap A440: the sequence plays.
-- [ ] Record from MIDI-in (DAW notes) while holding A440; trigger from the keyboard.
+- [ ] A440 + Bank / Group: `dn` plays the steps reversed (chord and rest in their places),
+      `rnd` shuffles steps, `Ud` bounces.
+- [ ] A440 + Program 2: `o 2` → the sequence, then an octave up. Release A440: no toggle.
+- [ ] `Syn` from a DAW: steps on the grid, the tied step spanning three grid steps.
+- [ ] A440 + Tune, play 3 notes, tap A440: the new sequence replaces the old one. A440 +
+      Tune then tap A440 with nothing played: the old sequence is kept, arp unchanged.
+- [ ] In record mode, A440 + Program 6: `r 0`, still recording. Tap A440: no sequence.
+- [ ] A440 + Program 6 outside record mode: sequence gone; keys play the normal arp again.
+- [ ] Arp off, A440 + Tune, record, tap A440: still off, keys play normally. Tap A440: the
+      sequence plays.
+- [ ] HOLD lit before entering record mode: recorded notes still release on key-up; HOLD
+      still lit on exit.
+- [ ] Hold A440 (no Tune) and play keys: nothing is recorded; the keys arpeggiate (arp on)
+      or play (arp off); releasing A440 toggles the arp as a tap does.
+- [ ] Record from MIDI-in (DAW notes) in record mode, including a chord; trigger from the
+      keyboard.
 
 ## Note value (spec "Note value")
 
@@ -164,7 +182,8 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] Each of these shows for about 1.5 s and then the **patch number** returns: A440 +
       Bank (`UP`…), A440 + Program 2 (`o 2`), A440 + Program 5 (`int`/`Syn`), A440 +
       Program 8 (`8S`), tap A440 on (BPM) and off (`OFF`), Lo Freq + Bank (`1`), A440 +
-      Osc B Keyboard (`36`), A440 + Unison (`tAP`), a seq step count.
+      Osc B Keyboard (`36`), A440 + Unison (`tAP`). In record mode `tiE` returns to `r N`
+      instead of the patch number.
 - [ ] A new message within the 1.5 s restarts the timing (e.g. Bank, Bank, Bank).
 
 ## Button id readout (spec "Button id readout")

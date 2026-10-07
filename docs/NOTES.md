@@ -6,8 +6,9 @@ behavioural source of truth; this file is the engineering context around it.
 ## Where things are
 
 - Repo `github.com/dangerous/prophet-rev4-mods` (local folder `~/git/prophet-arp-mods`).
-  All work happens in the worktree `.claude/worktrees/relatch-seq` (branch `relatch-seq`);
-  `main` is merged from the root checkout with a plain `git merge`.
+  Work happens in a worktree per feature under `.claude/worktrees/` (`relatch-seq` for the
+  2026-10-06/07 work, `poly-seq` for the polyphonic sequencer); `main` is merged from the
+  root checkout with a plain `git merge`.
 - `dist/` holds the installable image + `SHA256SUMS` (written from inside `dist/`, so verify
   with `cd dist && shasum -a 256 -c SHA256SUMS`). **Never delete dist files**; superseded
   builds go to `dist/old/` with a hash suffix. The `.syx` files are git-ignored and therefore
@@ -39,8 +40,11 @@ behavioural source of truth; this file is the engineering context around it.
   The Prophet-6 ten-value note-value list and order (Program 7/8 walk, display) verified
   2026-10-07. Tap tempo (A440 + Unison), Assign mode, the arithmetic packing of parameter
   93, BPM following the MIDI clock under `Syn` (gestures inert there) and swing under
-  `Syn` all verified 2026-10-07 in one pass. Nothing pending on hardware except seq
-  recording from MIDI-in.
+  `Syn` all verified 2026-10-07 in one pass.
+- 2026-10-08, **polyphonic sequencer** (record mode A440 + Tune, chord steps, rests and
+  ties via HOLD, 64 steps, `r N` readout, blinking A440 LED): image `250ec97c` flashed and
+  verified the same day ("it all works"); the relaid state area (ARP ≤ 0xA00) boots fine.
+  Not exercised: the pedal as rest/tie, seq recording from MIDI-in, a tied step under `Syn`.
 - First native flash attempt stalled the loader at `100` with the eight Program LEDs lit:
   the payload was an exact multiple of 7 and our encoder omitted the empty tail group's MS
   byte, which the loader always reads. Nothing was written; power cycle recovered. Fixed in
@@ -55,8 +59,9 @@ behavioural source of truth; this file is the engineering context around it.
   `-Oz`, Python ELF linker, `tests/firmware/test_image.py`). No third-party packages; pytest
   is not installed — use `unittest`.
 - `make image` → `build/prophet10_native.syx`. Record `0x20088000–0x20090000`: code limit
-  `0x2008E000`, state above it (ARP `0x2008E000`, UI `0x2008E400`, OCT `0x2008E440`, VHOLD
-  `0x2008E4E0`, queue `0x2008E500`, init flag `0x2008E700`), all zero at boot.
+  `0x2008E000`, state above it (ARP `0x2008E000` ≤ 0xA00 — the 64-step chord storage —, UI
+  `0x2008EA00`, OCT `0x2008EA40`, VHOLD `0x2008EAE0`, queue `0x2008EB00`, init flag
+  `0x2008ED00`), all zero at boot.
 - Sandbox quirk: compound Bash with heredocs in the worktree is sometimes refused as "too
   complex"; write files with the Write tool (or via the scratchpad + `cp`) and keep Bash
   lines simple. zsh aborts a whole command line on an unmatched glob (`--include=*.py`).
@@ -121,15 +126,26 @@ behavioural source of truth; this file is the engineering context around it.
   engine code (button-held table during the first 3 s, unless an A440 press event was seen);
   `UI->kill` makes every hook fall through to stock.
 - HOLD while the arp is on: hook the hold query in `note_off`; withhold the voice-engine
-  hold message while enabled; re-post it on enable/disable transitions (`vhold.c`).
+  hold message while *suspended* (arp enabled or seq record mode, `arpui_suspended`);
+  re-post it on transitions of that state (`vhold.c`).
 - Tap tempo (A440 + Unison, id 25): `arpui_t.ms` is a free-running 1 ms counter bumped in
   `arpui_tick`; the UI keeps the last tap time and up to 4 intervals (uint16, ≤ 2000 ms);
   BPM = round(60000·n / Σ). A gap > 2000 ms starts a new series. Unison is no longer a
   readout button (readout examples now use Osc B Keyboard 36). `arpui_t` stays ≤ 0x40.
 - Display: one 1.5 s timer (`disp.c`) restarted by every message; stock restore at expiry.
-- Seq: recording routes notes directly to voices and appends; playback substitutes the
-  recorded steps (transposed onto the trigger key) for the pitch-sorted pool as the pattern's
-  base order; pitch-anchored stepping for the pool, index-anchored for the sequence.
+- Seq: record mode is a UI state (`arpui_t.rec`, A440 + Tune; a tap of A440, A440 + Tune
+  or GLOBALS leaves). While it lasts the UI routes notes to `arp_seq_record_note`, consumes
+  the HOLD button (id 0x0E) and turns its presses — and the pedal's on-transitions, which
+  reach the UI through `arpui_hold` — into `arp_seq_rest_tie`; the display timer restores
+  `r N` instead of the patch display; the A440 LED blinks (500/500 ms). Engine storage: a
+  step is `seq_n` notes (`seq_note`/`seq_vel`, up to 10) and a length `seq_dur`; the open
+  step is "a recorded key is still down" (`rec_down` bitmap). Playback substitutes the step
+  list for the pitch-sorted pool as the base order (the walker runs over step indices;
+  `seq_hold` counts the arp steps a step still has to run, the gate fires only in its last
+  one); the reference pitch is the lowest note of the first sounding step. Entering/leaving
+  releases everything the engine has sounding and empties the pool, so keys down at the
+  transition are ignored until pressed again; `arp_enable` while recording only sets the
+  flag. Pitch-anchored stepping for the pool, index-anchored for the sequence.
 - Assign (`ASS`, mode 4): `arp_t` keeps an entry list (`asg_note`/`asg_vel`, up to 32) in
   note-on order beside the pitch-indexed pool, since the pool arrays cannot hold order or
   duplicates. Note-on appends (also while the arp is off); note-off without HOLD and HOLD
@@ -171,5 +187,10 @@ behavioural source of truth; this file is the engineering context around it.
   engine ignores those slots. Possible follow-up: the sequence in the 29 spare
   bytes of the flash record (pitches only, ~28 steps, not in SysEx dumps; hooks on the flash
   serialiser/deserialiser — a 4 KB sector holds 32 programs, so backup first).
-- Seq recording from MIDI-in not yet exercised on hardware.
-- Possible later features: arp to MIDI Out (for an external synth), rests in seq.
+- The pedal as rest/tie, seq recording from MIDI-in and a tied step under `Syn` have not
+  been exercised on hardware.
+- Per-program sequence storage (as the Prophet-6): the 29 spare flash bytes above would
+  hold a pitch-only mono sequence, not 64 chord steps with velocity; a SysEx dump/restore of
+  the sequence is the realistic alternative.
+- Possible later features: arp to MIDI Out (for an external synth), gate length, arp
+  repeats, chord/trigger mode, probability, variable swing.

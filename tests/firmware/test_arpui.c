@@ -37,8 +37,9 @@ static void clear_log(void) { nlog = 0; }
 
 /* panel character codes */
 enum { CH_U = 0x1E, CH_P = 0x19, CH_D = 0x0D, CH_N = 0x17, CH_R = 0x1B, CH_I = 0x12, CH_T = 0x1D,
-       CH_S = 0x1C, CH_Y = 0x22, CH_O = 0x18, CH_F = 0x0F, CH_LO = 0x24, BLANK = 0x25 };
+       CH_S = 0x1C, CH_Y = 0x22, CH_O = 0x18, CH_F = 0x0F, CH_E = 0x0E, CH_LO = 0x24, BLANK = 0x25 };
 enum { A440 = ARPUI_A440, GLOBALS = ARPUI_GLOBALS, GROUP = ARPUI_GROUP, BANK = ARPUI_BANK, UNISON = 0x19, OSCB_KEYB = 36, CH_A = 0x0A,
+       TUNE = ARPUI_TUNE, HOLD = ARPUI_HOLD,
        P1 = 0, P2 = 1, P3 = 2, P4 = 3, P5 = 4, P6 = 5, P7 = 6, P8 = 7,
        PRESS = 1, RELEASE = 2, REPEAT = 3, LOCAL = ARP_SRC_LOCAL, MIDI = ARP_SRC_MIDI };
 
@@ -156,24 +157,174 @@ static void test_program_7_8_step_through_every_value(void) {
     CHECK(!a.enabled);
 }
 
-static void test_recording_and_program6_clear(void) {
+/* ---- seq record mode (spec "Seq") ---------------------------------------------------- */
+static int last_is_rn(int n) { return last_d3_is(CH_R, n >= 10 ? n / 10 : BLANK, n % 10); }   /* the readout r N */
+static void note(int n, int vel) { arpui_note(&u, &a, LOCAL, n, vel); }
+static void enter_rec(void) { btn(A440, PRESS); btn(TUNE, PRESS); btn(TUNE, RELEASE); btn(A440, RELEASE); }
+
+static void test_a440_tune_enters_record_mode_and_a_tap_leaves(void) {
     reset();
     tap_a440();                                                        /* arp on */
     clear_log();
     btn(A440, PRESS);
-    arpui_note(&u, &a, LOCAL, 60, 100);
-    CHECK(count_type(EV_VON) == 1 && last_int() == 1);                 /* sounds, count shown */
-    arpui_note(&u, &a, LOCAL, 60, 0);
+    CHECK(btn(TUNE, PRESS) == 1 && u.rec && last_is_rn(0));
+    CHECK(btn(TUNE, REPEAT) == 1 && btn(TUNE, RELEASE) == 1);
+    CHECK(btn(A440, RELEASE) == 1 && a.enabled && u.rec);              /* used the hold: no toggle */
+    note(60, 100);
+    CHECK(count_type(EV_VON) == 1 && last_is_rn(1));                   /* sounds, count shown */
+    note(60, 0);
     arpui_note(&u, &a, MIDI, 64, 90); arpui_note(&u, &a, MIDI, 64, 0);
-    arpui_note(&u, &a, LOCAL, 67, 100); arpui_note(&u, &a, LOCAL, 67, 0);
-    CHECK(last_int() == 3 && count_type(EV_VOFF) == 3);
-    CHECK(btn(A440, RELEASE) == 1 && a.enabled);                       /* a recording: no toggle */
-    CHECK(a.seq_len == 3 && a.seq_note[1] == 64);
-    tap_a440();                                                        /* tap with no notes keeps the sequence */
-    CHECK(!a.enabled && a.seq_len == 3);
+    note(67, 100); note(67, 0);
+    CHECK(last_is_rn(3) && count_type(EV_VOFF) == 3);
+    clear_log();
+    tap_a440();                                                        /* leave */
+    CHECK(!u.rec && a.enabled && a.seq_len == 3 && a.seq_note[1][0] == 64);
+    ticks(1);
+    CHECK(count_type(EV_RESTORE) == 1);                                /* the patch display is back */
     tap_a440();
+    CHECK(!a.enabled);                                                 /* taps toggle again */
+}
+
+static void test_record_mode_without_steps_keeps_the_sequence(void) {
+    reset();
+    enter_rec();
+    note(60, 100); note(60, 0); note(64, 100); note(64, 0);
+    tap_a440();
+    CHECK(!u.rec && a.seq_len == 2 && !a.enabled);                     /* the arp stays off */
+    enter_rec();
+    CHECK(u.rec && last_is_rn(0) && a.seq_len == 2);                  /* the old one stays until a step is recorded */
+    enter_rec();                                                       /* A440 + Tune again leaves */
+    CHECK(!u.rec && a.seq_len == 2 && !a.enabled);
+}
+
+static void test_tune_without_a440_is_stock(void) {
+    reset();
+    CHECK(btn(TUNE, PRESS) == 0 && btn(TUNE, RELEASE) == 0 && !u.rec);
+}
+
+static void test_hold_button_is_rest_or_tie_in_record_mode(void) {
+    reset();
+    CHECK(btn(HOLD, PRESS) == 0 && btn(HOLD, RELEASE) == 0);           /* not recording: stock HOLD */
+    enter_rec();
+    clear_log();
+    CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 1 && a.seq_n[0] == 0 && last_is_rn(1));   /* no key down: a rest */
+    CHECK(btn(HOLD, REPEAT) == 1 && btn(HOLD, RELEASE) == 1 && a.seq_len == 1);
+    CHECK(!a.hold);                                                    /* the latch did not change */
+    note(60, 100);
+    CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 2 && a.seq_dur[1] == 2 && last_d3_is(CH_T, CH_I, CH_E));   /* key down: a tie */
+    btn(HOLD, RELEASE);
+    note(60, 0);
+    btn(A440, PRESS);
+    CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 3 && last_is_rn(3));  /* with A440 held too: not the id readout */
+    btn(HOLD, RELEASE); btn(A440, RELEASE);
+    CHECK(count_type(EV_INT) == 0);
+}
+
+static void test_pedal_on_transition_is_rest_or_tie_in_record_mode(void) {
+    reset();
+    arpui_hold(&u, &a, 1);
+    CHECK(a.hold == 1);                                                /* not recording: the arp's hold */
+    arpui_hold(&u, &a, 0);
+    CHECK(a.hold == 0);
+    enter_rec();
+    arpui_hold(&u, &a, 1);
+    CHECK(a.seq_len == 1 && a.seq_n[0] == 0 && last_is_rn(1));        /* pedal down, no key: a rest */
+    arpui_hold(&u, &a, 0);
+    CHECK(a.seq_len == 1);                                             /* pedal up: nothing */
+    note(60, 100);
+    arpui_hold(&u, &a, 1);
+    CHECK(a.seq_len == 2 && a.seq_dur[1] == 2 && last_d3_is(CH_T, CH_I, CH_E));   /* pedal down, key down: a tie */
+    arpui_hold(&u, &a, 0);
+    note(60, 0);
+    tap_a440();
+    CHECK(!u.rec && a.hold == 0);
+}
+
+static void test_record_readout_persists_and_patch_display_returns_on_leaving(void) {
+    reset();
+    enter_rec();
+    clear_log();
+    btn(A440, PRESS); btn(BANK, PRESS); btn(BANK, RELEASE); btn(A440, RELEASE);
+    CHECK(last_d3_is(CH_D, CH_N, BLANK) && u.rec);                    /* dn shown, still recording */
+    ticks(DISP_TICKS);
+    CHECK(last_is_rn(0) && count_type(EV_RESTORE) == 0);              /* back to r 0, not to the patch display */
+    ticks(5000);
+    CHECK(count_type(EV_RESTORE) == 0);
+    note(60, 100); note(60, 0);
+    CHECK(last_is_rn(1));
+    clear_log();
+    tap_a440();
+    ticks(1);
+    CHECK(count_type(EV_RESTORE) == 1 && count_type(EV_D3) == 0);     /* leaving: the patch display, no readout */
+    ticks(5000);
+    CHECK(count_type(EV_RESTORE) == 1 && count_type(EV_D3) == 0);
+}
+
+static void test_a440_led_blinks_in_record_mode(void) {
+    reset();                                                           /* arp off: LED off */
+    enter_rec();
+    ticks(1);
+    CHECK(last_led() == 1);
+    ticks(499);
+    CHECK(last_led() == 1);
+    ticks(1);
+    CHECK(last_led() == 0);                                            /* 500 ms on */
+    ticks(500);
+    CHECK(last_led() == 1);                                            /* 500 ms off */
+    tap_a440();
+    ticks(1);
+    CHECK(last_led() == 0);                                            /* back to the arp state: off */
+    tap_a440(); ticks(1);
+    CHECK(last_led() == 1);
+    enter_rec(); ticks(2000);
+    tap_a440(); ticks(1);
+    CHECK(last_led() == 1);                                            /* arp on: lit again */
+}
+
+static void test_program6_in_record_mode_clears_and_stays(void) {
+    reset();
+    tap_a440();
+    enter_rec();
+    note(60, 100); note(60, 0); note(64, 100); note(64, 0);
     btn(A440, PRESS); btn(P6, PRESS); btn(P6, RELEASE); btn(A440, RELEASE);
-    CHECK(a.seq_len == 0 && a.enabled);
+    CHECK(u.rec && a.seq_len == 0 && last_is_rn(0) && a.enabled);
+    note(67, 100); note(67, 0);
+    CHECK(a.seq_len == 1 && last_is_rn(1));
+    tap_a440();
+    CHECK(!u.rec && a.seq_len == 1 && a.seq_note[0][0] == 67);
+}
+
+static void test_globals_leaves_record_mode(void) {
+    reset();
+    enter_rec();
+    note(60, 100); note(60, 0);
+    CHECK(btn(GLOBALS, PRESS) == 0 && !u.rec && a.seq_len == 1);      /* the menu opens as stock */
+    fake_globals_open = 1;
+    CHECK(btn(GLOBALS, RELEASE) == 0);
+}
+
+static void test_notes_while_a440_is_held_are_ordinary(void) {
+    reset();
+    tap_a440();                                                        /* arp on */
+    clear_log();
+    btn(A440, PRESS);
+    note(60, 100);
+    CHECK(count_type(EV_VON) == 1 && a.seq_len == 0 && arp_pool_count(&a) == 1);   /* arpeggiated, not recorded */
+    note(60, 0);
+    CHECK(btn(A440, RELEASE) == 1 && !a.enabled && !u.rec);            /* a tap: the note did not use the hold */
+}
+
+static void test_suspended_is_arp_on_or_record_mode(void) {
+    reset();
+    CHECK(!arpui_suspended(&u, &a));
+    tap_a440();
+    CHECK(arpui_suspended(&u, &a));
+    tap_a440();
+    CHECK(!arpui_suspended(&u, &a));
+    enter_rec();
+    CHECK(arpui_suspended(&u, &a));
+    tap_a440();
+    CHECK(!arpui_suspended(&u, &a));
 }
 
 static void test_orphan_release_is_consumed_and_other_buttons_pass(void) {
@@ -193,6 +344,8 @@ static void test_readout_of_unassigned_buttons(void) {
     btn(A440, PRESS);
     CHECK(btn(OSCB_KEYB, PRESS) == 1 && last_int() == OSCB_KEYB);
     CHECK(btn(OSCB_KEYB, RELEASE) == 1);
+    CHECK(btn(HOLD, PRESS) == 1 && last_int() == HOLD);               /* HOLD is only taken in record mode */
+    CHECK(btn(HOLD, RELEASE) == 1);
     btn(A440, RELEASE);
     CHECK(!a.enabled);
 }
@@ -574,7 +727,17 @@ int main(void) {
     test_bank_group_cycle_modes_with_names();
     test_program_buttons_set_octaves_clock_and_note_value();
     test_program_7_8_step_through_every_value();
-    test_recording_and_program6_clear();
+    test_a440_tune_enters_record_mode_and_a_tap_leaves();
+    test_record_mode_without_steps_keeps_the_sequence();
+    test_tune_without_a440_is_stock();
+    test_hold_button_is_rest_or_tie_in_record_mode();
+    test_pedal_on_transition_is_rest_or_tie_in_record_mode();
+    test_record_readout_persists_and_patch_display_returns_on_leaving();
+    test_a440_led_blinks_in_record_mode();
+    test_program6_in_record_mode_clears_and_stays();
+    test_globals_leaves_record_mode();
+    test_notes_while_a440_is_held_are_ordinary();
+    test_suspended_is_arp_on_or_record_mode();
     test_orphan_release_is_consumed_and_other_buttons_pass();
     test_readout_of_unassigned_buttons();
     test_globals_button_abandons_the_hold();

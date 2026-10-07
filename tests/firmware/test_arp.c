@@ -61,8 +61,8 @@ static void test_defaults(void) {
     reset();
     CHECK(!a.enabled && a.mode == ARP_UP && a.octaves == 1 && a.bpm == 120 && !a.ext && !a.hold);
     CHECK(a.beats_num == 1 && a.beats_den == 2);                      /* 1/8 */
-    CHECK(a.sounding == ARP_NONE && a.seq_len == 0);
-    CHECK(sizeof(arp_t) <= 0x400);
+    CHECK(a.sounding == ARP_NONE && a.seq_len == 0 && !a.seq_rec);
+    CHECK(sizeof(arp_t) <= 0xA00);
     ticks(5000);
     CHECK(nlog == 0);
 }
@@ -538,6 +538,246 @@ static void test_seq_restarts_on_fresh_key_and_latches(void) {
     CHECK(strcmp(ons(), "59 62 59 55 ") == 0);                         /* keeps playing, latched */
 }
 
+
+/* ---- seq: record mode, chord steps, rests, ties (spec "Seq") ---------------------------- */
+static void rec_on(int note) { arp_seq_record_note(&a, LOCAL, note, 100); }
+static void rec_off(int note) { arp_seq_record_note(&a, LOCAL, note, 0); }
+static int off_at(int note, int t) { for (int i = 0; i < nlog; i++) if (!log_[i].on && log_[i].note == note && log_[i].t == t) return 1; return 0; }
+
+static void test_seq_notes_held_together_form_a_chord_step(void) {
+    reset(); arp_enable(&a, 1);
+    arp_seq_record(&a, 1);
+    CHECK(arp_seq_record_note(&a, LOCAL, E4, 90) == 1);                /* E first: the step opens */
+    CHECK(arp_seq_record_note(&a, LOCAL, C4, 100) == 1);               /* C and G join while E is down */
+    CHECK(arp_seq_record_note(&a, MIDI, 67, 80) == 1);
+    CHECK(n_on() == 3 && n_sounding() == 3);                           /* all sound while recording */
+    CHECK(arp_seq_record_note(&a, MIDI, C4, 70) == 1 && a.seq_n[0] == 3);   /* a pitch already in the step: not twice */
+    rec_off(E4);
+    CHECK(arp_seq_record_note(&a, LOCAL, A4, 100) == 1 && a.seq_n[0] == 4);  /* C and G still down: joins */
+    rec_off(C4); rec_off(67); rec_off(A4);
+    CHECK(n_sounding() == 0);
+    CHECK(arp_seq_record_note(&a, LOCAL, D4, 100) == 2);               /* every key released: a new step */
+    rec_off(D4);
+    arp_seq_record(&a, 0);
+    CHECK(a.seq_len == 2 && a.seq_n[0] == 4 && a.seq_n[1] == 1);
+    CHECK(a.seq_note[0][0] == E4 && a.seq_vel[0][0] == 90 && a.seq_note[0][1] == C4 && a.seq_vel[0][1] == 100);
+    CHECK(a.seq_dur[0] == 1 && a.seq_dur[1] == 1);
+    clear_log();
+    on(C4);                                                            /* reference = C4, the lowest of step 1 */
+    CHECK(n_on() == 4 && n_sounding() == 4);                           /* the chord at once, as recorded */
+    CHECK(sounding[C4] && sounding[E4] && sounding[67] && sounding[A4]);
+    CHECK(on_at(0)->vel == 90 && on_at(1)->vel == 100 && on_at(2)->vel == 80);
+    ticks(124);
+    CHECK(n_sounding() == 4);
+    ticks(1);
+    CHECK(n_sounding() == 0);                                          /* gate: the whole chord released */
+    ticks(125);
+    CHECK(n_on() == 5 && on_note(4) == D4 && on_tick(4) == 250);
+    off(C4);
+    clear_log();
+    on(D4);                                                            /* trigger D: the chord up a tone */
+    CHECK(n_on() == 4 && sounding[D4] && sounding[66] && sounding[A4] && sounding[71]);
+}
+
+static void test_seq_rest_and_tie_with_internal_clock(void) {
+    reset(); arp_enable(&a, 1);
+    record_cege();                                                     /* an old sequence */
+    arp_seq_record(&a, 1);
+    CHECK(arp_seq_rest_tie(&a) == 0 && a.seq_len == 1 && a.seq_n[0] == 0);   /* a rest first discards the old one too */
+    rec_on(C4); rec_off(C4);
+    CHECK(a.seq_len == 2);
+    CHECK(arp_seq_rest_tie(&a) == 0 && a.seq_len == 3);                /* no key down: rest */
+    rec_on(E4);
+    CHECK(arp_seq_rest_tie(&a) == 1 && arp_seq_rest_tie(&a) == 1);     /* key down: ties */
+    CHECK(a.seq_len == 4 && a.seq_dur[3] == 3 && a.seq_dur[2] == 1);
+    rec_off(E4);
+    CHECK(arp_seq_rest_tie(&a) == 0 && a.seq_len == 5);                /* released: a rest again */
+    arp_seq_record(&a, 0);
+    clear_log();
+    on(C4);                                                            /* rest, C, rest, E(3), rest */
+    ticks(249);
+    CHECK(n_on() == 0);                                                /* the rest: silence */
+    ticks(1);
+    CHECK(n_on() == 1 && on_note(0) == C4 && on_tick(0) == 250);
+    ticks(125);
+    CHECK(n_sounding() == 0);                                          /* gate at 375 */
+    ticks(375);                                                        /* 750: E, three steps long */
+    CHECK(n_on() == 2 && on_note(1) == E4 && on_tick(1) == 750);
+    ticks(500);                                                        /* 1250: no retrigger at 1000 or 1250 */
+    CHECK(n_on() == 2 && n_sounding() == 1 && sounding[E4]);
+    ticks(124);
+    CHECK(n_sounding() == 1);
+    ticks(1);
+    CHECK(n_sounding() == 0 && off_at(E4, 1375));                      /* released half-way through its last step */
+    ticks(125);                                                        /* 1500: the final rest */
+    CHECK(n_on() == 2);
+    ticks(250);                                                        /* 1750: round again, the first rest */
+    CHECK(n_on() == 2);
+    ticks(250);
+    CHECK(n_on() == 3 && on_note(2) == C4 && on_tick(2) == 2000);
+}
+
+static void test_seq_tie_under_midi_clock(void) {
+    reset(); arp_enable(&a, 1);
+    arp_seq_record(&a, 1);
+    rec_on(C4); rec_off(C4);
+    arp_seq_rest_tie(&a);                                              /* rest */
+    rec_on(E4); arp_seq_rest_tie(&a); arp_seq_rest_tie(&a); rec_off(E4);   /* E, three steps */
+    arp_seq_record(&a, 0);
+    clear_log();                                                       /* the recording sounded directly */
+    arp_set_ext(&a, 1);
+    on(C4);
+    arp_realtime(&a, 0xFA, 0);
+    clocks(1, 0);                                                      /* clock 0: C */
+    CHECK(n_on() == 1 && on_note(0) == C4);
+    clocks(6, 0);                                                      /* clock 6: gate off */
+    CHECK(n_sounding() == 0);
+    clocks(6, 0);                                                      /* clock 12: rest */
+    CHECK(n_on() == 1);
+    clocks(12, 0);                                                     /* clock 24: E */
+    CHECK(n_on() == 2 && on_note(1) == E4);
+    clocks(24, 0);                                                     /* clocks 36 and 48: no retrigger, still sounding */
+    CHECK(n_on() == 2 && n_sounding() == 1);
+    clocks(5, 0);                                                      /* clock 53 */
+    CHECK(n_sounding() == 1);
+    clocks(1, 0);                                                      /* clock 54: the gate of its last step */
+    CHECK(n_sounding() == 0);
+    clocks(6, 0);                                                      /* clock 60: C again */
+    CHECK(n_on() == 3 && on_note(2) == C4);
+}
+
+static void test_seq_direction_modes_keep_each_steps_chord_and_length(void) {
+    int t0;
+    reset(); arp_enable(&a, 1);
+    arp_seq_record(&a, 1);
+    rec_on(C4); rec_off(C4);
+    arp_seq_rest_tie(&a);
+    rec_on(E4); arp_seq_rest_tie(&a); arp_seq_rest_tie(&a); rec_off(E4);   /* C, rest, E(3) */
+    arp_seq_record(&a, 0);
+    clear_log();                                                       /* the recording sounded directly */
+    arp_set_mode(&a, ARP_DOWN);
+    on(C4);
+    ticks(1300);                                                       /* E(3) @0, rest @750, C @1000, E @1250 */
+    CHECK(strcmp(ons(), "64 60 64 ") == 0);
+    CHECK(on_tick(0) == 0 && off_at(E4, 625) && on_tick(1) == 1000 && on_tick(2) == 1250);
+    off(C4);
+    arp_set_mode(&a, ARP_RANDOM);
+    clear_log();
+    on(C4);
+    ticks(5000);
+    for (int i = 0; i < nlog; i++) CHECK(log_[i].note == C4 || log_[i].note == E4);
+    off(C4);
+    arp_seq_record(&a, 1);
+    rec_on(C4); rec_off(C4); rec_on(D4); rec_off(D4); rec_on(E4); arp_seq_rest_tie(&a); rec_off(E4);   /* C, D, E(2) */
+    arp_seq_record(&a, 0);
+    arp_set_mode(&a, ARP_UPDOWN);
+    clear_log();
+    t0 = now;
+    on(C4);
+    ticks(2000);                                                       /* 0 250 500(E, two steps) 1000 1250 1500 1750 */
+    CHECK(strcmp(ons(), "60 62 64 62 60 62 64 ") == 0);
+    CHECK(on_tick(2) == t0 + 500 && off_at(E4, t0 + 875) && on_tick(3) == t0 + 1000);
+}
+
+static void test_seq_reference_is_the_lowest_note_of_the_first_sounding_step(void) {
+    reset(); arp_enable(&a, 1);
+    arp_seq_record(&a, 1);
+    arp_seq_rest_tie(&a);                                              /* a rest first */
+    rec_on(A4); rec_on(D4); rec_off(A4); rec_off(D4);                  /* then a chord: D, the lowest, is the reference */
+    arp_seq_record(&a, 0);
+    clear_log();                                                       /* the recording sounded directly */
+    on(C4);
+    ticks(250);
+    CHECK(n_on() == 2 && on_tick(0) == 250 && on_tick(1) == 250);
+    CHECK((on_note(0) == C4 && on_note(1) == 67) || (on_note(0) == 67 && on_note(1) == C4));
+}
+
+static void test_seq_out_of_range_notes_are_silent_but_the_step_keeps_its_place(void) {
+    reset(); arp_enable(&a, 1);
+    arp_seq_record(&a, 1);
+    rec_on(C4); rec_on(125); rec_off(C4); rec_off(125);                /* a chord of C4 and a very high note */
+    rec_on(D4); rec_off(D4);
+    arp_seq_record(&a, 0);
+    clear_log();                                                       /* the recording sounded directly */
+    on(F4);                                                            /* +5: 65 and 130 */
+    ticks(300);
+    CHECK(strcmp(ons(), "65 67 ") == 0 && on_tick(1) == 250);         /* 130 silent; F sounds, G follows in its place */
+}
+
+static void test_seq_record_mode_entry_and_exit(void) {
+    int k;
+    enabled_with_ceg();                                                /* arp on, C E G, C sounding */
+    ticks(10);
+    clear_log();
+    arp_seq_record(&a, 1);
+    CHECK(has_off(C3) && n_sounding() == 0 && arp_pool_count(&a) == 0);   /* entry: step released, pool emptied */
+    k = nlog;
+    off(C3); off(E3); off(G3);
+    ticks(1000);
+    CHECK(nlog == k);                                                  /* keys down at entry: ignored, nothing plays */
+    rec_on(D4);
+    CHECK(sounding[D4]);
+    arp_seq_record(&a, 0);                                             /* leave with D still down */
+    CHECK(has_off(D4) && n_sounding() == 0 && a.seq_len == 1);
+    k = nlog;
+    ticks(1000);
+    off(D4);
+    CHECK(nlog == k);                                                  /* D down at exit: ignored until pressed again */
+    on(D4);
+    CHECK(n_on() == 2 && on_note(1) == D4 && sounding[D4]);           /* the one-step sequence runs from D */
+    reset();                                                           /* arp off: keys sounding directly are released on entry */
+    on(C3);
+    arp_seq_record(&a, 1);
+    CHECK(has_off(C3) && n_sounding() == 0);
+    arp_seq_record(&a, 0);
+    CHECK(a.seq_len == 0);
+    record_cege();                                                     /* leaving without a step keeps the old sequence */
+    arp_seq_record(&a, 1);
+    arp_seq_record(&a, 0);
+    CHECK(a.seq_len == 4);
+}
+
+static void test_seq_capacity_64_steps_10_notes_64_ties(void) {
+    reset();
+    arp_seq_record(&a, 1);
+    for (int i = 0; i < 70; i++) { rec_on(30 + i % 40); rec_off(30 + i % 40); }
+    CHECK(a.seq_len == 64 && n_on() == 70);                            /* beyond 64: sounds, not recorded */
+    arp_seq_clear(&a);
+    clear_log();
+    for (int i = 0; i < 12; i++) rec_on(40 + i);
+    CHECK(a.seq_len == 1 && a.seq_n[0] == 10 && n_on() == 12);         /* beyond 10 in a step: sounds, not recorded */
+    for (int i = 0; i < 70; i++) arp_seq_rest_tie(&a);
+    CHECK(a.seq_dur[0] == 64);
+    for (int i = 0; i < 12; i++) rec_off(40 + i);
+    CHECK(n_sounding() == 0);
+    arp_seq_record(&a, 0);
+}
+
+static void test_seq_all_notes_off_enable_and_clear_during_record_mode(void) {
+    reset();
+    arp_seq_record(&a, 1);
+    rec_on(C4);
+    arp_all_notes_off(&a);
+    CHECK(has_off(C4) && a.seq_len == 1 && a.seq_rec);                 /* CC 123: notes cut, recording kept */
+    rec_off(C4);
+    rec_on(E4); rec_off(E4);
+    CHECK(a.seq_len == 2);
+    rec_on(G3);
+    clear_log();
+    arp_enable(&a, 1);                                                 /* a program load while recording */
+    CHECK(a.enabled && nlog == 0 && sounding[G3]);                     /* nothing cut, nothing started */
+    rec_off(G3);
+    CHECK(has_off(G3));
+    arp_seq_clear(&a);                                                 /* Program 6 while recording */
+    CHECK(a.seq_len == 0 && a.seq_rec);
+    rec_on(A4); rec_off(A4);
+    CHECK(a.seq_len == 1);
+    arp_seq_record(&a, 0);
+    clear_log();
+    on(C4);
+    CHECK(n_on() == 1 && on_note(0) == C4);                            /* the one-step sequence, on C */
+}
+
 /* ---- assign -------------------------------------------------------------------------- */
 static void assign_on(void) { reset(); arp_enable(&a, 1); arp_set_mode(&a, ARP_ASSIGN); }
 
@@ -747,6 +987,15 @@ int main(void) {
     test_seq_records_sounds_directly_and_plays_transposed();
     test_seq_octaves_modes_and_clear();
     test_seq_restarts_on_fresh_key_and_latches();
+    test_seq_notes_held_together_form_a_chord_step();
+    test_seq_rest_and_tie_with_internal_clock();
+    test_seq_tie_under_midi_clock();
+    test_seq_direction_modes_keep_each_steps_chord_and_length();
+    test_seq_reference_is_the_lowest_note_of_the_first_sounding_step();
+    test_seq_out_of_range_notes_are_silent_but_the_step_keeps_its_place();
+    test_seq_record_mode_entry_and_exit();
+    test_seq_capacity_64_steps_10_notes_64_ties();
+    test_seq_all_notes_off_enable_and_clear_during_record_mode();
     test_assign_plays_the_entered_order_with_each_entrys_velocity();
     test_assign_duplicates_via_hold_and_relatch_replaces();
     test_assign_release_without_hold_removes_the_pitch();

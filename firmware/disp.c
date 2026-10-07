@@ -11,6 +11,11 @@ void disp_touch(disp_t *d)
     d->ticks = DISP_TICKS;
 }
 
+void disp_cancel(disp_t *d)
+{
+    d->ticks = 0;
+}
+
 int disp_active(const disp_t *d)
 {
     return d->ticks != 0;

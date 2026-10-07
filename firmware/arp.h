@@ -8,7 +8,9 @@
 #include <stdint.h>
 
 #define ARP_NONE 0xFF
-#define ARP_SEQ_MAX 32
+#define ARP_SEQ_MAX 64                /* seq: steps */
+#define ARP_SEQ_CHORD 10              /* seq: notes per step */
+#define ARP_SEQ_TIE_MAX 64            /* seq: a step's length in arp steps */
 #define ARP_ASG_MAX 32                /* Assign: entries in note-on order */
 #define ARP_LOSS_TICKS 1000           /* 1 s without a MIDI clock releases the sounding note */
 #define ARP_PPQN 24
@@ -24,7 +26,9 @@ typedef struct {
     uint8_t  enabled, hold, mode, octaves, ext;
     uint8_t  running;                 /* MIDI transport: Start/Continue seen and no Stop since */
     uint8_t  port;                    /* MIDI clock port lock, ARP_NONE = none */
-    uint8_t  sounding;                /* step note currently sounding, ARP_NONE = none */
+    uint8_t  sounding;                /* first step note currently sounding, ARP_NONE = none */
+    uint8_t  snd_n;                   /* step notes sounding (a seq chord step has several) */
+    uint8_t  snd[ARP_SEQ_CHORD];
     uint8_t  idx, pass;               /* pattern position: entry in the base order, octave pass */
     uint8_t  last_base;               /* base pitch of the last step (pool order is pitch-anchored) */
     uint8_t  sounding_base;           /* base pitch of the sounding step note */
@@ -43,9 +47,14 @@ typedef struct {
     uint16_t clk_iv[ARP_BEAT_IVS];    /* ring of intervals (ticks) */
     uint8_t  clk_n, clk_pos;          /* intervals held, next slot */
     uint8_t  clk_prev;                /* a clock has been seen since the window restarted */
-    /* seq: recorded steps, played transposed so step 0 lands on the trigger key */
+    /* seq: recorded steps — a chord of up to ARP_SEQ_CHORD notes or a rest (seq_n 0), each
+     * seq_dur arp steps long — played transposed so the lowest note of the first sounding
+     * step lands on the trigger key */
     uint8_t  seq_len, seq_rec, seq_fresh, seq_trigger;
-    uint8_t  seq_note[ARP_SEQ_MAX], seq_vel[ARP_SEQ_MAX];
+    uint8_t  seq_hold;                /* arp steps the sounding seq step still has to run (its length - 1) */
+    uint8_t  seq_n[ARP_SEQ_MAX], seq_dur[ARP_SEQ_MAX];
+    uint8_t  seq_note[ARP_SEQ_MAX][ARP_SEQ_CHORD], seq_vel[ARP_SEQ_MAX][ARP_SEQ_CHORD];
+    uint8_t  rec_down[16];            /* record mode: keys recorded into the open step and still down (bitmap) */
     /* Assign: the pool's notes in entered order, duplicates allowed */
     uint8_t  asg_len;
     uint8_t  asg_stay;                /* the entry at idx replaced the one just played: do not advance */
@@ -71,10 +80,15 @@ void arp_set_beats(arp_t *a, int num, int den);          /* beats per step */
 void arp_set_swing(arp_t *a, int on);                    /* 16S / 8S */
 void arp_set_ext(arp_t *a, int ext);                     /* clock source: 0 internal, 1 MIDI */
 
-/* Seq recording: notes played while recording sound directly and are appended (up to
- * ARP_SEQ_MAX); end with at least one step makes the sequence the base order. */
+/* Seq record mode (docs/SPEC.md: "Seq"). Entering releases everything sounding and empties
+ * the pool; notes then sound directly and are recorded — held together, one chord step;
+ * after every key is released, a new step — until leaving, which releases what still
+ * sounds. The old sequence stands until the first step is recorded. */
 void arp_seq_record(arp_t *a, int on);
 int  arp_seq_record_note(arp_t *a, int src, int note, int vel);   /* returns steps recorded */
+/* HOLD / pedal while recording: a key of the open step down = tie (returns 1), else a rest
+ * (returns 0); -1 when not recording. */
+int  arp_seq_rest_tie(arp_t *a);
 void arp_seq_clear(arp_t *a);
 
 /* Queries for the UI */

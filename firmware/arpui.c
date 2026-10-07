@@ -3,7 +3,7 @@
 
 enum { UI_PRESS = 1, UI_RELEASE = 2 };
 enum { UC_A = 0x0A, UC_U = 0x1E, UC_P = 0x19, UC_D = 0x0D, UC_N = 0x17, UC_R = 0x1B, UC_I = 0x12, UC_T = 0x1D,
-       UC_S = 0x1C, UC_Y = 0x22, UC_O = 0x18, UC_F = 0x0F, UC_LO = 0x24, UC_BLANK = 0x25 };
+       UC_S = 0x1C, UC_Y = 0x22, UC_O = 0x18, UC_F = 0x0F, UC_E = 0x0E, UC_LO = 0x24, UC_BLANK = 0x25 };
 enum { P1 = 0, P4 = 3, P5 = 4, P6 = 5, P7 = 6, P8 = 7 };
 
 static const uint8_t MODE_TEXT[ARP_MODES][3] = {
@@ -98,6 +98,44 @@ void arpui_program_loaded(arpui_t *u, arp_t *a)
     arp_enable(a, on);
 }
 
+/* --- seq record mode (A440 + Tune) ------------------------------------------------------ */
+static void draw_rec(const arp_t *a)                       /* the readout: r N, steps of this recording */
+{
+    int n = a->seq_fresh ? 0 : a->seq_len;                 /* the old sequence stands until the first step */
+    plat_display3(UC_R, n >= 10 ? n / 10 : UC_BLANK, n % 10);
+}
+
+static void show_rec(arpui_t *u, const arp_t *a)
+{
+    draw_rec(a);
+    disp_touch(&u->disp);
+}
+
+static void rest_tie(arpui_t *u, arp_t *a)                 /* HOLD button or pedal while recording */
+{
+    if (arp_seq_rest_tie(a) == 1)
+        show3(u, UC_T, UC_I, UC_E);
+    else
+        show_rec(u, a);
+}
+
+static void rec_enter(arpui_t *u, arp_t *a)
+{
+    u->rec = 1;
+    u->rec_ms = 0;
+    arp_seq_record(a, 1);
+    show_rec(u, a);
+}
+
+static void rec_leave(arpui_t *u, arp_t *a, int restore)   /* restore = 0 when the Globals menu takes the display */
+{
+    u->rec = 0;
+    arp_seq_record(a, 0);
+    disp_cancel(&u->disp);                                 /* the readout goes with the mode */
+    if (restore)
+        plat_display_restore();
+}
+
 /* --- tap tempo (A440 + Unison) ---------------------------------------------------------- */
 static void tempo_tap(arpui_t *u, arp_t *a)
 {
@@ -130,10 +168,9 @@ static void tempo_tap(arpui_t *u, arp_t *a)
 }
 
 /* --- buttons ---------------------------------------------------------------------------- */
-static void end_hold(arpui_t *u, arp_t *a)
+static void end_hold(arpui_t *u)
 {
     u->a440_held = 0;
-    arp_seq_record(a, 0);
 }
 
 /* a button pressed while A440 is held */
@@ -162,9 +199,17 @@ static void combo(arpui_t *u, arp_t *a, int id)
         break;
     case P6:
         arp_seq_clear(a);
+        if (u->rec)
+            show_rec(u, a);                                /* start over, still recording */
         break;
     case ARPUI_UNISON:
         tempo_tap(u, a);
+        break;
+    case ARPUI_TUNE:
+        if (u->rec)
+            rec_leave(u, a, 1);
+        else
+            rec_enter(u, a);
         break;
     case P7:
     case P8:
@@ -187,7 +232,7 @@ int arpui_button(arpui_t *u, arp_t *a, int id, int value)
     bit = (uint8_t)(1u << (id & 7));
     if (plat_globals_open()) {                             /* the Globals menu is pure stock */
         if (u->a440_held)
-            end_hold(u, a);
+            end_hold(u);
         return 0;
     }
     if (id == ARPUI_A440) {
@@ -195,25 +240,37 @@ int arpui_button(arpui_t *u, arp_t *a, int id, int value)
             u->a440_seen = 1;                              /* a real press: not held from power-on */
             u->a440_held = 1;
             u->a440_used = 0;
-            arp_seq_record(a, 1);
         } else if (value == UI_RELEASE && u->a440_held) {
-            end_hold(u, a);
-            if (!u->a440_used) {
-                arp_enable(a, !a->enabled);
-                show_status(u, a);
-                store_patch(u, a);
+            end_hold(u);
+            if (!u->a440_used) {                           /* a tap */
+                if (u->rec) {
+                    rec_leave(u, a, 1);                    /* leaves record mode, nothing else */
+                } else {
+                    arp_enable(a, !a->enabled);
+                    show_status(u, a);
+                    store_patch(u, a);
+                }
             }
         }
         return 1;
     }
-    if (id == ARPUI_GLOBALS) {                             /* opens the menu: the hold is abandoned */
+    if (id == ARPUI_GLOBALS) {                             /* opens the menu: the hold is abandoned, record mode ends */
         if (u->a440_held)
-            end_hold(u, a);
+            end_hold(u);
+        if (u->rec)
+            rec_leave(u, a, 0);
         return 0;
     }
     if (u->swallow[id >> 3] & bit) {                       /* press was ours: repeats and release too */
         if (value == UI_RELEASE)
             u->swallow[id >> 3] &= (uint8_t)~bit;
+        return 1;
+    }
+    if (u->rec && id == ARPUI_HOLD) {                      /* record mode: HOLD is rest / tie, A440 held or not */
+        if (value == UI_PRESS) {
+            u->swallow[id >> 3] |= bit;
+            rest_tie(u, a);
+        }
         return 1;
     }
     if (!u->a440_held || value != UI_PRESS)
@@ -233,14 +290,28 @@ void arpui_note(arpui_t *u, arp_t *a, int src, int note, int vel)
             plat_voice_off(src, note);
         return;
     }
-    if (u->a440_held) {                                    /* recording a sequence */
-        int n = arp_seq_record_note(a, src, note, vel);
-        u->a440_used = 1;
+    if (u->rec) {                                          /* record mode: sounds directly, recorded */
+        arp_seq_record_note(a, src, note, vel);
         if (vel > 0)
-            show_int(u, n);
+            show_rec(u, a);
         return;
     }
     arp_note(a, src, note, vel);
+}
+
+/* --- HOLD -------------------------------------------------------------------------------- */
+void arpui_hold(arpui_t *u, arp_t *a, int on)
+{
+    if (u->kill)
+        return;
+    if (u->rec && on && !a->hold)                          /* the pedal went down while recording */
+        rest_tie(u, a);
+    arp_hold(a, on);
+}
+
+int arpui_suspended(const arpui_t *u, const arp_t *a)
+{
+    return !u->kill && (a->enabled || u->rec);
 }
 
 /* --- Glide Rate -------------------------------------------------------------------------- */
@@ -287,9 +358,19 @@ void arpui_tick(arpui_t *u, arp_t *a)
     }
     if (u->kill)
         return;
-    if (disp_tick(&u->disp))
-        plat_display_restore();
-    on = a->enabled != 0;
+    if (disp_tick(&u->disp)) {
+        if (u->rec)
+            draw_rec(a);                                   /* a message over the readout: back to r N */
+        else
+            plat_display_restore();
+    }
+    if (u->rec) {                                          /* the LED blinks while recording */
+        on = u->rec_ms < ARPUI_BLINK_MS;
+        if (++u->rec_ms >= 2 * ARPUI_BLINK_MS)
+            u->rec_ms = 0;
+    } else {
+        on = a->enabled != 0;
+    }
     if (on != u->led_on) {
         u->led_on = (uint8_t)on;
         plat_led(ARPUI_LED_A440, on);
