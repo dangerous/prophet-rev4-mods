@@ -56,8 +56,10 @@ def unpack7(packed: bytes) -> bytes:
     out = bytearray()
     for i in range(0, len(packed), 8):
         group = packed[i:i + 8]
-        if len(group) < 2:
-            raise SyxError("packed data ends with an MS byte and no data bytes")
+        if len(group) == 1:
+            if group[0] != 0:
+                raise SyxError("empty tail group has a non-zero MS byte 0x%02X" % group[0])
+            break                                        # the empty tail group: header only
         ms = group[0]
         for k, b in enumerate(group[1:]):
             out.append(b | (((ms >> k) & 1) << 7))
@@ -98,7 +100,7 @@ def decode(raw: bytes, check_trailer: bool = True) -> Container:
     if len(body) < 2:
         raise SyxError("missing trailer")
     packed, trailer = body[:-2], body[-2:]
-    expected_packed = groups * 8 + (tail + 1 if tail else 0)
+    expected_packed = groups * 8 + tail + 1              # the tail group's MS byte is always there
     if len(packed) != expected_packed:
         raise SyxError("payload length %d inconsistent with header (groups=%d, tail=%d -> %d)"
                        % (len(packed), groups, tail, expected_packed))
@@ -124,6 +126,8 @@ def encode(payload: bytes, target: str) -> bytes:
     out.append(HEADER_MAGIC)
     out += _header_group(groups, tail)
     out += pack7(payload)
+    if tail == 0:
+        out.append(0)                                    # the loader reads a tail MS byte regardless
     out += trailer_for(payload)
     out.append(EOX)
     return bytes(out)

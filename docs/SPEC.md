@@ -46,8 +46,13 @@ F0 01 32 7C [7D] 7A <6-byte header group> <payload> <trailer: 2 bytes> F7
 - **Header group.** One 6-byte packed group (MS + 5 data) decoding to: `groups`, a
   big-endian u32 = number of full payload groups; `tail`, a u8 = number of data bytes in
   the final partial payload group (0 = none).
-- **Payload.** `groups` full groups, then one partial group of `1 + tail` bytes if
-  `tail > 0`. Decoded length = `7 × groups + tail`.
+- **Payload.** `groups` full groups, then the tail group: its MS byte **always present**,
+  followed by `tail` data bytes — so an empty tail (`tail = 0`) is still one byte on the
+  wire. Decoded length = `7 × groups + tail`. The loader reads that MS byte
+  unconditionally before the trailer; a file without it stalls the transfer at `100`
+  with the eight Program LEDs lit, nothing is written, and a power cycle recovers.
+  `[HW: 2026-10-07 — happened with the first native image, 244,048 payload bytes = 34,864
+  groups + 0]`
 - **Trailer.** Let `S` be the 32-bit sum of the decoded payload taken as little-endian
   u16 halfwords (a final odd byte is not summed). Trailer byte 0 = `S & 0x7F`, byte 1 =
   `(S >> 8) & 0x7F`. The loader compares `S & 0x7F7F` with `t0 | t1 << 8` and rejects the

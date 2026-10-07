@@ -76,6 +76,23 @@ class ContainerTests(unittest.TestCase):
         self.assertTrue(all(b < 0x80 for b in packed))
         self.assertEqual(syx.unpack7(packed), data)
 
+    def test_empty_tail_group_still_has_its_header_byte(self):
+        # spec "Payload": the loader always reads the tail group's MS byte, even for tail = 0
+        payload = bytes(range(14))                      # exactly two full groups
+        raw = syx.encode(payload, "main")
+        body = raw[4 + 1 + 6:-1]                        # after F0 01 32 7C 7A + header group
+        packed, trailer = body[:-2], body[-2:]
+        self.assertEqual(len(packed), 2 * 8 + 1)
+        self.assertEqual(packed[-1], 0)                 # the empty tail group's MS byte
+        self.assertEqual(trailer, syx.trailer_for(payload))
+        c = syx.decode(raw)
+        self.assertEqual((c.groups, c.tail, c.payload), (2, 0, payload))
+        # without that byte the file is what stalled the loader: reject it
+        without = raw[:4 + 1 + 6 + 16] + raw[4 + 1 + 6 + 17:]
+        with self.assertRaisesRegex(syx.SyxError, "inconsistent"):
+            syx.decode(without)
+        self.assertEqual(syx.pack7(b""), b"")           # pack7 itself stays pure
+
     def test_decode_rejects_wrong_prefix_or_command(self):
         raw = MAIN.read_bytes()
         with self.assertRaisesRegex(syx.SyxError, "prefix"):
