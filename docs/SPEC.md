@@ -307,8 +307,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
   (`0x2003EC5D`, src=2), MIDI note-off `0x2003B032` (`0x2003EEDD`); CC 123 `0x2003B294` and
   CC 124–127 `0x2003B144` (`0x2003EBE5`); hold `0x200396CA` (`0x2003D325`, r4 = merged hold
   state); panel button `0x2003C244` (`0x2003BC31`, (id, value)); pot store `0x2003C292`
-  (`0x20036B51`, (pot, raw)); pot change `0x2003C2A6` (`0x2003BC6D`, (pot, old, new)); MIDI
-  parser table words `0x200343D8/E0/E4/E8` (F8/FA/FB/FC, stock `0x20034343`). The site
+  (`0x20036B51`, (pot, raw)); pot change `0x2003C2A6` (`0x2003BC6D`, (pot, old, new)); end of program
+  apply `0x2003D15C` (`0x2003B6B1`, "Patch memory"); MIDI parser table words `0x200343D8/E0/E4/E8` (F8/FA/FB/FC, stock `0x20034343`). The site
   `0x2003BED8` is **not** a MIDI Out call (it posts a message no state handles) and is not
   hooked.
 - Stock functions used: note_on `0x2003EC5D`, note_off `0x2003E95D`, all_notes_off
