@@ -123,7 +123,10 @@ the spec: Up/Down end repeat, random repeat avoidance, arp to MIDI Out, Globals 
 kill-switch button (ruled: A440 at power-on). Status: `firmware/arp.c` (engine), `arpui.c`
 (UI), `native.c` (glue, queue, stock table) built and host-tested (`test_arp` 97 checks,
 `test_arpui` 69, `test_native_image` 10); `make image-native` → `build/prophet10_native.syx`
-(5.6 KB code, record `0x20088000–0x20090000`, 17 stock sites). Not yet flashed. Decisions
+(5.6 KB code, record `0x20088000–0x20090000`, 17 stock sites). **Flashed 2026-10-07 and
+working** (A440, display, pattern, per-pass octaves, HOLD). First attempt stalled the loader
+(empty tail group byte — fixed in tools/syx.py); the 1 s table-only kill switch did not see a
+pre-held A440 — now 3 s and also an A440 press event. Decisions
 taken: Up/Down no end repeat; Random may repeat; no MIDI-Out toggle; Globals menu = pure
 stock (A440 tuning tone reachable there); mode/octave change keeps the phase.
 

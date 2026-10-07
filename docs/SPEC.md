@@ -173,7 +173,7 @@ V5's window record at `0x20089600`; that layout was verified on hardware.
   payloads as `image <n> record @0x<offset> ram 0x<lo>..0x<hi>: <n> bytes`, so a reviewer
   can see exactly what a build changed. Record-structure differences are reported as such.
 
-### Native arp engine (stock 2.1.0 base) `[HW: unverified]`
+### Native arp engine (stock 2.1.0 base) `[HW: verified 2026-10-07, Prophet-10 Rev4 — first flash: boot, A440 toggle/LED/display, pattern incl. per-pass octaves, HOLD; kill switch re-test pending after the 3 s/press fix]`
 
 Replaces the dependency on Arp Mod V5: the base image becomes Sequential's stock Main OS
 2.1.0 and every arp behaviour below is this project's code. The behaviours specified elsewhere in

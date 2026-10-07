@@ -64,7 +64,7 @@ out of the MIDI‑byte path that a USB re‑flash uses; the full variant adds th
 and has not been installed on hardware yet. [`dist/README.md`](dist/README.md) explains the
 checksums.
 
-### Native build — our own arp on stock 2.1.0, no V5 `[HW: unverified]`
+### Native build — our own arp on stock 2.1.0, no V5 `[HW: verified 2026‑10‑07, first flash]`
 
 `make image-native` → `build/prophet10_native.syx`: the same features re‑implemented as
 one engine hooked straight into Sequential's stock OS (spec section "Native arp engine"),
