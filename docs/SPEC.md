@@ -173,7 +173,7 @@ V5's window record at `0x20089600`; that layout was verified on hardware.
   payloads as `image <n> record @0x<offset> ram 0x<lo>..0x<hi>: <n> bytes`, so a reviewer
   can see exactly what a build changed. Record-structure differences are reported as such.
 
-### Native arp engine (stock 2.1.0 base) `[HW: verified 2026-10-07, Prophet-10 Rev4 — first flash: boot, A440 toggle/LED/display, pattern incl. per-pass octaves, HOLD; kill switch re-test pending after the 3 s/press fix]`
+### Native arp engine (stock 2.1.0 base) `[HW: verified 2026-10-07, Prophet-10 Rev4 — first flash: boot, A440 toggle/LED/display, pattern incl. per-pass octaves, HOLD, kill switch (both ways)]`
 
 Replaces the dependency on Arp Mod V5: the base image becomes Sequential's stock Main OS
 2.1.0 and every arp behaviour below is this project's code. The behaviours specified elsewhere in
@@ -299,8 +299,9 @@ deviations are marked **(change)** with the reason.
   power-on**, disables every arp hook for the session (all hooks fall straight through to
   stock; the A440 press itself reaches stock too), so a misbehaving engine can be bypassed
   without re-flashing. Detected two ways: the stock button-held table, and the A440 press
-  event itself. `[HW: 2026-10-07 — the table alone (1 s window) did not detect a button
-  held from before power-on: a panel reports changes, and its link comes up late]`
+  event itself. `[HW: verified 2026-10-07, Prophet-10 Rev4 — both ways; the original 1 s
+  table-only window missed a button held from before power-on because the panel link comes
+  up later than that, not because pre-held buttons go unreported]`
 - No code runs at boot; all state is zero in the image and initialised lazily by the first
   hook that runs.
 
