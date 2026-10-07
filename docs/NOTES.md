@@ -137,8 +137,8 @@ behavioural source of truth; this file is the engineering context around it.
 
 ## Open items
 
-- Patch memory (arp settings in program parameters 93/94) built, not yet flashed; verify
-  the voice engine ignores those slots. Possible follow-up: the sequence in the 29 spare
+- Patch memory (arp settings in program parameters 93/94) verified 2026-10-07; the voice
+  engine ignores those slots. Possible follow-up: the sequence in the 29 spare
   bytes of the flash record (pitches only, ~28 steps, not in SysEx dumps; hooks on the flash
   serialiser/deserialiser — a 4 KB sector holds 32 programs, so backup first).
 - Seq recording from MIDI-in not yet exercised on hardware.

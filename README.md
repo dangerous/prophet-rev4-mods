@@ -38,7 +38,7 @@ All of it `[HW: verified 2026‑10‑07, Prophet‑10 Rev4]` unless marked.
 - **Button id readout** — hold A440 and press an unused button to see its id.
 - **Patch memory** — the arp's on/off, mode, octaves and note value are saved with the
   program (two spare parameter slots, carried in SysEx dumps too) and restored when it is
-  loaded; programs without arp data load with the arp off. `[HW: unverified]`
+  loaded; programs without arp data load with the arp off.
 - **Kill switch** — hold A440 while powering on and every hook passes straight through to
   stock for that session (a tap after power‑on is just a tap).
 - **Globals menu** is pure stock while it is open, so Sequential's A440 tuning tone is still

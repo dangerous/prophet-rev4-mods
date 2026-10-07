@@ -326,7 +326,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
   (engine), `arpui.c` (controls, display, LED, kill switch), `oct.c`, `rate.c`, `disp.c`,
   `vhold.c`.
 
-### Patch memory `[HW: unverified]`
+### Patch memory `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
 1. Saved with a program: the arp **on/off**, **mode**, **octaves** and **note value**. Not
    saved: BPM, clock source, keyboard octave shift, the sequence.
@@ -350,9 +350,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
    with the live table final (the hook runs in the Prophet5 task and queues "program loaded"
    to the tick). Stock's own load clamps the slots to their maxima. With PRESET off, stock
    restores the live table from its panel shadow on every load, so arp settings behave like
-   every other parameter in that mode (the stored ones are ignored). `[HW: the voice engine
-   receives 93/94 like every parameter; its use of them, if any, is unknown — listen for any
-   change with 94 = 1..4]`
+   every other parameter in that mode (the stored ones are ignored). `[HW: 2026-10-07 — the
+   voice engine receives 93/94 like every parameter and showed no audible reaction to them]`
 
 ### Note value (arp/seq step length) `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock and MIDI sync]`
 
