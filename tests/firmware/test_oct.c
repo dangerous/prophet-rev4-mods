@@ -66,12 +66,32 @@ static void test_both_directions_together_reset_to_zero(void) {
 static void test_tap_without_bank_or_group_is_replayed(void) {
     reset();
     CHECK(oct_button(&o, LO_FREQ, PRESS) == OCT_CONSUMED);
-    CHECK(oct_button(&o, LO_FREQ, REPEAT) == OCT_CONSUMED);
     CHECK(oct_button(&o, LO_FREQ, RELEASE) == OCT_REPLAY_TAP);
-    CHECK(nlog == 0 && oct_shift(&o) == 0);
+    CHECK(nlog == 0 && oct_shift(&o) == 0);                       /* a tap shows nothing */
     /* keys played while it is held do not count as "used" */
     mod(PRESS);
     oct_map_key(&o, 60, 1); oct_map_key(&o, 60, 0);
+    CHECK(oct_button(&o, LO_FREQ, RELEASE) == OCT_REPLAY_TAP);
+}
+
+static void test_held_modifier_shows_the_shift_and_is_no_tap(void) {
+    reset();
+    mod(PRESS); oct_button(&o, BANK, PRESS); oct_button(&o, BANK, RELEASE); mod(RELEASE);   /* shift 1 */
+    clear_log();
+    mod(PRESS);
+    CHECK(nlog == 0);                                              /* the press alone shows nothing yet */
+    CHECK(oct_button(&o, LO_FREQ, REPEAT) == OCT_CONSUMED);        /* the panel reports it held */
+    CHECK(last_int() == 1 && count_type(EV_INT) == 1 && count_type(EV_HOLD) == 1);   /* the current shift, unchanged */
+    CHECK(oct_button(&o, LO_FREQ, REPEAT) == OCT_CONSUMED);
+    CHECK(count_type(EV_INT) == 2 && count_type(EV_HOLD) == 2);   /* every repeat renews the message */
+    CHECK(oct_button(&o, LO_FREQ, RELEASE) == OCT_CONSUMED);       /* a hold is not a tap: no replay */
+    CHECK(oct_shift(&o) == 1);
+    clear_log();
+    mod(PRESS); oct_button(&o, LO_FREQ, REPEAT);                   /* held, then shifted */
+    oct_button(&o, GROUP, PRESS); oct_button(&o, GROUP, RELEASE);
+    CHECK(oct_shift(&o) == 0 && last_int() == 0);
+    CHECK(oct_button(&o, LO_FREQ, RELEASE) == OCT_CONSUMED);
+    mod(PRESS);                                                    /* and a plain tap still is one */
     CHECK(oct_button(&o, LO_FREQ, RELEASE) == OCT_REPLAY_TAP);
 }
 
@@ -130,6 +150,7 @@ int main(void) {
     test_bank_up_group_down_clamped_with_display();
     test_both_directions_together_reset_to_zero();
     test_tap_without_bank_or_group_is_replayed();
+    test_held_modifier_shows_the_shift_and_is_no_tap();
     test_other_buttons_pass_through_when_not_held();
     test_keys_are_shifted_and_releases_use_the_press_time_shift();
     test_out_of_range_keys_are_silent_on_and_off();

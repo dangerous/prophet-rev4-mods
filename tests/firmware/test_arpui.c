@@ -159,6 +159,8 @@ static void test_program_7_8_step_through_every_value(void) {
 
 /* ---- seq record mode (spec "Seq") ---------------------------------------------------- */
 static int last_is_rn(int n) { return last_d3_is(CH_R, n >= 10 ? n / 10 : BLANK, n % 10); }   /* the readout r N */
+static int last_is_rst(void) { return last_d3_is(CH_R, CH_S, CH_T); }
+static int last_is_tie(void) { return last_d3_is(CH_T, CH_I, CH_E); }
 static void note(int n, int vel) { arpui_note(&u, &a, LOCAL, n, vel); }
 static void enter_rec(void) { btn(A440, PRESS); btn(TUNE, PRESS); btn(TUNE, RELEASE); btn(A440, RELEASE); }
 
@@ -207,17 +209,50 @@ static void test_hold_button_is_rest_or_tie_in_record_mode(void) {
     CHECK(btn(HOLD, PRESS) == 0 && btn(HOLD, RELEASE) == 0);           /* not recording: stock HOLD */
     enter_rec();
     clear_log();
-    CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 1 && a.seq_n[0] == 0 && last_is_rn(1));   /* no key down: a rest */
+    CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 1 && a.seq_n[0] == 0 && last_is_rst());   /* no key down: a rest, rSt flashes */
     CHECK(btn(HOLD, REPEAT) == 1 && btn(HOLD, RELEASE) == 1 && a.seq_len == 1);
     CHECK(!a.hold);                                                    /* the latch did not change */
+    ticks(DISP_FLASH_TICKS - 1);
+    CHECK(last_is_rst());
+    ticks(1);
+    CHECK(last_is_rn(1));                                              /* ... then the count */
     note(60, 100);
-    CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 2 && a.seq_dur[1] == 2 && last_d3_is(CH_T, CH_I, CH_E));   /* key down: a tie */
+    CHECK(last_is_rn(2));
+    CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 2 && a.seq_dur[1] == 2 && last_is_tie());   /* key down: a tie, tiE flashes */
     btn(HOLD, RELEASE);
+    ticks(DISP_FLASH_TICKS);
+    CHECK(last_is_rn(3));                                              /* the tie counts one */
+    CHECK(btn(HOLD, PRESS) == 1 && a.seq_dur[1] == 3 && last_is_tie());   /* and again */
+    btn(HOLD, RELEASE);
+    ticks(DISP_FLASH_TICKS);
+    CHECK(last_is_rn(4));
     note(60, 0);
     btn(A440, PRESS);
-    CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 3 && last_is_rn(3));  /* with A440 held too: not the id readout */
+    CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 3 && last_is_rst());  /* with A440 held too: not the id readout */
     btn(HOLD, RELEASE); btn(A440, RELEASE);
     CHECK(count_type(EV_INT) == 0);
+}
+
+static void test_record_readout_counts_length_in_arp_steps(void) {
+    reset();
+    enter_rec();
+    note(60, 100); note(64, 100); note(67, 100);
+    CHECK(last_is_rn(1));                                              /* a chord is one */
+    btn(HOLD, PRESS); btn(HOLD, RELEASE); ticks(DISP_FLASH_TICKS);
+    CHECK(last_is_rn(2));                                              /* tied: two */
+    note(60, 0); note(64, 0); note(67, 0);
+    note(62, 100); note(62, 0);
+    CHECK(last_is_rn(3));
+    note(62, 100);                                                     /* a step tied up to the 64 cap */
+    for (int i = 0; i < 70; i++) { btn(HOLD, PRESS); btn(HOLD, RELEASE); }
+    note(62, 0);
+    ticks(DISP_FLASH_TICKS);
+    CHECK(a.seq_len == 3 && a.seq_dur[2] == 64 && last_is_rn(67));     /* 2 + 1 + 64 */
+    note(64, 100);                                                     /* past 99: the plain number */
+    for (int i = 0; i < 40; i++) { btn(HOLD, PRESS); btn(HOLD, RELEASE); }
+    note(64, 0);
+    ticks(DISP_FLASH_TICKS);
+    CHECK(a.seq_dur[3] == 41 && last_int() == 108 && count_type(EV_INT) == 1);   /* 67 + 41 */
 }
 
 static void test_pedal_on_transition_is_rest_or_tie_in_record_mode(void) {
@@ -228,12 +263,16 @@ static void test_pedal_on_transition_is_rest_or_tie_in_record_mode(void) {
     CHECK(a.hold == 0);
     enter_rec();
     arpui_hold(&u, &a, 1);
-    CHECK(a.seq_len == 1 && a.seq_n[0] == 0 && last_is_rn(1));        /* pedal down, no key: a rest */
+    CHECK(a.seq_len == 1 && a.seq_n[0] == 0 && last_is_rst());        /* pedal down, no key: a rest */
     arpui_hold(&u, &a, 0);
     CHECK(a.seq_len == 1);                                             /* pedal up: nothing */
+    ticks(DISP_FLASH_TICKS);
+    CHECK(last_is_rn(1));
     note(60, 100);
     arpui_hold(&u, &a, 1);
-    CHECK(a.seq_len == 2 && a.seq_dur[1] == 2 && last_d3_is(CH_T, CH_I, CH_E));   /* pedal down, key down: a tie */
+    CHECK(a.seq_len == 2 && a.seq_dur[1] == 2 && last_is_tie());      /* pedal down, key down: a tie */
+    ticks(DISP_FLASH_TICKS);
+    CHECK(last_is_rn(3));
     arpui_hold(&u, &a, 0);
     note(60, 0);
     tap_a440();
@@ -731,6 +770,7 @@ int main(void) {
     test_record_mode_without_steps_keeps_the_sequence();
     test_tune_without_a440_is_stock();
     test_hold_button_is_rest_or_tie_in_record_mode();
+    test_record_readout_counts_length_in_arp_steps();
     test_pedal_on_transition_is_rest_or_tie_in_record_mode();
     test_record_readout_persists_and_patch_display_returns_on_leaving();
     test_a440_led_blinks_in_record_mode();

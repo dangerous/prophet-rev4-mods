@@ -117,8 +117,10 @@ Manual verification on the instrument. Record results against the spec markers i
       display `r 1`…`r 4`.
 - [ ] Play a C-E-G chord (fingers landing in any order), release, then a single D: `r 5`,
       `r 6` — the chord is one step.
-- [ ] With no key down press HOLD: `r 7` (a rest); HOLD LED unchanged. Hold a key and press
-      HOLD twice: `tiE` twice, then `r 8` again (a step three arp steps long).
+- [ ] With no key down press HOLD: `rSt` flashes, then `r 7` (a rest); HOLD LED unchanged.
+- [ ] Press a key and keep it down: `r 8`. Press HOLD: `tiE` flashes, then `r 9`. Press HOLD
+      again: `tiE` flashes, then `r10`. Release the key. (That step is three arp steps long;
+      the count is the length recorded so far in arp steps — every gesture adds one.)
 - [ ] Sustain pedal (`HLd` mode): pedal with no key down = rest, pedal with a key down = tie.
 - [ ] A440 + Bank while recording: `UP`… shows for 1.5 s, then `r N` returns.
 - [ ] Tap A440: the patch number returns, LED steady (arp still on). Press and hold C: the
@@ -173,6 +175,10 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] Shift `1`: hold a chord, change the shift to `-1` while holding, release the chord:
       no stuck notes; the next chord sounds an octave down.
 - [ ] Arp on, shift `1`: arpeggiates an octave up; seq recording and triggering follow.
+- [ ] Hold Lo Freq alone: after the panel's hold delay the display shows the current shift
+      (`000`, `001`, `-01`…) and keeps showing it while held; release: Osc B Lo Freq did
+      **not** toggle.
+- [ ] A quick tap of Lo Freq still toggles Osc B Lo Freq (LED changes on release).
 - [ ] DAW recording MIDI from the Prophet: notes arrive shifted (Local Control on and off).
       MIDI-in notes played from the DAW are **not** shifted.
 - [ ] Prophet-10 split mode: the split point moves with the shift (expected).
@@ -182,8 +188,8 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] Each of these shows for about 1.5 s and then the **patch number** returns: A440 +
       Bank (`UP`…), A440 + Program 2 (`o 2`), A440 + Program 5 (`int`/`Syn`), A440 +
       Program 8 (`8S`), tap A440 on (BPM) and off (`OFF`), Lo Freq + Bank (`1`), A440 +
-      Osc B Keyboard (`36`), A440 + Unison (`tAP`). In record mode `tiE` returns to `r N`
-      instead of the patch number.
+      Osc B Keyboard (`36`), A440 + Unison (`tAP`). In record mode `rSt` / `tiE` flash for
+      about a quarter of a second and return to `r N` instead of the patch number.
 - [ ] A new message within the 1.5 s restarts the timing (e.g. Bank, Bank, Bank).
 
 ## Button id readout (spec "Button id readout")

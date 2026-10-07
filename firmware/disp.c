@@ -11,6 +11,11 @@ void disp_touch(disp_t *d)
     d->ticks = DISP_TICKS;
 }
 
+void disp_flash(disp_t *d)
+{
+    d->ticks = DISP_FLASH_TICKS;
+}
+
 void disp_cancel(disp_t *d)
 {
     d->ticks = 0;

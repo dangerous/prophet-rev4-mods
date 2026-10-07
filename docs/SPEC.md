@@ -465,16 +465,25 @@ this engine deliberately differs it is marked **(change)** with the reason.
    Bank/Group, so the shift is a one-handed move. Versions before 2026-10-07 used the
    filter Keyboard Amount button, id 8.) Pressing Bank and
    Group together (the second while the first is still down) resets the shift to 0. The
-   display shows the shift (`-2`…`2`) for about a second after each press (also at the
-   ends, unchanged). Power-up: 0. Not saved with patches.
+   display shows the shift (`-2`…`2`) for 1.5 s after each press (also at the ends,
+   unchanged), through the stock integer readout — `001`, `-01` — deliberately, as that is
+   how stock shows its own signed values such as the pitch-bend range. **Holding Lo
+   Freq on its own shows the current shift** `[HW: verified 2026-10-08, Prophet-10 Rev4]`: from the moment the
+   panel reports the button held (its first held-repeat event, after the stock repeat
+   delay) the display shows the shift, unchanged or not, and keeps showing it for as long
+   as the button is held (each repeat renews the message); it reverts 1.5 s after the last
+   repeat as any message does. Power-up: 0. Not saved with patches.
 2. The shift applies to keys played on the keyboard: what the synth plays, what the arp/seq
    receive (re-latch, recording, triggers), and what is sent to MIDI Out for those keys.
    MIDI-in notes are not shifted. A key's release always uses the shift that was in force
    when it was pressed, so changing the shift while holding keys never sticks a note.
-3. A tap of Lo Freq (press and release with no Bank/Group press in between) still toggles
-   Osc B low-frequency mode as in stock; the setting and its LED change on the release
-   rather than on the press. While it is held with Bank/Group, the Lo Freq setting does
-   not change. Repeat events (value 3) of any of the three buttons are ignored.
+3. A tap of Lo Freq (press and release with no Bank/Group press in between, and released
+   before the panel reports it held) still toggles Osc B low-frequency mode as in stock;
+   the setting and its LED change on the release rather than on the press. While it is
+   held with Bank/Group, the Lo Freq setting does not change; nor does it change when a
+   hold ends without a shift command — a hold is not a tap `[HW: verified 2026-10-08, Prophet-10 Rev4]` (the
+   stock repeat delay sets how long a tap may last). Repeat events (value 3) of Bank and
+   Group are ignored; Lo Freq's are the hold detection.
 4. Because the shift is applied before the voice engine, a Prophet-10 split point moves
    with the keyboard. A key whose shifted note would fall outside 0–127 is silent (not
    reachable from the 61-key range at ±2).
@@ -488,8 +497,9 @@ this engine deliberately differs it is marked **(change)** with the reason.
    Control is on or off. (`0x2003BED8` is not a MIDI Out call: it posts a message no state
    handles. `[HW: bug found 2026-10-07 by disassembly before that image was installed]`.)
    The button hook swallows id 37 (press, repeats, release), treats Bank/Group presses
-   while it is held as shift commands, and on a release with no shift command replays
-   press+release of id 37 into stock's button post (`0x2003BC31`).
+   while it is held as shift commands, treats a repeat of id 37 as the hold (shows the
+   shift, and marks the hold as used so its release is no tap), and on a release with
+   neither replays press+release of id 37 into stock's button post (`0x2003BC31`).
 
 ### HOLD while the arp is on `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
@@ -520,17 +530,18 @@ this engine deliberately differs it is marked **(change)** with the reason.
 
 1. Every message the engine puts on the display — mode (`UP dn Ud rnd`), octaves
    (`o N`), clock (`int`/`Syn`), `OFF`, BPM (while Glide Rate turns with A440 held, on a
-   tempo tap, and when the arp is switched on), `tAP`, note value, `tiE`, keyboard shift,
-   button id — shows for 1.5 s after the last change and then the display returns to the
-   stock patch display (bank, group and program). Nothing stays on the display permanently,
-   with one exception: while seq record mode lasts the display returns to its readout `r N`
+   tempo tap, and when the arp is switched on), `tAP`, note value, keyboard shift, button
+   id — shows for 1.5 s after the last change and then the display returns to the stock
+   patch display (bank, group and program). The record-mode flashes `rSt` and `tiE` are the
+   one shorter message: 0.25 s ("Seq"). Nothing stays on the display permanently, with one
+   exception: while seq record mode lasts the display returns to its readout `r N`
    instead, and the patch display comes back when record mode ends ("Seq")
    `[HW: verified 2026-10-08, Prophet-10 Rev4]`. `(change from V5, which kept OFF / BPM / Syn up for as long as the
    arp was on)`
 2. A new message restarts the 1.5 s.
-3. Realisation: the UI keeps one 1.5 s timer, restarted by every message it shows; at
-   expiry the stock patch display is redrawn with `0x2003818D(ui = 0x20057390)` — or, while
-   record mode lasts, `r N` is shown again.
+3. Realisation: the UI keeps one timer, restarted by every message it shows (1.5 s, or
+   0.25 s for a flash); at expiry the stock patch display is redrawn with
+   `0x2003818D(ui = 0x20057390)` — or, while record mode lasts, `r N` is shown again.
 
 ### Button id readout `[HW: verified 2026-10-07, Prophet-10 Rev4 — Keyboard 36, GLOBALS 13; Unison read 25 before it became tap tempo, Tune read 12 before it became record mode]`
 
@@ -603,11 +614,13 @@ sequence exists. *Keys*, *HOLD active* and *keys down* are as in "Re-latch under
    sounding directly with the arp off — and the pool is emptied; keys down at entry are
    ignored until released and pressed again. The existing sequence stays until the first
    step is recorded, so entering and leaving without recording changes nothing.
-3. **Readout**: the display shows `r N` (N = steps recorded so far; `r 0` on entry) for as
-   long as record mode lasts. Any other message shown meanwhile (a mode, octaves, BPM, note
-   value, `tiE`…) lasts its 1.5 s and then the display returns to `r N`, not to the patch
-   display ("Display messages"). The A440 LED blinks (500 ms on, 500 ms off) while record
-   mode lasts and shows the arp state again afterwards.
+3. **Readout**: the display shows `r N` for as long as record mode lasts, where N is the
+   **length recorded so far in arp steps**: a chord or a rest counts one, each tie one
+   more — so every recording gesture advances it by exactly one (`r 0` on entry; from 100,
+   the plain number) `[HW: verified 2026-10-08, Prophet-10 Rev4]`. Any other message shown meanwhile (a mode, octaves, BPM, note value…)
+   lasts its 1.5 s and then the display returns to `r N`, not to the patch display
+   ("Display messages"). The A440 LED blinks (500 ms on, 500 ms off) while record mode
+   lasts and shows the arp state again afterwards.
 4. **Notes** (keys, or MIDI-in) sound directly through the stock voice allocator — their
    releases are honoured, so nothing sticks — and are recorded. **Chord rule**: a note-on
    while any key already recorded into the step being recorded (the *open step*) is still
@@ -616,12 +629,15 @@ sequence exists. *Keys*, *HOLD active* and *keys down* are as in "Re-latch under
    its own velocity. Beyond 10 notes in a step, or beyond 64 steps, notes still sound but
    are not recorded.
 5. **Rest**: a press of the HOLD button, or of the sustain pedal in `HLd` mode, while no key
-   of the open step is down appends a rest (a step with no notes, length 1); the count
-   advances. **Tie**: the same with at least one key of the open step down makes the open
-   step one arp step longer (up to 64); the display shows `tiE` (a display message like any
-   other). The HOLD button is consumed, whether or not A440 is held: the hold latch and
-   its LED do not change. The pedal keeps driving the stock hold state and LED as in stock
-   but is otherwise only a rest/tie control. Held repeats are ignored; releases do nothing.
+   of the open step is down appends a rest (a step with no notes, length 1). **Tie**: the
+   same with at least one key of the open step down makes the open step one arp step
+   longer (up to 64). Either way the display **flashes** `rSt` or `tiE` for 0.25 s and then
+   shows the advanced count `[HW: verified 2026-10-08, Prophet-10 Rev4 — first with a 0.5 s
+   flash, then at 0.25 s]`. The HOLD button is consumed,
+   whether or not A440 is held:
+   the hold latch and its LED do not change. The pedal keeps driving the stock hold state
+   and LED as in stock but is otherwise only a rest/tie control. Held repeats are ignored;
+   releases do nothing.
 6. While record mode lasts the synth's own hold is suspended as it is while the arp is on
    ("HOLD while the arp is on"), arp on or off, so recorded notes release on key-up even
    with HOLD lit or the pedal down.
@@ -693,5 +709,5 @@ sequence exists. *Keys*, *HOLD active* and *keys down* are as in "Re-latch under
   advances; the pool still decides whether the pattern runs and the trigger is the most
   recently pressed pool note. The hold suspension is the "HOLD while the arp is on"
   mechanism, driven by *arp enabled or record mode*.
-- The step count and `tiE` go through the UI's display path and revert like every other
-  message ("Display messages").
+- The readout sums the steps' lengths; `rSt` / `tiE` go through the UI's display path with
+  the short timer and revert to the readout like every other message ("Display messages").

@@ -99,10 +99,22 @@ void arpui_program_loaded(arpui_t *u, arp_t *a)
 }
 
 /* --- seq record mode (A440 + Tune) ------------------------------------------------------ */
-static void draw_rec(const arp_t *a)                       /* the readout: r N, steps of this recording */
+static void flash3(arpui_t *u, int c0, int c1, int c2)
 {
-    int n = a->seq_fresh ? 0 : a->seq_len;                 /* the old sequence stands until the first step */
-    plat_display3(UC_R, n >= 10 ? n / 10 : UC_BLANK, n % 10);
+    plat_display3(c0, c1, c2);
+    disp_flash(&u->disp);
+}
+
+static void draw_rec(const arp_t *a)                       /* the readout: r N, the length recorded so far */
+{
+    int n = 0;
+    if (!a->seq_fresh)                                     /* the old sequence stands until the first step */
+        for (int i = 0; i < a->seq_len; i++)
+            n += a->seq_dur[i];                            /* a chord or rest counts one, each tie one more */
+    if (n >= 100)
+        plat_display_int(n);                               /* three digits: the plain number */
+    else
+        plat_display3(UC_R, n >= 10 ? n / 10 : UC_BLANK, n % 10);
 }
 
 static void show_rec(arpui_t *u, const arp_t *a)
@@ -114,9 +126,9 @@ static void show_rec(arpui_t *u, const arp_t *a)
 static void rest_tie(arpui_t *u, arp_t *a)                 /* HOLD button or pedal while recording */
 {
     if (arp_seq_rest_tie(a) == 1)
-        show3(u, UC_T, UC_I, UC_E);
+        flash3(u, UC_T, UC_I, UC_E);                       /* tiE, then the count */
     else
-        show_rec(u, a);
+        flash3(u, UC_R, UC_S, UC_T);                       /* rSt, then the count */
 }
 
 static void rec_enter(arpui_t *u, arp_t *a)

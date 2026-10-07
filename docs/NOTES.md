@@ -45,6 +45,13 @@ behavioural source of truth; this file is the engineering context around it.
   ties via HOLD, 64 steps, `r N` readout, blinking A440 LED): image `250ec97c` flashed and
   verified the same day ("it all works"); the relaid state area (ARP ≤ 0xA00) boots fine.
   Not exercised: the pedal as rest/tie, seq recording from MIDI-in, a tied step under `Syn`.
+- 2026-10-08, **follow-ups** after that pass: the record readout counts the length in arp
+  steps (every gesture +1; `rSt` / `tiE` flash, then the count) and holding Lo Freq alone
+  shows the current shift from the panel's first held-repeat, such a hold no longer
+  toggling Lo Freq on release — both verified 2026-10-08 (image `ce3c737e`, 0.5 s flash).
+  The flash was then shortened to 0.25 s (image `7cfe0b8f`, verified the same day). The
+  shift readout stays the stock zero-padded integer (`001`, `-01`) by David's choice: it
+  matches stock's own signed readouts (pitch-bend range).
 - First native flash attempt stalled the loader at `100` with the eight Program LEDs lit:
   the payload was an exact multiple of 7 and our encoder omitted the empty tail group's MS
   byte, which the loader always reads. Nothing was written; power cycle recovered. Fixed in
@@ -132,7 +139,8 @@ behavioural source of truth; this file is the engineering context around it.
   `arpui_tick`; the UI keeps the last tap time and up to 4 intervals (uint16, ≤ 2000 ms);
   BPM = round(60000·n / Σ). A gap > 2000 ms starts a new series. Unison is no longer a
   readout button (readout examples now use Osc B Keyboard 36). `arpui_t` stays ≤ 0x40.
-- Display: one 1.5 s timer (`disp.c`) restarted by every message; stock restore at expiry.
+- Display: one timer (`disp.c`) restarted by every message — 1.5 s, or 0.25 s for the
+  record-mode flashes (`disp_flash`); stock restore at expiry, `r N` while recording.
 - Seq: record mode is a UI state (`arpui_t.rec`, A440 + Tune; a tap of A440, A440 + Tune
   or GLOBALS leaves). While it lasts the UI routes notes to `arp_seq_record_note`, consumes
   the HOLD button (id 0x0E) and turns its presses — and the pedal's on-transitions, which
@@ -146,6 +154,9 @@ behavioural source of truth; this file is the engineering context around it.
   releases everything the engine has sounding and empties the pool, so keys down at the
   transition are ignored until pressed again; `arp_enable` while recording only sets the
   flag. Pitch-anchored stepping for the pool, index-anchored for the sequence.
+- Keyboard octave shift (`oct.c`): Lo Freq's held-repeat (panel value 3) is the hold
+  detection — it shows the shift and marks the hold used, so only a press released before
+  the panel's repeat delay is a tap (replayed to stock). Bank/Group repeats are ignored.
 - Assign (`ASS`, mode 4): `arp_t` keeps an entry list (`asg_note`/`asg_vel`, up to 32) in
   note-on order beside the pitch-indexed pool, since the pool arrays cannot hold order or
   duplicates. Note-on appends (also while the arp is off); note-off without HOLD and HOLD
