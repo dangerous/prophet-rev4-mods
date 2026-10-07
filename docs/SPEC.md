@@ -187,7 +187,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
 - **While A440 is held**: Bank = next mode, Group = previous mode (Up → Down → Up/Down →
   Random → Up…; display `UP`, `dn`, `Ud`, `rnd`); Program 1–4 = 1–4 octaves (`o 1`…`o 4`);
   Program 5 = toggle clock source (`int` / `Syn`); Program 6 = clear sequence; Program 7/8 =
-  note value longer/shorter (− / +, + is faster); any other button = id readout. Any of these cancels the toggle
+  note value longer/shorter (− / +, + is faster); Unison = tempo tap (below); any other button = id readout. Any of these cancels the toggle
   on A440 release. Held-repeat events (value 3) are ignored. A combo button whose release
   arrives after A440 has been released is still consumed **(change: V5 leaked the orphan
   release to stock)**.
@@ -201,8 +201,22 @@ this engine deliberately differs it is marked **(change)** with the reason.
   patch's glide value is not touched. **Glide Rate alone is always the normal glide control**,
   also while the arp is running. **(change: V5, and this engine before 2026-10-07, captured
   the pot as tempo whenever the arp was on, which made glide unusable with the arp running.)**
+- **A440 + Unison is tap tempo** `[HW: unverified]`: while A440 is held, each press of
+  Unison (button id 25 / `0x19`) is a tempo tap. The first tap of a series shows `tAP` and
+  records the time; the BPM is unchanged. Every further tap sets the BPM from the intervals
+  between taps: the mean of the most recent intervals (up to 4) of the series, `BPM =
+  round(60000 / mean ms)`, clamped to 40–300, and the display shows the new BPM (a display
+  message like any other). An interval of more than 2000 ms ends the series: that tap starts
+  a new one (shows `tAP` again, BPM unchanged); an interval of exactly 2000 ms still counts
+  (30 BPM → 40). Intervals are measured on the UI's 1 ms tick. The series only ends by such a
+  gap (releasing A440 in between does not end it). A tap counts as using the A440 hold, so the
+  A440 release does not toggle the arp; Unison's press, held repeats and release are
+  consumed like any combo button, and Unison without A440 held is always stock Unison. Taps
+  work whether the arp is on or off and whichever clock source is selected (they set the BPM
+  of the internal clock; under `Syn` it applies when the clock source returns to `int`). The
+  BPM is not saved with the program (see above).
 - **Display**: transient messages (mode, octaves, clock, note value, BPM while the pot
-  moves, step count, shift, readout) show for 1.5 s, then the display returns to the stock
+  moves or on a tempo tap, `tAP`, step count, shift, readout) show for 1.5 s, then the display returns to the stock
   program display **(change: V5 left `OFF` / BPM / `Syn` on the display for as long as the
   arp was on)**. Switching the arp on shows the BPM (`Syn` under external clock) for 1.5 s;
   switching it off shows `OFF` for 1.5 s.
@@ -374,13 +388,13 @@ this engine deliberately differs it is marked **(change)** with the reason.
    every other parameter in that mode (the stored ones are ignored). `[HW: 2026-10-07 — the
    voice engine receives 93/94 like every parameter and showed no audible reaction to them]`
 
-### Note value (arp/seq step length) `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock and MIDI sync, with the earlier 15-value list; the Prophet-6 list and order below: unverified]`
+### Note value (arp/seq step length) `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock and MIDI sync, with the earlier 15-value list; the Prophet-6 list, order and display below: verified 2026-10-07]`
 
 1. The step length is one of the Prophet-6's ten values, in the Prophet-6's order from
    longest to shortest: **Half** (1/2 note, 2 beats), **Qtr** (1/4, 1 beat), **8th D**
    (dotted eighth, 3/4 beat), **8th** (1/2 beat), **8th S** (eighth swing), **8th T**
    (eighth triplet, 1/3 beat), **16th** (1/4 beat), **16th S** (sixteenth swing), **16th T**
-   (1/6 beat), **32nd** (1/8 beat) `[HW: unverified]`. Power-up default is 8th. Saved with
+   (1/6 beat), **32nd** (1/8 beat) `[HW: verified 2026-10-07, Prophet-10 Rev4]`. Power-up default is 8th. Saved with
    the program ("Patch memory"). (Dotted 16th, dotted quarter, whole, 2 bars and 4 bars of
    the earlier list are gone; programs saved at them load at the nearest remaining value.)
    **Swing** `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock]` (as the
@@ -393,7 +407,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
    The list order is the Prophet-6's, so a step does not always change the length
    monotonically: 8th S (average 1/2 beat) sits between 8th and 8th T, 16th S between 16th
    and 16th T. The display shows the new value, right-aligned in three characters: `2`,
-   `4`, `8d`, `8`, `8S`, `8t`, `16`, `16S`, `16t`, `32` `[HW: unverified]`.
+   `4`, `8d`, `8`, `8S`, `8t`, `16`, `16S`, `16t`, `32` `[HW: verified 2026-10-07, Prophet-10 Rev4]`.
 3. Internal clock: the step period is the note value at the current BPM; the note is
    released half-way through the step (each swing step at half of its own length). At
    120 BPM an 8th S pair is 500 ms (steps 334 ms and 166 ms with the remainder carried), a
@@ -471,8 +485,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
 ### Display messages `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
 1. Every message the engine puts on the display — mode (`UP dn Ud rnd`), octaves
-   (`o N`), clock (`int`/`Syn`), `OFF`, BPM (while Glide Rate turns with A440 held, and when
-   the arp is switched on), note value, seq step count, keyboard shift, button id — shows for 1.5 s
+   (`o N`), clock (`int`/`Syn`), `OFF`, BPM (while Glide Rate turns with A440 held, on a
+   tempo tap, and when the arp is switched on), `tAP`, note value, seq step count, keyboard shift, button id — shows for 1.5 s
    after the last change and then the display returns to the stock patch display (bank,
    group and program). Nothing stays on the display permanently. `(change from V5, which
    kept OFF / BPM / Syn up for as long as the arp was on)`
@@ -480,10 +494,10 @@ this engine deliberately differs it is marked **(change)** with the reason.
 3. Realisation: the UI keeps one 1.5 s timer, restarted by every message it shows; at
    expiry the stock patch display is redrawn with `0x2003818D(ui = 0x20057390)`.
 
-### Button id readout `[HW: verified 2026-10-07, Prophet-10 Rev4 — Keyboard 36, GLOBALS 13, Unison 25]`
+### Button id readout `[HW: verified 2026-10-07, Prophet-10 Rev4 — Keyboard 36, GLOBALS 13; Unison read 25 before it became tap tempo]`
 
 While A440 is held, pressing a panel button that the arp does not assign — anything other
-than Program 1–8, Bank, Group, GLOBALS (id 13 / `0x0D`, which must still open its menu) and
+than Program 1–8, Bank, Group, Unison (id 25 / `0x19`, tap tempo), GLOBALS (id 13 / `0x0D`, which must still open its menu) and
 Lo Freq (id 37, consumed by the keyboard octave shift) — shows that button's id on the
 display and is otherwise ignored (its release is consumed too). An aid for mapping panel
 button ids when designing new combinations.

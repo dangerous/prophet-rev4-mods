@@ -38,7 +38,7 @@ static void clear_log(void) { nlog = 0; }
 /* panel character codes */
 enum { CH_U = 0x1E, CH_P = 0x19, CH_D = 0x0D, CH_N = 0x17, CH_R = 0x1B, CH_I = 0x12, CH_T = 0x1D,
        CH_S = 0x1C, CH_Y = 0x22, CH_O = 0x18, CH_F = 0x0F, CH_LO = 0x24, BLANK = 0x25 };
-enum { A440 = ARPUI_A440, GLOBALS = ARPUI_GLOBALS, GROUP = ARPUI_GROUP, BANK = ARPUI_BANK, UNISON = 0x19,
+enum { A440 = ARPUI_A440, GLOBALS = ARPUI_GLOBALS, GROUP = ARPUI_GROUP, BANK = ARPUI_BANK, UNISON = 0x19, OSCB_KEYB = 36, CH_A = 0x0A,
        P1 = 0, P2 = 1, P3 = 2, P4 = 3, P5 = 4, P6 = 5, P7 = 6, P8 = 7,
        PRESS = 1, RELEASE = 2, REPEAT = 3, LOCAL = ARP_SRC_LOCAL, MIDI = ARP_SRC_MIDI };
 
@@ -185,8 +185,8 @@ static void test_orphan_release_is_consumed_and_other_buttons_pass(void) {
 static void test_readout_of_unassigned_buttons(void) {
     reset();
     btn(A440, PRESS);
-    CHECK(btn(UNISON, PRESS) == 1 && last_int() == UNISON);
-    CHECK(btn(UNISON, RELEASE) == 1);
+    CHECK(btn(OSCB_KEYB, PRESS) == 1 && last_int() == OSCB_KEYB);
+    CHECK(btn(OSCB_KEYB, RELEASE) == 1);
     btn(A440, RELEASE);
     CHECK(!a.enabled);
 }
@@ -244,6 +244,123 @@ static void test_glide_is_tempo_only_with_a440_held(void) {
     btn(P2, PRESS);
     CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 600) == 0 && arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0);
     fake_globals_open = 0;
+}
+
+/* ---- tap tempo (A440 + Unison) ------------------------------------------------------- */
+static int tap(void) { int r = btn(UNISON, PRESS); r &= btn(UNISON, RELEASE); return r; }
+static int last_is_tap(void) { return nlog && log_[nlog - 1].type == EV_D3 && last_d3_is(CH_T, CH_A, CH_P); }
+static int last_is_int(int v) { return nlog && log_[nlog - 1].type == EV_INT && log_[nlog - 1].a == v; }
+/* hold A440 and tap at the given intervals (ms); the first tap starts the series */
+static void tap_series(const int *iv, int n) {
+    tap();
+    for (int i = 0; i < n; i++) { ticks(iv[i]); tap(); }
+}
+
+static void test_tap_tempo_steady_series(void) {
+    static const int IV120[] = { 500, 500, 500 };
+    reset();
+    arp_set_bpm(&a, 77);
+    btn(A440, PRESS);
+    clear_log();
+    CHECK(tap() == 1);                                                 /* first tap: tAP, BPM unchanged */
+    CHECK(last_is_tap() && a.bpm == 77);
+    ticks(500);
+    CHECK(tap() == 1 && a.bpm == 120 && last_is_int(120));             /* each later tap: BPM */
+    ticks(500); tap(); ticks(500); tap();
+    CHECK(a.bpm == 120 && last_is_int(120));
+    btn(A440, RELEASE);
+    CHECK(!a.enabled);                                                 /* the taps used the hold */
+    reset();
+    btn(A440, PRESS);
+    tap_series(IV120, 3);
+    CHECK(a.bpm == 120);
+    ticks(2001);                                                       /* > 2 s: a new series */
+    tap();
+    CHECK(last_is_tap() && a.bpm == 120);
+    for (int i = 0; i < 3; i++) { ticks(667); tap(); }
+    CHECK(a.bpm == 90 && last_is_int(90));                             /* round(60000 / 667) */
+    btn(A440, RELEASE);
+    CHECK(!a.enabled);
+}
+
+static void test_tap_tempo_averages_the_last_four_intervals(void) {
+    static const int IV[] = { 500, 500, 500, 400 };
+    reset();
+    btn(A440, PRESS);
+    tap_series(IV, 4);
+    CHECK(a.bpm == 126);                                               /* 60000 / 475 = 126.3 */
+    ticks(400); tap();                                                 /* last four: 500 500 400 400 */
+    CHECK(a.bpm == 133 && last_is_int(133));                           /* 60000 / 450 = 133.3 */
+    ticks(400); tap(); ticks(400); tap();                              /* 400 400 400 400 */
+    CHECK(a.bpm == 150);
+    reset();
+    btn(A440, PRESS);
+    tap(); ticks(1000); tap();                                         /* one interval: 60 */
+    CHECK(a.bpm == 60);
+    ticks(500); tap();                                                 /* mean of 1000, 500 = 750: 80 */
+    CHECK(a.bpm == 80);
+    btn(A440, RELEASE);
+}
+
+static void test_tap_tempo_clamps_and_the_two_second_limit(void) {
+    reset();
+    btn(A440, PRESS);
+    tap(); ticks(150); tap();
+    CHECK(a.bpm == 300 && last_is_int(300));                           /* 400 clamped */
+    ticks(150); tap();
+    CHECK(a.bpm == 300);
+    reset();
+    btn(A440, PRESS);
+    tap(); ticks(2000); tap();                                         /* exactly 2 s counts: 30 -> 40 */
+    CHECK(a.bpm == 40 && last_is_int(40));
+    ticks(2000); tap();
+    CHECK(a.bpm == 40);
+    ticks(500); tap();                                                 /* mean of 2000 2000 500 */
+    CHECK(a.bpm == 40);
+    reset();
+    btn(A440, PRESS);
+    tap(); ticks(2001); clear_log(); tap();                            /* 2001: a new series instead */
+    CHECK(last_is_tap() && a.bpm == 120);
+    ticks(1000); tap();                                                /* the old interval is gone */
+    CHECK(a.bpm == 60);
+    btn(A440, RELEASE);
+}
+
+static void test_tap_tempo_consumption_and_scope(void) {
+    reset();
+    CHECK(btn(UNISON, PRESS) == 0 && btn(UNISON, REPEAT) == 0 && btn(UNISON, RELEASE) == 0);   /* stock */
+    btn(A440, PRESS);
+    CHECK(btn(UNISON, PRESS) == 1 && btn(UNISON, REPEAT) == 1);        /* repeats ignored */
+    btn(A440, RELEASE);
+    CHECK(btn(UNISON, RELEASE) == 1 && !a.enabled);                    /* orphan release consumed */
+    CHECK(btn(UNISON, PRESS) == 0 && btn(UNISON, RELEASE) == 0);
+    reset();                                                           /* no store: BPM is not saved */
+    tap_a440();
+    btn(A440, PRESS);
+    int n = count_type(EV_PARAM);
+    tap(); ticks(500); tap(); ticks(500); tap();
+    CHECK(a.bpm == 120 && count_type(EV_PARAM) == n);
+    btn(A440, RELEASE);
+    CHECK(a.enabled);                                                  /* arp on: still on */
+    arp_set_ext(&a, 1);                                                /* under Syn: sets the BPM too */
+    btn(A440, PRESS);
+    ticks(3000);
+    tap(); ticks(1000); tap();
+    CHECK(a.bpm == 60 && a.ext && last_is_int(60));
+    btn(A440, RELEASE);
+    CHECK(a.enabled);
+    fake_globals_open = 1;                                             /* Globals menu: stock */
+    btn(A440, PRESS);
+    CHECK(btn(UNISON, PRESS) == 0 && btn(UNISON, RELEASE) == 0);
+    btn(A440, RELEASE);
+    fake_globals_open = 0;
+    arpui_init(&u); arp_init(&a); clear_log();                         /* kill switch: stock */
+    fake_a440_down = 1; ticks(10); fake_a440_down = 0; ticks(ARPUI_BOOT_TICKS);
+    CHECK(u.kill);
+    btn(A440, PRESS);
+    CHECK(btn(UNISON, PRESS) == 0 && btn(UNISON, RELEASE) == 0);
+    ticks(500);
+    CHECK(btn(UNISON, PRESS) == 0 && a.bpm == 120 && count_type(EV_D3) == 0 && count_type(EV_INT) == 0);
 }
 
 /* ---- display revert and LED ---------------------------------------------------------- */
@@ -431,6 +548,10 @@ int main(void) {
     test_orphan_release_is_consumed_and_other_buttons_pass();
     test_readout_of_unassigned_buttons();
     test_globals_button_abandons_the_hold();
+    test_tap_tempo_steady_series();
+    test_tap_tempo_averages_the_last_four_intervals();
+    test_tap_tempo_clamps_and_the_two_second_limit();
+    test_tap_tempo_consumption_and_scope();
     test_globals_menu_open_passes_everything();
     test_glide_is_tempo_only_with_a440_held();
     test_messages_revert_to_patch_display_after_1500_ticks();

@@ -2,7 +2,7 @@
 #include "platform.h"
 
 enum { UI_PRESS = 1, UI_RELEASE = 2 };
-enum { UC_U = 0x1E, UC_P = 0x19, UC_D = 0x0D, UC_N = 0x17, UC_R = 0x1B, UC_I = 0x12, UC_T = 0x1D,
+enum { UC_A = 0x0A, UC_U = 0x1E, UC_P = 0x19, UC_D = 0x0D, UC_N = 0x17, UC_R = 0x1B, UC_I = 0x12, UC_T = 0x1D,
        UC_S = 0x1C, UC_Y = 0x22, UC_O = 0x18, UC_F = 0x0F, UC_LO = 0x24, UC_BLANK = 0x25 };
 enum { P1 = 0, P4 = 3, P5 = 4, P6 = 5, P7 = 6, P8 = 7 };
 
@@ -93,6 +93,32 @@ void arpui_program_loaded(arpui_t *u, arp_t *a)
     arp_enable(a, on);
 }
 
+/* --- tap tempo (A440 + Unison) ---------------------------------------------------------- */
+static void tempo_tap(arpui_t *u, arp_t *a)
+{
+    uint32_t iv = u->ms - u->tap_last, sum = 0;
+    int bpm;
+    u->tap_last = u->ms;
+    if (!u->tap_on || iv > ARPUI_TAP_MAX_MS) {             /* first tap of a series */
+        u->tap_on = 1;
+        u->tap_n = 0;
+        show3(u, UC_T, UC_A, UC_P);
+        return;
+    }
+    for (int i = ARPUI_TAP_IVS - 1; i > 0; i--)
+        u->tap_iv[i] = u->tap_iv[i - 1];
+    u->tap_iv[0] = (uint16_t)iv;
+    if (u->tap_n < ARPUI_TAP_IVS)
+        u->tap_n++;
+    for (int i = 0; i < u->tap_n; i++)
+        sum += u->tap_iv[i];
+    bpm = sum ? (int)((120000u * u->tap_n + sum) / (2 * sum)) : 300;   /* round(60000 n / sum) */
+    if (bpm < 40) bpm = 40;
+    if (bpm > 300) bpm = 300;
+    arp_set_bpm(a, bpm);
+    show_int(u, a->bpm);
+}
+
 /* --- buttons ---------------------------------------------------------------------------- */
 static void end_hold(arpui_t *u, arp_t *a)
 {
@@ -126,6 +152,9 @@ static void combo(arpui_t *u, arp_t *a, int id)
         break;
     case P6:
         arp_seq_clear(a);
+        break;
+    case ARPUI_UNISON:
+        tempo_tap(u, a);
         break;
     case P7:
     case P8:
@@ -236,6 +265,7 @@ int arpui_pot_change(arpui_t *u, arp_t *a, int pot)
 void arpui_tick(arpui_t *u, arp_t *a)
 {
     int on;
+    u->ms++;
     if (u->boot_ticks < ARPUI_BOOT_TICKS) {                /* kill switch: A440 held from power-on */
         u->boot_ticks++;
         if (plat_a440_down() && !u->a440_seen)

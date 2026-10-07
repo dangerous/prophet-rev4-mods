@@ -36,8 +36,9 @@ behavioural source of truth; this file is the engineering context around it.
   sends no synthetic press for a pre-held button). Program 7/8 direction swap (8 =
   shorter/+) verified the same day. A440 + Glide Rate tempo (Glide Rate alone = glide with
   the arp running) and the `16S` / `8S` swing values (internal clock) verified 2026-10-07.
-  Pending: the Prophet-6 ten-value note-value list and order (Program 7/8 walk, display),
-  the legacy-code mapping on load (programs saved at 16d / 4d / 1 / 2b / 4b), and swing
+  The Prophet-6 ten-value note-value list and order (Program 7/8 walk, display) verified
+  2026-10-07. Pending: A440 + Unison tap tempo (added 2026-10-07, unflashed), the
+  legacy-code mapping on load (programs saved at 16d / 4d / 1 / 2b / 4b), and swing
   under `Syn`.
 - First native flash attempt stalled the loader at `100` with the eight Program LEDs lit:
   the payload was an exact multiple of 7 and our encoder omitted the empty tail group's MS
@@ -120,6 +121,10 @@ behavioural source of truth; this file is the engineering context around it.
   `UI->kill` makes every hook fall through to stock.
 - HOLD while the arp is on: hook the hold query in `note_off`; withhold the voice-engine
   hold message while enabled; re-post it on enable/disable transitions (`vhold.c`).
+- Tap tempo (A440 + Unison, id 25): `arpui_t.ms` is a free-running 1 ms counter bumped in
+  `arpui_tick`; the UI keeps the last tap time and up to 4 intervals (uint16, ≤ 2000 ms);
+  BPM = round(60000·n / Σ). A gap > 2000 ms starts a new series. Unison is no longer a
+  readout button (readout examples now use Osc B Keyboard 36). `arpui_t` stays ≤ 0x40.
 - Display: one 1.5 s timer (`disp.c`) restarted by every message; stock restore at expiry.
 - Seq: recording routes notes directly to voices and appends; playback substitutes the
   recorded steps (transposed onto the trigger key) for the pitch-sorted pool as the pattern's

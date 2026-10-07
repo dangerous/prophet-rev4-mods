@@ -40,6 +40,10 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] Hold A440 and turn Glide Rate: BPM shown while turning, 40–300, the tempo follows,
       patch number back after 1.5 s; releasing A440 does **not** toggle the arp. Also with
       the arp off (hold A440, turn, release: still off; tap on: the new BPM) and under `Syn`.
+- [ ] Tap tempo (spec "A440 + Unison is tap tempo"): hold A440, tap Unison four times at a
+      steady ~120 BPM → `tAP` on the first tap, then ~120 (the tempo follows); tap at ~90 →
+      ~90. Pause 3 s, tap once → `tAP`. Release A440: the arp does **not** toggle. Also with
+      the arp off (then tap A440 on: the tapped BPM). Unison without A440 is stock Unison.
 - [ ] Arp running, Glide Rate alone (no A440): it is **glide** — the step notes glide, the
       tempo does not change; the patch's glide value was not changed by the A440 + Glide
       turns before.
@@ -145,12 +149,12 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] Each of these shows for about 1.5 s and then the **patch number** returns: A440 +
       Bank (`UP`…), A440 + Program 2 (`o 2`), A440 + Program 5 (`int`/`Syn`), A440 +
       Program 8 (`8S`), tap A440 on (BPM) and off (`OFF`), Lo Freq + Bank (`1`), A440 +
-      Unison (`25`), a seq step count.
+      Osc B Keyboard (`36`), A440 + Unison (`tAP`), a seq step count.
 - [ ] A new message within the 1.5 s restarts the timing (e.g. Bank, Bank, Bank).
 
 ## Button id readout (spec "Button id readout")
 
-- [ ] Hold A440, press a button the arp doesn't use (Osc B Keyboard = 36, Unison = 25;
+- [ ] Hold A440, press a button the arp doesn't use (Osc B Keyboard = 36;
       GLOBALS = 13 must still open the menu — it abandons the hold).
 - [ ] Release A440: the arp does not toggle.
 
