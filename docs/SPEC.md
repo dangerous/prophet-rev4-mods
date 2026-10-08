@@ -265,20 +265,16 @@ this engine deliberately differs it is marked **(change)** with the reason.
 - **While A440 is held** — the combos act on the **selected generator** where a setting
   exists for both: **Bank / Group** = next / previous **direction** of the Arp (Up → Down →
   Up/Down → Random → Assign → Up…; display `UP`, `dn`, `Ud`, `rnd`, `ASS`), also while the
-  Seq is selected in its Arpeggiated style (the direction inside each chord), or the
-  **order** of the Seq in its Chords style (`For`, `bAC`, `Pnd` — "Seq") `[HW: unverified]`;
+  Seq is selected in its Arpeggiated style (the direction inside each chord), or the **order** of the Seq in its Chords style (`For`, `bAC`, `Pnd` — "Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`;
   **Program 1–4** = 1–4 octaves (`o 1`…`o 4`; the Arp's, also inside Arpeggiated chords;
   Chords ignores them); **Program 5** = clock source (`int` / `Syn`); **Program 6** = clear
   the sequence ("Seq"); **Program 7/8** = the selected generator's **note value** longer /
-  shorter (− / +, + is faster; the Arp's is saved with the program, the Seq's lives with the
-  recording — "Note value") `[HW: unverified for the split]`; **Velocity** = tempo tap
+  shorter (− / +, + is faster; the Arp's is saved with the program, the Seq's lives with the recording — "Note value") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Velocity** = tempo tap
   (below) `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Tune** = seq record mode on/off
   ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **HOLD** = stock tuning tone on/off
-  (above) `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Keyboard** (filter Keyboard
-  Amount, id 8) = generator `ArP` / `SEq` `[HW: unverified]`; **Unison** = sequence style
+  (above) `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Keyboard** (filter Keyboard Amount, id 8) = generator `ArP` / `SEq` `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Unison** = sequence style
   `CHd` / `ArP` and **Aftertouch** = chord length ("Seq") `[HW: verified 2026-10-08,
-  Prophet-10 Rev4 as the style and chord-length combos]`; **a keyboard key** (with `SEq`
-  selected, not recording) = sequence transposition ("Seq") `[HW: unverified]`; any other
+  Prophet-10 Rev4 as the style and chord-length combos]`; **a keyboard key** (with `SEq` selected, not recording) = sequence transposition ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; any other
   button = id readout. Any of these cancels the toggle on A440 release. Held-repeat events
   (value 3) are ignored. A combo button whose release arrives after A440 has been released
   is still consumed **(change: the Arp Mod leaked the orphan release to stock)**.
@@ -536,7 +532,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
 0. There are **two note values**: the **Arp's**, saved with the program, and the **Seq's**,
    which lives with the recording (global, not saved, untouched by program loads) and is
    shared by both of the Seq's styles. A440 + Program 7/8 edit the **selected generator's**;
-   each defaults to 8th `[HW: unverified — one shared value until 2026-10-08]`.
+   each defaults to 8th `[HW: verified 2026-10-08, Prophet-10 Rev4 — one shared value until that day]`.
 1. The step length is one of thirteen values, from longest to shortest. Three long ones for
    pad sequences — **4 bars** (16 beats), **2 bars** (8 beats), **Whole** (1 bar, 4 beats)
    `[HW: verified 2026-10-08, Prophet-10 Rev4]` **(change: added above the Prophet-6's list, so 64 steps of 4 bars make a
@@ -653,8 +649,10 @@ this engine deliberately differs it is marked **(change)** with the reason.
     sequence's chords sustained under HOLD]` — and the engine sustains the **live** notes
     itself: with HOLD active (button, or pedal in `HLd` mode) a live note's release is
     deferred until HOLD goes off or the key is pressed again, also after the sequencer has
-    stopped in the meantime. **Generated** notes keep their programmed gates `[HW:
-    unverified]`. With the sequencer stopped, new releases are stock's own hold's. Selecting `SEq` while the arp runs stops
+    stopped in the meantime. **Generated** notes keep their programmed gates `[HW: verified 2026-10-08, Prophet-10 Rev4 —
+    2.0.1: live notes sustain and retrigger, the sequence's chords release at their gates,
+    sustained notes outlive a stop and end at HOLD off, pedal the same]`. With the sequencer
+    stopped, new releases are stock's own hold's. Selecting `SEq` while the arp runs stops
     it, which hands the HOLD latch over exactly as switching the arp off does (rule 3);
     selecting `ArP` leaves the arp stopped, so the synth's hold stays in use until the arp is
     started, which hands over as switching it on.
@@ -752,7 +750,7 @@ be non-empty.
    step before adding the key; the pattern restarts at the next step boundary ("Arp
    engine" — Start rule). `[HW: verified 2026-10-06 (Arp-Mod-based build) and 2026-10-07 (engine)]`
 
-### Seq — the sequencer `[HW: unverified — redesigned 2026-10-08 as an independent generator (the Prophet-6 model); the trigger-key sequencer it replaces was verified 2026-10-08]`
+### Seq — the sequencer `[HW: verified 2026-10-08, Prophet-10 Rev4 — redesigned that day as an independent generator (the Prophet-6 model) and run through on the panel: record mode with Back, generator selection, transport, orders, transposition, the Seq's note value, the Arpeggiated style, clear, program loads, the tone combo; not individually confirmed: MIDI-clock transport (arm / Stop / Continue / clock loss), pedal rest/tie, MIDI-in recording, the 512-step capacity]`
 
 The sequencer is the second generator: the Arp plays the keys you hold, the Seq plays a
 recording while the keyboard stays yours — "I recorded a sequence, I start it, it plays, I
@@ -885,7 +883,7 @@ play over it." *Keys down* and *HOLD active* are as in "Re-latch under HOLD".
     backing to `r 0` leaves an empty new sequence (the old one is gone). Group's held repeats
     are ignored; Group under A440 is still the order / direction combo; Bank alone remains
     stock. **Example**: chord, tie, tie, rest → Back removes the rest, then the chord's
-    duration goes 3 → 2 → 1, then the chord is removed `[HW: unverified]`.
+    duration goes 3 → 2 → 1, then the chord is removed `[HW: verified 2026-10-08, Prophet-10 Rev4]`.
 20. **Leave**: a tap of A440, A440 + Tune, or GLOBALS. `SEq` stays selected and **stopped**;
     the next A440 tap starts the recording from event 1 **(change: 1.2.0 switched the arp
     on)**. A new recording resets the transposition. Nothing entered → the old sequence

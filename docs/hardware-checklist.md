@@ -111,7 +111,7 @@ Manual verification on the instrument. Record results against the spec markers i
       A440 on: HOLD LED on again, the arp latches, the synth's hold is suspended. Tap A440
       off: HOLD LED stays on (stock hold back). HOLD off; tap A440 on: the arp's latch is
       still on. Pedal (`HLd`): momentary in both modes.
-- [ ] **Rule 4a:** sequencer selected and playing chords, HOLD on. Play and release a key:
+- [x] **Rule 4a:** sequencer selected and playing chords, HOLD on. Play and release a key:
       it sustains (the engine's own sustain). The sequence's chords still release at their
       gates. Press the sustained key again: it retriggers cleanly. Stop the sequence (tap):
       the sustained note keeps sounding; HOLD off: it stops. HOLD on again, play and release

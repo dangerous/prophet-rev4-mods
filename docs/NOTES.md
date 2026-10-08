@@ -100,8 +100,10 @@ behavioural source of truth; this file is the engineering context around it.
 - 2026-10-08, **2.0.1** (`seq-hold-sustain`, image `5c262af7`): the HOLD fix — *suspended*
   += "SEq selected and running" (the DSP hold flag goes off as for the arp), live notes
   sustained in the engine (`arp_set_sustain`), spec 4a rewritten, 28 more harness checks.
-  Handed to the root `dist/` for flashing; the 2.0.x markers stay `[HW: unverified]` until
-  the checklist's "Seq" section and the 4a item are confirmed step by step.
+  Flashed and confirmed on the panel the same evening (live notes sustain and retrigger,
+  the sequence keeps its gates, sustain outlives a stop, pedal the same); merged and
+  published. Still not individually confirmed: MIDI-clock transport of the sequencer,
+  pedal rest/tie, MIDI-in recording, the 512-step capacity (spec markers say so).
 
 ## Build/test
 
