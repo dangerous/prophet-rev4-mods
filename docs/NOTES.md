@@ -95,13 +95,13 @@ behavioural source of truth; this file is the engineering context around it.
   independent generator (Prophet-6 model). Flashed and run through the 16-step panel test:
   Program 7 from 8th goes to `8d` before `4` (correct — the run-through text was wrong), and
   **HOLD sustains the sequence's chords**: the voice engine's own hold flag decides, the
-  per-note "off" answer at the hold query is inert. David: good enough to publish as is;
-  whether that is a bug is undecided. The fix (suspend the synth's hold while the sequencer
-  runs — *suspended* += "SEq running" — and sustain live notes in the engine,
-  `arp_set_sustain`, spec 4a rewritten, 28 more harness checks) is complete on branch
-  `seq-hold-sustain` (`36f4d60`, image `5c262af7`, unflashed), reverted off `main`. The other
-  run-through steps passed by exception; the 2.0.0 markers stay `[HW: unverified]` until the
-  checklist's "Seq" section is confirmed step by step.
+  per-note "off" answer at the hold query is inert. David: good enough to publish as is.
+  The other run-through steps passed by exception.
+- 2026-10-08, **2.0.1** (`seq-hold-sustain`, image `5c262af7`): the HOLD fix — *suspended*
+  += "SEq selected and running" (the DSP hold flag goes off as for the arp), live notes
+  sustained in the engine (`arp_set_sustain`), spec 4a rewritten, 28 more harness checks.
+  Handed to the root `dist/` for flashing; the 2.0.x markers stay `[HW: unverified]` until
+  the checklist's "Seq" section and the 4a item are confirmed step by step.
 
 ## Build/test
 
@@ -225,10 +225,16 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
   (FC; FB resumes, FA → event 1), own `loss` counter; the arp owns the port lock
   (`arp_rt_accept`). The UI re-applies the arp's own note value in `ui_enable(on)` because
   the Arpeggiated style sets the arp's beats to the seq's.
-- Generated vs live releases: `plat_voice_off` (generated: arp steps, seq chords) sets a
-  flag around stock `note_off` so the hold-query hook answers "off"; `plat_live_off` (direct
-  notes) leaves stock's answer. Whether stock honours the per-note answer is the 2.0.0
-  hardware question (spec "HOLD while the arp is on" 4a).
+- Live sustain (spec 4a): *suspended* now includes "SEq selected and running", so the DSP
+  hold flag is off while the sequence plays (as for the arp) and generated notes release at
+  their gates. Live notes are sustained by the engine: `arp_set_sustain(a, on)` (the UI sets
+  it from `seq_runs && !rec` at every transition and in the tick); in the live path a release
+  with `sustain_on && hold` only marks `sustained[]`, `arp_hold(0)` releases the set, a
+  re-pressed key releases its old note first, `arp_set_sustain(0)` keeps the set (a flush at
+  stop would race the hold-on message to the DSP and release the notes instead).
+  `plat_voice_off` / `plat_live_off` both map to stock `note_off`; the per-note flag tried
+  first (2026-10-08) did nothing on hardware — the DSP sustains any released voice while its
+  flag is on.
 - Keyboard octave shift (`oct.c`): Lo Freq's held-repeat (panel value 3) is the hold
   detection — it shows the shift and marks the hold used, so only a press released before
   the panel's repeat delay is a tap (replayed to stock). Bank/Group repeats are ignored.
@@ -292,12 +298,9 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
   been exercised on hardware.
 - **2.0.0 is entirely unverified on hardware** (independent sequencer: generator select,
   transport incl. MIDI arm/Stop/Continue, orders, transposition, Back, 512 steps, two note
-  values, per-note hold answer for generated notes). Checklist: `docs/hardware-checklist.md`
-  "Seq". Open stock question: does the voice engine honour a per-note "hold off" answer at
-  `0x2003EACE` (generated notes release under HOLD while live notes sustain), or is hold
-  decided per voice elsewhere? If generated notes sustain, options are: suspend the synth's
-  hold while the sequencer plays (as the arp does — then live notes don't sustain either), or
-  accept it.
+  values, per-note hold answer for generated notes). Checklist: `docs/hardware-checklist.md` "Seq". The per-note hold question is answered
+  (the DSP decides; see "Live sustain" above); the engine-side sustain of live notes is the
+  remaining unverified piece of 4a.
 - Decisions made while implementing 2.0.0, folded into the spec: selecting `SEq` with
   nothing recorded is refused (`---`, `ArP` stays) rather than selecting an empty generator;
   A440 + Program 6 with the arp running leaves the arp running; a clock-source change

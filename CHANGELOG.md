@@ -4,6 +4,16 @@ Versions of the patch as published through the patcher — the `VERSION` file, t
 name (`prophet5_main_2.1.0_patched_<version>.syx`) and `site/version.json`. Each entry names
 the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
 
+## 2.0.1 — 2026-10-08
+
+### Fixed
+- **HOLD while the sequencer runs** sustained the sequence's own notes as well as yours
+  (the voice engine sustains every released voice while its hold flag is on, whatever the
+  patch tells stock's note‑off). The synth's hold is now suspended while the sequencer runs,
+  as it is while the arp is on, and the patch sustains the notes *you* play itself: released
+  under HOLD or the pedal they keep sounding until HOLD goes off or you press them again;
+  the sequence keeps its gates.
+
 ## 2.0.0 — 2026-10-08
 
 The step sequencer becomes a generator of its own, the Prophet‑6 way: it plays on its own

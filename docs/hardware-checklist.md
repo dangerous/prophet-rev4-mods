@@ -111,11 +111,14 @@ Manual verification on the instrument. Record results against the spec markers i
       A440 on: HOLD LED on again, the arp latches, the synth's hold is suspended. Tap A440
       off: HOLD LED stays on (stock hold back). HOLD off; tap A440 on: the arp's latch is
       still on. Pedal (`HLd`): momentary in both modes.
-- [x] **Rule 4a:** sequencer selected and playing chords, HOLD on. Play and release a key: it
-      sustains (stock hold). **Result 2026-10-08: the sequence's chords sustain too** — the
-      voice engine's hold flag decides, the per-note answer is inert. Left as is for now
-      (undecided whether it is a bug); the fix is on branch `seq-hold-sustain`. Then: arp on,
-      HOLD latched, A440 + Keyboard → `SEq`: HOLD LED goes off (stock's latch back), the
+- [ ] **Rule 4a:** sequencer selected and playing chords, HOLD on. Play and release a key:
+      it sustains (the engine's own sustain). The sequence's chords still release at their
+      gates. Press the sustained key again: it retriggers cleanly. Stop the sequence (tap):
+      the sustained note keeps sounding; HOLD off: it stops. HOLD on again, play and release
+      with the sequence stopped: stock's hold sustains as usual. Pedal (`HLd`) the same.
+      `[2026-10-08: the first 2.0.0 build let the chords sustain too — the voice engine's own
+      hold flag decides, so the hold is now suspended while the sequencer runs]`. Then: arp
+      on, HOLD latched, A440 + Keyboard → `SEq`: HOLD LED goes off (stock's latch back), the
       arp's latch returns when the arp is next started.
 
 ## Re-latch (spec "Re-latch under HOLD")
@@ -164,8 +167,8 @@ Transport and generators:
       LED lit): single notes, the chord as a chord, the rest silent, the tied step held for
       three steps and released half-way through its last one. Tap A440: `OFF`, silence.
 - [ ] While it plays: play the keyboard — every key sounds polyphonically with its velocity
-      and nothing changes in the sequence; HOLD / pedal sustain *your* notes only (see rule
-      4a above); starting or stopping the sequence does not cut your notes.
+      and nothing changes in the sequence; HOLD / pedal sustain *your* notes only (rule 4a
+      above); starting or stopping the sequence does not cut your notes.
 - [ ] A440 + Keyboard (filter Keyboard Amount, id 8): `ArP`; tap A440: the keys arpeggiate as
       before, the sequence untouched. A440 + Keyboard: `SEq`; tap: it plays again from step 1.
       With no recording (after power-up): A440 + Keyboard shows `---` and `ArP` stays.

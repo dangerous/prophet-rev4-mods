@@ -85,8 +85,9 @@ void arpui_all_notes_off(arpui_t *u, arp_t *a, seq_t *q);
 /* A MIDI realtime byte (F8 / FA / FB / FC) on a port: the arp decides, the sequencer sees an
  * accepted byte first. */
 void arpui_realtime(arpui_t *u, arp_t *a, seq_t *q, int byte, int port);
-/* The synth's own hold is suspended ("HOLD while the arp is on"): arp on, or record mode. */
-int  arpui_suspended(const arpui_t *u, const arp_t *a);
+/* The synth's own hold is suspended ("HOLD while the arp is on"): arp on, record mode, or
+ * the sequencer running with SEq selected (the engine then sustains live notes itself). */
+int  arpui_suspended(const arpui_t *u, const arp_t *a, const seq_t *q);
 /* Pot hooks: raw store (pot, raw 0..1023) and change post. Return 1 if consumed. */
 int  arpui_pot_store(arpui_t *u, arp_t *a, int pot, int raw);
 int  arpui_pot_change(arpui_t *u, arp_t *a, int pot);
