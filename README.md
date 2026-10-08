@@ -105,8 +105,9 @@ goes away after 1.5 s and the program number comes back.
 | A440 + **Glide Rate** knob | Tempo 40–300 BPM | the BPM |
 | A440 + **Velocity** (tap repeatedly) | Tap tempo | `tAP`, then the BPM |
 | A440 + **HOLD** (arp off) | Sequential's A440 tuning tone on / off | A440 LED, as stock |
-| A440 + **Unison** | Sequence playback: chords / arpeggiated | `POL` / `ArP` |
+| A440 + **Unison** | Sequence playback: chords / arpeggiated | `Std` / `ArP` |
 | A440 + **Aftertouch** | Chord length for `ArP` (quarter → half → whole → 2 bars → 4 bars) | `4 2 1 2b 4b` |
+| A440 + **Keyboard** (filter Keyboard Amount) | Accompany: play over the latched arp, on / off | `ACC` |
 | **HOLD** (or pedal in `HLd` mode) | Latch | — |
 
 "HOLD" is the button labelled **RELEASE / HOLD**, with the Release/Hold global set to hold.
@@ -136,6 +137,13 @@ goes away after 1.5 s and the program number comes back.
 - **Tuning tone.** With the arp off, hold A440 and press HOLD: the stock A440 reference tone
   toggles, lighting the A440 LED as it does in stock. Switching the arp on silences it, so
   from then on a lit LED means the arp.
+- **Accompany.** With the arp (or sequence) running latched under HOLD, A440 + **Keyboard**
+  frees the keyboard: what you play now sounds directly — chords, with velocity — on top of
+  the arp, which carries on with what it has latched (`ACC`). The sustain pedal sustains
+  what you play; the HOLD button is still the arp's latch. Tap A440 to stop the arp and tap
+  again to resume it with the same notes, still accompanying. A440 + Keyboard again gives
+  the keys back to the arp. It only engages while something is latched and playing, and ends
+  by itself when the latch goes.
 
 ### Step sequencer
 
@@ -172,8 +180,11 @@ Playing it back:
   bars, 4 bars) while the arpeggiator plays its notes at the note value, in the arp's
   direction mode and octaves — record four pads as four steps, set a whole note per chord
   and 16ths, and you have a bar of arpeggio per chord. Chords always come in order; a tied
-  step is held for more chord lengths, a rest is silence. `POL` plays the steps as chords,
-  one per arp step, as before.
+  step is held for more chord lengths, a rest is silence. `Std` plays the steps as chords,
+  one per arp step, as before. In `ArP` think of the note value as the arp's *speed* (use
+  8ths or 16ths — a four-bar note value would mean one note per four bars) and the chord
+  length as the harmonic rhythm; dotted and triplet rates don't divide a bar evenly, so the
+  last note before a chord change is cut short.
 - A440 + **Program 6** outside record mode clears the sequence; you're back to the plain
   arp.
 - Limits: 64 steps, 10 notes per step, a step can be tied up to 64 steps long. The sequence

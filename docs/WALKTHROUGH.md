@@ -93,20 +93,37 @@ arpeggiator plays each chord.
     stay exactly where they were.
 30. Ties and rests work here too: a step you tied once is held for two chord lengths; a rest
     is a chord length of silence.
-31. **A440 + Unison**: `POL` — the chords play as blocks again, one per step, as in
+31. **A440 + Unison**: `Std` — the chords play as blocks again, one per step, as in
     section 5. Both this setting and the chord length are saved with the program.
+
+    Two things to keep in mind in `ArP`: the note value is now the arp's *speed*, so keep it
+    at 8ths or 16ths (a `4b` note value would give one note every four bars), and dotted or
+    triplet rates don't divide a bar evenly, so the last note before a chord change is cut.
+
+## 6a. Playing over the arp
+
+32. Arp on, hold a chord, **press HOLD**, let go — it keeps playing. **A440 + Keyboard**
+    (the filter Keyboard Amount button, bottom row of the filter section): `ACC`.
+33. **Play.** Your notes sound as normal notes — chords, velocity, all of it — on top of the
+    running arpeggio, which doesn't react to them.
+34. **Press the sustain pedal** and play: your notes sustain; release it and they stop. The
+    arp's latch is untouched.
+35. **Tap A440.** The arp stops; keep playing. **Tap A440** again: the arp resumes with the
+    same notes, and you are still playing over it.
+36. **A440 + Keyboard** again: the keys are the arp's once more (re-latch and transposition
+    as before). Pressing HOLD to drop the latch ends it too.
 
 ## 7. Keyboard octave shift
 
-32. Arp off. **Hold Lo Freq** (Osc B) **and press Bank**: `001`, the keyboard is up an octave.
+42. Arp off. **Hold Lo Freq** (Osc B) **and press Bank**: `001`, the keyboard is up an octave.
     **Bank** again: `002`. **Group** brings it down; both together resets to `000`. It applies
     to what you play, to the arp and sequencer, and to MIDI Out.
-33. **Hold Lo Freq on its own**: after a moment the display shows the current shift, and
+38. **Hold Lo Freq on its own**: after a moment the display shows the current shift, and
     letting go does not change Osc B's Lo Freq setting. A quick tap still toggles it.
 
 ## 8. Saving with a program
 
-34. Set the arp up as you like it — on, `Ud`, `o 2`, `16S`, `ArP`, `2b` — and save the program
+39. Set the arp up as you like it — on, `Ud`, `o 2`, `16S`, `ArP`, `2b` — and save the program
     as you would any other (Record, then a slot). Load a different program: the arp follows
     that program (off, if it was saved without arp data). Load yours back: everything
     returns. Tempo, clock source, keyboard shift and the sequence itself are global and
@@ -114,17 +131,17 @@ arpeggiator plays each chord.
 
 ## 9. MIDI sync
 
-35. **A440 + Program 5**: `Syn`. Send MIDI clock from a DAW, press Start: the arp and the
+40. **A440 + Program 5**: `Syn`. Send MIDI clock from a DAW, press Start: the arp and the
     sequencer run on the DAW's grid — notes on the beat, chord changes on the bar lines —
     and follow Stop and Continue. The tempo gestures show `Syn` (the clock sets the tempo);
     switch back to `int` and the arp carries on at the DAW's tempo.
 
 ## 10. Odds and ends
 
-36. **Tuning tone**: with the arp off, **A440 + HOLD** switches Sequential's A440 reference
+41. **Tuning tone**: with the arp off, **A440 + HOLD** switches Sequential's A440 reference
     tone on (A440 LED lit); A440 + HOLD again, or a tap of A440, switches it off.
-37. **Bypass**: hold **A440 while powering on** and the patch stays completely out of the way
+42. **Bypass**: hold **A440 while powering on** and the patch stays completely out of the way
     for that session.
-38. **Globals**: while the Globals menu is open every button is stock's.
-39. **Button ids**: hold A440 and press a button the patch doesn't use — its panel id is
+43. **Globals**: while the Globals menu is open every button is stock's.
+44. **Button ids**: hold A440 and press a button the patch doesn't use — its panel id is
     shown. Handy if you want to add a control of your own.

@@ -21,7 +21,8 @@
 #define ARPUI_POT_GLIDE 0x16
 #define ARPUI_VELOCITY 0x0B         /* A440 + Velocity = tap tempo (beside A440: one hand) */
 #define ARPUI_AFTERTOUCH 0x0A       /* A440 + Aftertouch = chord length (ArP) */
-#define ARPUI_UNISON 0x19           /* A440 + Unison = sequence playback POL / ArP */
+#define ARPUI_UNISON 0x19           /* A440 + Unison = sequence playback Std / ArP */
+#define ARPUI_KEYBOARD 8            /* A440 + Keyboard Amount = accompany on / off */
 #define ARPUI_CHORDS 5                /* chord lengths: Qtr, Half, Whole, 2 bars, 4 bars */
 #define ARPUI_TUNE 0x0C             /* A440 + Tune = seq record mode on / off */
 #define ARPUI_HOLD 0x0E             /* A440 + HOLD = stock tuning tone (arp off); in record mode: rest / tie */
@@ -56,7 +57,8 @@ typedef struct {
     uint8_t  tone_pending;            /* A440 + HOLD pressed with the arp off: toggle the tone on HOLD's release */
     uint8_t  led_fix;                 /* ms until the arp LED is asserted again after a replayed A440 press */
     uint8_t  hold_arp, hold_stock;    /* the two HOLD latches: the one not in use is remembered here */
-    uint8_t  pad3[2];
+    uint8_t  acc;                     /* accompanying: the keys play over the latched arp */
+    uint8_t  pedal;                   /* accompanying: the pedal state last seen (transitions post the hold message) */
 } arpui_t;
 
 void arpui_init(arpui_t *u);
@@ -69,6 +71,11 @@ void arpui_note(arpui_t *u, arp_t *a, int src, int note, int vel);
 void arpui_hold(arpui_t *u, arp_t *a, int on);
 /* The synth's own hold is suspended ("HOLD while the arp is on"): arp on, or record mode. */
 int  arpui_suspended(const arpui_t *u, const arp_t *a);
+/* Stock's hold query while accompanying with the arp on: the pedal's state, 0/1; -1 = not
+ * accompanying (answer as usual). */
+int  arpui_sustain(const arpui_t *u, const arp_t *a);
+/* MIDI CC 123-127: ends the accompaniment, then the arp's all-notes-off. */
+void arpui_all_notes_off(arpui_t *u, arp_t *a);
 /* Pot hooks: raw store (pot, raw 0..1023) and change post. Return 1 if consumed. */
 int  arpui_pot_store(arpui_t *u, arp_t *a, int pot, int raw);
 int  arpui_pot_change(arpui_t *u, arp_t *a, int pot);

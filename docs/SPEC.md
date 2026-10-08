@@ -263,7 +263,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
   Random → Assign → Up…, Group the other way; display `UP`, `dn`, `Ud`, `rnd`, `ASS` —
   Assign `[HW: verified 2026-10-07, Prophet-10 Rev4]`); Program 1–4 = 1–4 octaves (`o 1`…`o 4`);
   Program 5 = toggle clock source (`int` / `Syn`); Program 6 = clear sequence; Program 7/8 =
-  note value longer/shorter (− / +, + is faster); Velocity = tempo tap (below) `[HW: verified 2026-10-08, Prophet-10 Rev4 — moved from Unison]`; Tune = seq record mode on/off ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; HOLD = stock tuning tone on/off (arp off; above) `[HW: verified 2026-10-08, Prophet-10 Rev4]`; Unison = sequence playback `POL` / `ArP` and Aftertouch = chord length ("Seq — Arpeggiated playback") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; any other button = id readout. Any of these cancels the toggle
+  note value longer/shorter (− / +, + is faster); Velocity = tempo tap (below) `[HW: verified 2026-10-08, Prophet-10 Rev4 — moved from Unison]`; Tune = seq record mode on/off ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; HOLD = stock tuning tone on/off (arp off; above) `[HW: verified 2026-10-08, Prophet-10 Rev4]`; Unison = sequence playback `Std` / `ArP` and Aftertouch = chord length ("Seq — Arpeggiated playback") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; Keyboard (filter Keyboard Amount, id 8) = accompany on/off ("Accompany") `[HW: unverified]`; any other button = id readout. Any of these cancels the toggle
   on A440 release. Held-repeat events (value 3) are ignored. A combo button whose release
   arrives after A440 has been released is still consumed **(change: the Arp Mod leaked the orphan
   release to stock)**.
@@ -478,7 +478,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
 ### Patch memory `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
 1. Saved with a program: the arp **on/off**, **mode**, **octaves**, **note value**, the
-   sequence's **playback mode** (`POL`/`ArP`) and **chord length**. Not saved: BPM, clock
+   sequence's **playback mode** (`Std`/`ArP`) and **chord length**. Not saved: BPM, clock
    source, keyboard octave shift, the sequence.
 2. Loading a program — from the panel, a MIDI program change, a SysEx program or edit-buffer
    receive, the PRESET toggle or the power-on recall — applies the program's arp settings and
@@ -495,14 +495,14 @@ this engine deliberately differs it is marked **(change)** with the reason.
    8 × C + 40 × M**, where L = 0 for one of the Prophet-6's ten note values and L = 1 for a
    long one, C is the chord length as 0 = Whole, 1 = Qtr, 2 = Half, 3 = 2 bars, 4 = 4 bars
    (0 = Whole so that programs saved before chord lengths existed load with the default),
-   and M = 0 for `POL`, 1 for `ArP` (so 1–80; **0 = no arp data**); **93 = n × 10 + mode × 2
+   and M = 0 for `Std`, 1 for `ArP` (so 1–80; **0 = no arp data**); **93 = n × 10 + mode × 2
    + on/off**, where n is the Prophet-6 position (0 = Half … 9 = 32nd) when L = 0 or the long
    value (0 = Whole, 1 = 2 bars, 2 = 4 bars) when L = 1, mode 0–4 = Up, Down, Up/Down, Random,
    Assign, and on/off 0/1 — so 93 is 0–99, or 0–29 with L = 1. Anything else (94 above 80, C
    above 4, 93 out of range) counts as no arp data. Programs saved before the long values or
-   the chord settings existed (94 in 1–8) load unchanged, with `POL` and Whole. `[HW: verified
+   the chord settings existed (94 in 1–8) load unchanged, with `Std` and Whole. `[HW: verified
    2026-10-07, Prophet-10 Rev4 for L = 0; 2026-10-08 for L = 1 and for an older program
-   loading unchanged; C and M, and a 1.1.0 program loading as `POL` / Whole, 2026-10-08]`
+   loading unchanged; C and M, and a 1.1.0 program loading as `Std` / Whole, 2026-10-08]`
    Programs saved under the earlier bitfield layout of 93 (on/off | mode << 1 | note code
    << 3 — only test saves made on 2026-10-07) are not converted: they load with the wrong
    settings (or as no arp data) and must be re-saved. Written
@@ -639,12 +639,54 @@ this engine deliberately differs it is marked **(change)** with the reason.
    1)`) — stock toggles the latch, its LED and the hold handler as for a real press, a few
    milliseconds later in its own task. A program load clears both memories.
 
+### Accompany — playing over a latched arp `[HW: unverified]`
+
+With the arp or the sequence running latched, the keyboard can be freed to play over it,
+as on a Moog Matriarch.
+
+1. **Enter**: A440 + **Keyboard** (the filter Keyboard Amount button, id 8) while the arp is
+   running **latched** — HOLD active (the HOLD button's latch), the arp on, notes in the
+   pool — puts the keyboard on top: display `ACC`. At any other time the combo does nothing
+   (it still counts as using the A440 hold, so A440's release does not toggle). Not saved
+   with programs; off at power-up. No indicator beyond the message.
+2. **While accompanying**: keys and MIDI-in notes alike sound directly through the stock
+   voice allocator, polyphonically and with their velocity, and never reach the arp — they
+   do not join the pool, do not re-latch and do not transpose the sequence. The arp carries
+   on with what it has latched. One voice goes to each arp note (a `Std` chord step takes
+   several), the rest are the player's; the stock allocator steals as usual.
+3. **The sustain pedal** (`HLd` mode) sustains what is played while it is down — the
+   player's notes and, as a side effect, any arp notes released meanwhile — and it does not
+   start or stop the arp's latch; the HOLD button remains the arp's latch. Lifting the pedal
+   releases what it sustained. **(change: the pedal is otherwise the arp's latch while the
+   arp is on)**
+4. **A440 tapped while accompanying** switches the arp off but keeps its latched notes and
+   the accompaniment; the next tap switches it on again and the pattern resumes from those
+   notes, still accompanying. **(change: otherwise switching the arp off drops the latched
+   notes — "Note pool".)** The keys play directly throughout.
+5. **Leave**: A440 + Keyboard again, with the arp on or off. The accompaniment also ends by
+   itself when there is nothing left to play over: the arp's latch switched off, MIDI CC
+   123–127, entering record mode, or a program load (which drops the latch). Once ended it
+   can only be re-entered as in rule 1 — so not while the arp is off. On leaving, keys down
+   at that moment keep sounding until released and are ignored by the arp until pressed
+   again; from then on the keys are the arp's again.
+6. Realisation: a UI state (`acc`); while it lasts `arpui_note` plays notes through the
+   engine's direct path (its `direct` table, as with the arp off), which an arp enable does
+   not cut while accompanying. The arp's latched set survives an arp disable while
+   accompanying because the hold-off that follows the latch hand-over is not passed to the
+   arp then; the next enable restarts the pattern from it. For the pedal, while accompanying
+   with the arp on, the hold-query hook answers the pedal's own state (stock's byte at
+   `ui + 0x19D`, not the merged state — the HOLD latch is on throughout) for every note-off,
+   and the UI polls the pedal each tick: on a down transition it posts the voice-engine hold
+   message on, on an up transition hold off followed by stock's release-on-hold-off walk
+   (`0x2003EEE1`), which frees the sustained voices whose keys are up; pedal transitions are
+   not handed to the arp's hold. With the arp off the synth's hold is stock's as usual.
+
 ### Display messages `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
 1. Every message the engine puts on the display — mode (`UP dn Ud rnd`), octaves
    (`o N`), clock (`int`/`Syn`), `OFF`, BPM (while Glide Rate turns with A440 held, on a
-   tempo tap, and when the arp is switched on), `tAP`, note value, `POL`/`ArP`, chord
-   length, keyboard shift, button id — shows for 1.5 s after the last change and then the display returns to the stock
+   tempo tap, and when the arp is switched on), `tAP`, note value, `Std`/`ArP`, chord
+   length, `ACC`, keyboard shift, button id — shows for 1.5 s after the last change and then the display returns to the stock
    patch display (bank, group and program). The record-mode flashes `rSt` and `tiE` are the
    one shorter message: 0.25 s ("Seq"). Nothing stays on the display permanently, with one
    exception: while seq record mode lasts the display returns to its readout `r N`
@@ -659,9 +701,10 @@ this engine deliberately differs it is marked **(change)** with the reason.
 ### Button id readout `[HW: verified 2026-10-07, Prophet-10 Rev4 — Keyboard 36, GLOBALS 13; Unison read 25 before it became tap tempo, Tune read 12 before it became record mode]`
 
 While A440 is held, pressing a panel button that the arp does not assign — anything other
-than Program 1–8, Bank, Group, Aftertouch (id 10 / `0x0A`, chord length), Velocity (id 11 /
-`0x0B`, tap tempo), Tune (id 12 / `0x0C`, seq record mode), HOLD (id 14 / `0x0E`: the tuning
-tone, or rest/tie in record mode), Unison (id 25 / `0x19`, sequence playback mode), GLOBALS
+than Program 1–8, Bank, Group, Keyboard Amount (id 8, accompany), Aftertouch (id 10 /
+`0x0A`, chord length), Velocity (id 11 / `0x0B`, tap tempo), Tune (id 12 / `0x0C`, seq record
+mode), HOLD (id 14 / `0x0E`: the tuning tone, or rest/tie in record mode), Unison (id 25 /
+`0x19`, sequence playback mode), GLOBALS
 (id 13 / `0x0D`, which must still open its menu) and Lo Freq (id 37, consumed by the
 keyboard octave shift) — shows that button's id on the display and is otherwise ignored
 (its release is consumed too). An aid for mapping panel button ids when designing new
@@ -716,7 +759,7 @@ be non-empty.
 A sequence is up to **64 steps**. A step is a **chord of up to 10 notes** (each with its own
 velocity) or a **rest**, and has a **length** (1 unless tied). It is recorded in *record
 mode*, entered and left from the panel; *seq mode* is active exactly when a sequence exists.
-It plays back in one of two ways: **`POL`** — each step sounds as the chord it is, one step
+It plays back in one of two ways: **`Std`** — each step sounds as the chord it is, one step
 per arp step ("Playback" below) — or **`ArP`** — the arpeggiator plays each chord for a set
 length while the sequence advances through the chords ("Arpeggiated playback"). *Keys*,
 *HOLD active* and *keys down* are as in "Re-latch under HOLD" (local keys after the keyboard
@@ -777,7 +820,7 @@ octave shift and MIDI-in notes count alike).
     held behave as if it were not held and do not count as using it.
 11. Power-up: no sequence, not in record mode.
 
-#### Playback (seq mode active, arp enabled, `POL`)
+#### Playback (seq mode active, arp enabled, `Std`)
 
 12. The sequence plays while at least one key is down and, with HOLD active, after all
     keys are released until the next key — the re-latch rule: the first key after all keys
@@ -807,19 +850,19 @@ octave shift and MIDI-in notes count alike).
 The sequence as a chord progression for the arpeggiator: each step is held for the **chord
 length** and the arp runs over that step's notes meanwhile.
 
-18. **Playback mode**: A440 + **Unison** toggles `POL` / `ArP` (display `POL`, `ArP`); it
+18. **Playback mode**: A440 + **Unison** toggles `Std` / `ArP` (display `Std`, `ArP`); it
     counts as using the A440 hold. **Chord length**: A440 + **Aftertouch** steps through
     Qtr → Half → Whole → 2 bars → 4 bars → Qtr … (display `4`, `2`, `1`, `2b`, `4b`, as the
-    note values are shown); it counts as using the hold. Power-up defaults: `POL`, Whole.
+    note values are shown); it counts as using the hold. Power-up defaults: `Std`, Whole.
     Both are saved with the program ("Patch memory"). Both can be changed at any time, also
     while a sequence plays and while recording; a change takes effect at the next chord
-    boundary (`ArP`) or step (`POL`).
+    boundary (`ArP`) or step (`Std`).
 19. In `ArP` the sequence's steps are **chords in forward order**, whatever the arp's
     direction mode; each is held for the chord length times its recorded length (a tie
     makes a chord last one chord length longer), a rest is silence for the same duration.
-    The sequence starts, stops, latches, re-latches and transposes exactly as in `POL`
+    The sequence starts, stops, latches, re-latches and transposes exactly as in `Std`
     (rules 12 and 15–17): a fresh key restarts it from its first chord.
-20. During a chord the arp plays the chord's notes — transposed as in `POL` — at the
+20. During a chord the arp plays the chord's notes — transposed as in `Std` — at the
     **note value**, in the arp's **direction mode** and over its **octaves**, exactly as it
     plays held keys: Up and Down by pitch, Up/Down without repeating the ends, Random,
     Assign in the order the notes were recorded; octave passes over the whole chord; gate
@@ -844,7 +887,7 @@ length** and the arp runs over that step's notes meanwhile.
 
 #### Octaves
 
-24. The octave setting is shared by the arp and seq (A440 + Program 1–4, `o N`). In `POL`,
+24. The octave setting is shared by the arp and seq (A440 + Program 1–4, `o N`). In `Std`,
     with `o 2` the sequence plays once as recorded, then once an octave up — per pass, as
     the arp's own octaves; direction modes apply across the expanded pattern; a change
     takes effect from the next step. In `ArP` the octaves apply within each chord (rule

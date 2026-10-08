@@ -940,6 +940,27 @@ static void test_arp_mode_change_takes_effect_and_without_a_sequence_changes_not
     CHECK(strcmp(ons(), "48 52 55 ") == 0);
 }
 
+/* ---- direct play (accompany) --------------------------------------------------------- */
+static void test_direct_play_and_acc_keep_direct_notes_through_enable(void) {
+    enabled_with_ceg();
+    arp_hold(&a, 1); off(C3); off(E3); off(G3);                        /* latched */
+    arp_set_acc(&a, 1);
+    arp_play_direct(&a, LOCAL, C4, 90);
+    CHECK(sounding[C4] && arp_pool_count(&a) == 3);                    /* sounds; not in the pool */
+    arp_enable(&a, 0);
+    CHECK(sounding[C4]);                                               /* arp off: the played note stays */
+    arp_enable(&a, 1);
+    CHECK(sounding[C4]);                                               /* arp on while accompanying: not cut */
+    arp_play_direct(&a, LOCAL, C4, 0);
+    CHECK(!sounding[C4]);
+    arp_play_direct(&a, LOCAL, E4, 90);
+    arp_set_acc(&a, 0);
+    off(E4);                                                           /* after accompanying, the key's release still frees it */
+    CHECK(!sounding[E4] && arp_pool_count(&a) == 3);
+    arp_enable(&a, 0); arp_play_direct(&a, LOCAL, D4, 90); arp_enable(&a, 1);
+    CHECK(!sounding[D4]);                                              /* not accompanying: enable cuts direct notes as before */
+}
+
 /* ---- assign -------------------------------------------------------------------------- */
 static void assign_on(void) { reset(); arp_enable(&a, 1); arp_set_mode(&a, ARP_ASSIGN); }
 
@@ -1166,6 +1187,7 @@ int main(void) {
     test_arp_mode_uneven_note_value_is_cut_at_the_chord_boundary();
     test_arp_mode_new_trigger_from_the_next_step_and_fresh_key_restarts();
     test_arp_mode_change_takes_effect_and_without_a_sequence_changes_nothing();
+    test_direct_play_and_acc_keep_direct_notes_through_enable();
     test_assign_plays_the_entered_order_with_each_entrys_velocity();
     test_assign_duplicates_via_hold_and_relatch_replaces();
     test_assign_release_without_hold_removes_the_pitch();

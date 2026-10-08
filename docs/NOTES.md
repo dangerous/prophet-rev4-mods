@@ -83,6 +83,15 @@ behavioural source of truth; this file is the engineering context around it.
   latches (stock's latch byte `ui + 0x19C` holds the active mode's, the UI remembers the other
   and replays a HOLD press at arp on/off transitions when they differ; program load clears
   both memories); leaving record mode with steps switches the arp on.
+- 2026-10-08, **1.3.0** (image `870c435c`, not yet flashed): accompany (`ACC`, A440 + Keyboard Amount id 8):
+  with the arp running latched the keys and MIDI-in play through `arp_play_direct` (the
+  `direct` table; an enable no longer cuts them while accompanying — `accomp` flag); the
+  hold-off that follows the latch hand-over at arp-off is not passed to the arp while
+  accompanying, so the latched notes survive the A440 toggle; the pedal: the hold-query hook
+  answers the pedal byte `ui + 0x19D` while accompanying with the arp on, and the UI tick
+  posts the DSP hold message on pedal transitions and runs stock's release walk
+  `0x2003EEE1` on release (new interface entries). `POL` renamed `Std` once the full font was
+  read (table at `0x2004E218`, A–Z at 0x0A–0x23).
 - First native flash attempt stalled the loader at `100` with the eight Program LEDs lit:
   the payload was an exact multiple of 7 and our encoder omitted the empty tail group's MS
   byte, which the loader always reads. Nothing was written; power cycle recovered. Fixed in
@@ -124,10 +133,16 @@ behavioural source of truth; this file is the engineering context around it.
   HOLD 0x23; LED setter `0x20036824(led, 0/1/2)`. Button-held table `0x20079B20[id]` (4
   bytes each, u16) — A440 at `0x20079B5C`; the panel link comes up >1 s after our first tick.
 - Display: `0x20037F25(c0,c1,c2)` 3 chars; `0x20037FF7(int)` integer (negatives shown);
-  patch display restore `0x2003818C(ui)`, `ui = 0x20057390`. Codes: digits 0–9 = 0–9,
-  A=0x0A b=0x0B d=0x0D E=0x0E F=0x0F i=0x12 L=0x15 n=0x17 O=0x18 P=0x19 r=0x1B S=0x1C
-  t=0x1D U=0x1E y=0x22 o=0x24 blank=0x25 '-'=0x26. Globals menu open ⇔ word
-  `0x20057438 != 0`.
+  patch display restore `0x2003818C(ui)`, `ui = 0x20057390`. `display3` forwards each code
+  to the per-digit routine `0x20036A40(digit, code, …)`, which accepts codes 0–0x28 and
+  looks the glyph up in the byte table at **`0x2004E218`** (bit → segment: 0 a, 1 b, 2 c,
+  3 d, 4 e, 5 f, 6 g; the digits' segments are individual panel LEDs). **The full font**
+  (read from that table 2026-10-08): digits 0–9 = 0–9; **A–Z = 0x0A–0x23** in order (A b C
+  d E F G H i J K L M n O P q r S t U V W X y Z — `K`, `W` and `Z` are blank glyphs, `M` and
+  `X` look like `H` without / `V` like `U`), `o` = 0x24, blank = 0x25, `-` = 0x26, `_` =
+  0x27, `]`-like = 0x28. So `C` = 0x0C and `H` = 0x11; the stock Globals strings confirm
+  it (`HLd`, `CC`, the hex list `012 345 678 9Ab CdE`, `JUP`, `GrP`, `Vin`, `Mdi`). Globals
+  menu open ⇔ word `0x20057438 != 0`.
 - Keyboard FIFO consumer `0x2003BE8C…` (1 ms timer callback): `fifo_count` at `0x2003BE9C`
   (our tick), `note_on(1,note,vel)` at `0x2003BECC` only with Local Control (global 7) == 2;
   `bl 0x2003BCE0(note, vel)` at `0x2003BED8` posts a UI event nobody handles, NOT MIDI; MIDI

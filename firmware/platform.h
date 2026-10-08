@@ -17,6 +17,9 @@ int  plat_tone_on(void);                          /* stock's A440 reference tone
 void plat_stock_a440_press(void);                 /* replay an A440 press to stock: toggles its tone (HOLD up) */
 int  plat_hold_latch(void);                       /* stock's HOLD button latch (ui + 0x19C) */
 void plat_stock_hold_press(void);                 /* replay a HOLD press to stock: toggles its latch, LED and hold */
+int  plat_pedal_down(void);                       /* stock's sustain-pedal state (ui + 0x19D) */
+void plat_dsp_hold(int on);                       /* the voice engine's hold message (0x080D0000 | on) */
+void plat_release_unheld(void);                   /* stock: release every sounding voice whose key is up */
 void plat_param_store(int param, int value);      /* stock plain parameter store, layer A */
 
 #endif

@@ -24,6 +24,7 @@ typedef struct {
     uint8_t  latched[128];            /* velocity kept by HOLD after release (0 = not latched) */
     uint8_t  direct[128];             /* notes sounding directly through stock while the arp is off */
     uint8_t  enabled, hold, mode, octaves, ext;
+    uint8_t  accomp;                  /* accompanying: direct notes survive an enable ("Accompany") */
     uint8_t  running;                 /* MIDI transport: Start/Continue seen and no Stop since */
     uint8_t  port;                    /* MIDI clock port lock, ARP_NONE = none */
     uint8_t  sounding;                /* first step note currently sounding, ARP_NONE = none */
@@ -49,11 +50,11 @@ typedef struct {
     uint8_t  clk_prev;                /* a clock has been seen since the window restarted */
     /* seq: recorded steps — a chord of up to ARP_SEQ_CHORD notes or a rest (seq_n 0), each
      * seq_dur long — played transposed so the lowest note of the first sounding step lands
-     * on the trigger key. POL: one step per arp step (seq_dur in arp steps). ArP (seq_arp):
+     * on the trigger key. Std: one step per arp step (seq_dur in arp steps). ArP (seq_arp):
      * each step is a chord held for chord_beats x seq_dur while the arp runs over its notes. */
     uint8_t  seq_len, seq_rec, seq_fresh, seq_trigger;
-    uint8_t  seq_hold;                /* POL: arp steps the sounding seq step still has to run (its length - 1) */
-    uint8_t  seq_arp;                 /* playback mode: 0 POL, 1 ArP */
+    uint8_t  seq_hold;                /* Std: arp steps the sounding seq step still has to run (its length - 1) */
+    uint8_t  seq_arp;                 /* playback mode: 0 Std, 1 ArP */
     uint8_t  chord_beats;             /* ArP: chord length in beats (1, 2, 4, 8, 16) */
     uint8_t  chord_pos;               /* ArP: the chord (step) being played */
     uint8_t  chord_restart;           /* ArP: the chord clock starts afresh at the next step (sequence (re)start) */
@@ -86,7 +87,11 @@ void arp_set_bpm(arp_t *a, int bpm);                     /* 40..300 */
 void arp_set_beats(arp_t *a, int num, int den);          /* beats per step */
 void arp_set_swing(arp_t *a, int on);                    /* 16S / 8S */
 void arp_set_ext(arp_t *a, int ext);                     /* clock source: 0 internal, 1 MIDI */
-void arp_set_seq_arp(arp_t *a, int on);                  /* sequence playback: 0 POL (chords as blocks), 1 ArP */
+void arp_set_seq_arp(arp_t *a, int on);                  /* sequence playback: 0 Std (chords as blocks), 1 ArP */
+void arp_set_acc(arp_t *a, int on);                      /* accompanying ("Accompany") */
+/* A note played over the arp: straight to a voice, tracked so its release matches; never
+ * the pool's. vel 0 = off. */
+void arp_play_direct(arp_t *a, int src, int note, int vel);
 void arp_set_chord_beats(arp_t *a, int beats);           /* ArP chord length in beats, 1..16 */
 
 /* Seq record mode (docs/SPEC.md: "Seq"). Entering releases everything sounding and empties

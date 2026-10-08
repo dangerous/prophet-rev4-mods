@@ -4,11 +4,27 @@ Versions of the patch as published through the patcher — the `VERSION` file, t
 name (`prophet5_main_2.1.0_patched_<version>.syx`) and `site/version.json`. Each entry names
 the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
 
+## 1.3.0 — 2026-10-08
+
+### Added
+- **Accompany** — playing over a latched arp or sequence, as on a Moog Matriarch. With the
+  arp running latched (HOLD), A440 + **Keyboard** (the filter Keyboard Amount button) frees
+  the keyboard: keys and MIDI notes sound directly, polyphonically, while the arp carries on
+  with what it has latched (`ACC`). The sustain pedal sustains what you play (and whatever
+  arp notes release meanwhile) without touching the arp's latch; tapping A440 off and on
+  keeps the accompaniment and the latched notes; A440 + Keyboard again hands the keys back.
+  It ends by itself when the latch goes.
+
+### Changed
+- The sequence's chord playback mode is now called **`Std`** (was `POL`); `ArP` is unchanged.
+  The full display font was read from the stock firmware (A–Z are all there), which is what
+  made `ACC` possible.
+
 ## 1.2.0 — 2026-10-08
 
 ### Added
 - **Arpeggiated playback** of the step sequencer: A440 + **Unison** switches the sequence
-  between `POL` (each step sounds as the chord it is, as before) and `ArP`, where the
+  between `Std` (each step sounds as the chord it is, as before) and `ArP`, where the
   sequence is a chord progression for the arpeggiator — each chord is held for the **chord
   length** (A440 + **Aftertouch**: quarter, half, whole, 2 bars, 4 bars, shown as `4 2 1 2b
   4b`) while the arp runs over its notes at the note value, in the arp's direction mode and

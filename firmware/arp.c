@@ -484,6 +484,10 @@ void arp_note(arp_t *a, int src, int note, int vel)
         }
         return;
     }
+    if (a->direct[note]) {                                 /* a note played over the arp ("Accompany"): released */
+        a->direct[note] = 0;
+        plat_voice_off(src, note);
+    }
     if (!a->held[note])
         return;
     if (a->hold)
@@ -529,7 +533,8 @@ void arp_enable(arp_t *a, int on)
     if (a->seq_rec)
         return;                                            /* record mode: nothing sounds through the arp */
     if (on) {
-        release_direct(a);
+        if (!a->accomp)
+            release_direct(a);                             /* accompanying: the played notes stay */
         reset_pattern(a);
         if (!a->ext) {
             a->acc = 0;
@@ -611,6 +616,24 @@ void arp_set_seq_arp(arp_t *a, int on)
         return;
     a->seq_arp = (uint8_t)on;
     reset_pattern(a);                                      /* from the next step: the first step / chord */
+}
+
+void arp_set_acc(arp_t *a, int on)
+{
+    a->accomp = (uint8_t)(on != 0);
+}
+
+void arp_play_direct(arp_t *a, int src, int note, int vel)
+{
+    if (note < 0 || note > 127)
+        return;
+    if (vel > 0) {
+        a->direct[note] = (uint8_t)vel;
+        plat_voice_on(src, note, vel);
+    } else if (a->direct[note]) {
+        a->direct[note] = 0;
+        plat_voice_off(src, note);
+    }
 }
 
 void arp_set_chord_beats(arp_t *a, int beats)

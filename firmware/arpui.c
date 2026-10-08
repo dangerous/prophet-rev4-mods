@@ -3,8 +3,8 @@
 
 enum { UI_PRESS = 1, UI_RELEASE = 2 };
 enum { UC_A = 0x0A, UC_U = 0x1E, UC_P = 0x19, UC_D = 0x0D, UC_N = 0x17, UC_R = 0x1B, UC_I = 0x12, UC_T = 0x1D,
-       UC_S = 0x1C, UC_Y = 0x22, UC_O = 0x18, UC_F = 0x0F, UC_E = 0x0E, UC_L = 0x15, UC_B = 0x0B, UC_LO = 0x24,
-       UC_BLANK = 0x25 };
+       UC_S = 0x1C, UC_Y = 0x22, UC_O = 0x18, UC_F = 0x0F, UC_E = 0x0E, UC_L = 0x15, UC_B = 0x0B, UC_C = 0x0C,
+       UC_LO = 0x24, UC_BLANK = 0x25 };
 
 /* ArP chord lengths in cycle order: beats, the code patch memory stores (0 = Whole, the
  * default, so older programs load with it), display (as the note values are shown) */
@@ -24,6 +24,8 @@ static int chord_index(const arp_t *a)                     /* the engine's chord
     return 2;                                              /* Whole */
 }
 enum { P1 = 0, P4 = 3, P5 = 4, P6 = 5, P7 = 6, P8 = 7 };
+
+static void acc_end(arpui_t *u, arp_t *a);                /* accompany: below */
 
 static const uint8_t MODE_TEXT[ARP_MODES][3] = {
     { UC_U, UC_P, UC_BLANK },        /* UP  */
@@ -133,6 +135,7 @@ void arpui_program_loaded(arpui_t *u, arp_t *a)
     int m, note, mode, on, ci = -1;
     if (u->kill)
         return;
+    acc_end(u, a);                                         /* a program load drops the latch: nothing to play over */
     u->hold_arp = u->hold_stock = 0;                       /* a program load drops both HOLD latches */
     if (v < 1 || v > ARPUI_OCT_MAX || pack < 0) {
         ui_enable(u, a, 0);                                /* no arp data: off, settings untouched */
@@ -197,6 +200,7 @@ static void rest_tie(arpui_t *u, arp_t *a)                 /* HOLD button or ped
 
 static void rec_enter(arpui_t *u, arp_t *a)
 {
+    acc_end(u, a);
     u->rec = 1;
     u->rec_ms = 0;
     arp_seq_record(a, 1);
@@ -217,6 +221,45 @@ static void rec_leave(arpui_t *u, arp_t *a, int restore)   /* restore = 0 when t
             show_status(u, a);
         store_patch(u, a);
     }
+}
+
+/* --- accompany: the keys play over the latched arp ("Accompany") -------------------------- */
+static void acc_end(arpui_t *u, arp_t *a)
+{
+    if (!u->acc)
+        return;
+    u->acc = 0;
+    arp_set_acc(a, 0);
+    if (u->pedal) {                                        /* nothing left sustained by our pedal handling */
+        u->pedal = 0;
+        plat_dsp_hold(0);
+        plat_release_unheld();
+    }
+}
+
+static void acc_toggle(arpui_t *u, arp_t *a)
+{
+    if (u->acc) {
+        acc_end(u, a);
+    } else if (a->enabled && plat_hold_latch() && arp_pool_count(a) > 0) {   /* only over a latched, running arp */
+        u->acc = 1;
+        u->pedal = 0;                                      /* a pedal already down is seen at the next tick */
+        arp_set_acc(a, 1);
+        show3(u, UC_A, UC_C, UC_C);
+    }
+}
+
+int arpui_sustain(const arpui_t *u, const arp_t *a)
+{
+    if (u->kill || !u->acc || !a->enabled)
+        return -1;
+    return plat_pedal_down() != 0;
+}
+
+void arpui_all_notes_off(arpui_t *u, arp_t *a)
+{
+    acc_end(u, a);
+    arp_all_notes_off(a);
 }
 
 /* --- tap tempo (A440 + Velocity) -------------------------------------------------------- */
@@ -292,13 +335,16 @@ static void combo(arpui_t *u, arp_t *a, int id)
         if (!a->enabled)
             u->tone_pending = 1;                           /* toggled on the release, when HOLD is up */
         break;
-    case ARPUI_UNISON:                                     /* sequence playback: POL / ArP */
+    case ARPUI_UNISON:                                     /* sequence playback: Std / ArP */
         arp_set_seq_arp(a, !a->seq_arp);
         if (a->seq_arp)
             show3(u, UC_A, UC_R, UC_P);
         else
-            show3(u, UC_P, UC_O, UC_L);
+            show3(u, UC_S, UC_T, UC_D);
         store_patch(u, a);
+        break;
+    case ARPUI_KEYBOARD:                                   /* accompany on / off */
+        acc_toggle(u, a);
         break;
     case ARPUI_AFTERTOUCH: {                               /* ArP chord length: the next in the cycle */
         int i = (int)((unsigned)(chord_index(a) + 1) % ARPUI_CHORDS);
@@ -405,6 +451,10 @@ void arpui_note(arpui_t *u, arp_t *a, int src, int note, int vel)
             show_rec(u, a);
         return;
     }
+    if (u->acc) {                                          /* accompanying: on top, never the arp's */
+        arp_play_direct(a, src, note, vel);
+        return;
+    }
     arp_note(a, src, note, vel);
 }
 
@@ -415,7 +465,11 @@ void arpui_hold(arpui_t *u, arp_t *a, int on)
         return;
     if (u->rec && on && !a->hold)                          /* the pedal went down while recording */
         rest_tie(u, a);
+    if (u->acc && !a->enabled && !on)
+        return;                                            /* accompaniment suspended: the arp keeps its latched notes */
     arp_hold(a, on);
+    if (u->acc && arp_pool_count(a) == 0)
+        acc_end(u, a);                                     /* the latch went: nothing left to play over */
 }
 
 int arpui_suspended(const arpui_t *u, const arp_t *a)
@@ -475,6 +529,15 @@ void arpui_tick(arpui_t *u, arp_t *a)
     }
     if (u->led_fix && --u->led_fix == 0 && a->enabled && !u->rec)
         u->led_on = 0;                                     /* stock's late LED-off has landed: assert ours again */
+    if (u->acc && a->enabled) {                            /* the pedal sustains what is played, by our hand */
+        int p = plat_pedal_down() != 0;
+        if (p != u->pedal) {
+            u->pedal = (uint8_t)p;
+            plat_dsp_hold(p);
+            if (!p)
+                plat_release_unheld();
+        }
+    }
     if (u->rec) {                                          /* the LED blinks while recording */
         on = u->rec_ms < ARPUI_BLINK_MS;
         if (++u->rec_ms >= 2 * ARPUI_BLINK_MS)

@@ -43,6 +43,8 @@ enum {
     NI_HOLD_OFF,         /* 0x2003B6B1 hold off (both sources): original callee at the program-loaded hook */
     NI_TONE_FLAG,        /* 0x200574FA ui + 0x16A: stock's A440 reference tone on (byte != 0) */
     NI_HOLD_LATCH,       /* 0x2005752C ui + 0x19C: stock's HOLD button latch (byte != 0) */
+    NI_PEDAL,            /* 0x2005752D ui + 0x19D: the sustain pedal (byte != 0) */
+    NI_RELEASE_UNHELD,   /* 0x2003EEE1 release every sounding voice whose key is up (stock's hold-off walk) */
     NI_COUNT
 };
 
@@ -71,6 +73,8 @@ const volatile uint32_t stock_iface[NI_COUNT] = {
     [NI_HOLD_OFF] = 0x2003B6B1u,
     [NI_TONE_FLAG] = 0x200574FAu,
     [NI_HOLD_LATCH] = 0x2005752Cu,
+    [NI_PEDAL] = 0x2005752Du,
+    [NI_RELEASE_UNHELD] = 0x2003EEE1u,
 };
 
 #define SFN(i, type) ((type)(uintptr_t)stock_iface[i])
@@ -199,7 +203,7 @@ static void q_drain(void)
         switch (e.type) {
         case Q_NOTE: arpui_note(UI, ARP, e.a, e.b, e.c); break;
         case Q_HOLD: arpui_hold(UI, ARP, e.a); break;
-        case Q_ANO:  arp_all_notes_off(ARP); break;
+        case Q_ANO:  arpui_all_notes_off(UI, ARP); break;
         case Q_PROGRAM: arpui_program_loaded(UI, ARP); break;
         default: break;
         }
@@ -222,6 +226,9 @@ int  plat_tone_on(void) { return *SPTR(NI_TONE_FLAG, volatile const uint8_t *) !
 void plat_stock_a440_press(void) { SFN(NI_BUTTON_POST, button_fn)(ARPUI_A440, 1); }   /* stock: tone toggle (HOLD up) */
 int  plat_hold_latch(void) { return *SPTR(NI_HOLD_LATCH, volatile const uint8_t *) != 0; }
 void plat_stock_hold_press(void) { SFN(NI_BUTTON_POST, button_fn)(ARPUI_HOLD, 1); }    /* stock: latch toggle */
+int  plat_pedal_down(void) { return *SPTR(NI_PEDAL, volatile const uint8_t *) != 0; }
+void plat_dsp_hold(int on) { dsp_post(DSP_HOLD_MSG | (uint32_t)(on != 0)); }
+void plat_release_unheld(void) { SFN(NI_RELEASE_UNHELD, void_fn)(); }
 
 /* --- hooks: Timer Service task ----------------------------------------------------------- */
 /* stock 0x2003BE9C: the 1 ms keyboard poll. Everything the engine does happens here. */
@@ -407,8 +414,13 @@ void hook_program_loaded(void)
 /* stock 0x2003EACE: note_off asks whether HOLD is active (both tasks) */
 int hook_hold_query(void)
 {
-    int stock;
+    int stock, sustain;
     ensure_init();
     stock = stock_hold_active();
-    return killed() ? stock : vhold_query(arpui_suspended(UI, ARP), stock);
+    if (killed())
+        return stock;
+    sustain = arpui_sustain(UI, ARP);                      /* accompanying: the pedal alone decides */
+    if (sustain >= 0)
+        return sustain;
+    return vhold_query(arpui_suspended(UI, ARP), stock);
 }

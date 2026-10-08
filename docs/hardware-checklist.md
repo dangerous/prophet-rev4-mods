@@ -139,8 +139,15 @@ Manual verification on the instrument. Record results against the spec markers i
       cycle `2b 4b 4 2 1`). Hold a key: 16 sixteenths over C, then F, G, C — a bar each; `dn`
       runs each chord downwards, chords still in order; `o 2` arpeggiates each chord over two
       octaves. Chord length `4`: a chord per beat. A tied step lasts twice as long; a rest is
-      silence. A440 + Unison → `POL`: the chords as blocks again. Save a program in `ArP` with
+      silence. A440 + Unison → `Std`: the chords as blocks again. Save a program in `ArP` with
       `2b`, load another, reload: both come back.
+- [ ] Accompany: arp on, chord latched (HOLD). A440 + Keyboard Amount → `ACC`. Play: notes
+      sound directly on top, the arp unchanged (chords, velocity; MIDI-in too). Pedal down:
+      your notes sustain, the arp's latch stays; pedal up: they release. Tap A440: arp off,
+      keys still play; tap A440: the arp resumes from the same latched notes. A440 +
+      Keyboard Amount: keys back to the arp (a held key releases normally; pressed again it
+      re-latches). HOLD off while accompanying: `ACC` ends. Arp off, or arp on but nothing
+      latched: A440 + Keyboard Amount does nothing.
 - [ ] Two HOLD latches: arp on, HOLD on (latched notes play). Tap A440 off: HOLD LED goes
       off, nothing is held. Press HOLD (stock hold on), play and release: notes sustain. Tap
       A440 on: HOLD LED on again, the arp latches, the synth's hold is suspended. Tap A440

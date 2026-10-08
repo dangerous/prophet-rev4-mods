@@ -11,10 +11,10 @@ static int failures, checks;
     printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
 
 /* ---- fake platform ------------------------------------------------------------------ */
-enum { EV_VON, EV_VOFF, EV_D3, EV_INT, EV_RESTORE, EV_LED, EV_PARAM, EV_A440_STOCK, EV_HOLD_STOCK };
+enum { EV_VON, EV_VOFF, EV_D3, EV_INT, EV_RESTORE, EV_LED, EV_PARAM, EV_A440_STOCK, EV_HOLD_STOCK, EV_DSP_HOLD, EV_RELEASE_WALK };
 typedef struct { int type, a, b, c; } ev_t;
 static ev_t log_[4096];
-static int nlog, fake_globals_open, fake_a440_down, fake_tone_on, fake_latch;
+static int nlog, fake_globals_open, fake_a440_down, fake_tone_on, fake_latch, fake_pedal;
 static void push(int t, int a, int b, int c) { if (nlog < 4096) log_[nlog++] = (ev_t){t, a, b, c}; }
 void plat_voice_on(int src, int note, int vel) { push(EV_VON, src, note, vel); }
 void plat_voice_off(int src, int note) { push(EV_VOFF, src, note, 0); }
@@ -28,6 +28,9 @@ int  plat_tone_on(void) { return fake_tone_on; }
 void plat_stock_a440_press(void) { push(EV_A440_STOCK, 0, 0, 0); fake_tone_on = !fake_tone_on; }   /* stock toggles its tone */
 int  plat_hold_latch(void) { return fake_latch; }
 void plat_stock_hold_press(void) { push(EV_HOLD_STOCK, 0, 0, 0); fake_latch = !fake_latch; }      /* stock toggles its latch */
+int  plat_pedal_down(void) { return fake_pedal; }
+void plat_dsp_hold(int on) { push(EV_DSP_HOLD, on, 0, 0); }
+void plat_release_unheld(void) { push(EV_RELEASE_WALK, 0, 0, 0); }
 static int params[99];
 int  plat_param_read(int p) { return params[p]; }
 void plat_param_store(int p, int v) { params[p] = v; push(EV_PARAM, p, v, 0); }
@@ -43,7 +46,7 @@ static void clear_log(void) { nlog = 0; }
 enum { CH_U = 0x1E, CH_P = 0x19, CH_D = 0x0D, CH_N = 0x17, CH_R = 0x1B, CH_I = 0x12, CH_T = 0x1D,
        CH_S = 0x1C, CH_Y = 0x22, CH_O = 0x18, CH_F = 0x0F, CH_E = 0x0E, CH_LO = 0x24, BLANK = 0x25 };
 enum { A440 = ARPUI_A440, GLOBALS = ARPUI_GLOBALS, GROUP = ARPUI_GROUP, BANK = ARPUI_BANK, VELOCITY = ARPUI_VELOCITY, UNISON = 0x19,
-       AFTERTOUCH = ARPUI_AFTERTOUCH, OSCB_KEYB = 36, CH_A = 0x0A, CH_B = 0x0B, CH_L = 0x15,
+       AFTERTOUCH = ARPUI_AFTERTOUCH, KEYBOARD = ARPUI_KEYBOARD, OSCB_KEYB = 36, CH_A = 0x0A, CH_B = 0x0B, CH_C = 0x0C, CH_L = 0x15,
        TUNE = ARPUI_TUNE, HOLD = ARPUI_HOLD,
        P1 = 0, P2 = 1, P3 = 2, P4 = 3, P5 = 4, P6 = 5, P7 = 6, P8 = 7,
        PRESS = 1, RELEASE = 2, REPEAT = 3, LOCAL = ARP_SRC_LOCAL, MIDI = ARP_SRC_MIDI };
@@ -53,14 +56,14 @@ static arp_t a;
 
 static void reset(void) {
     arpui_init(&u); arp_init(&a);
-    clear_log(); fake_globals_open = 0; fake_a440_down = 0; fake_tone_on = 0; fake_latch = 0;
+    clear_log(); fake_globals_open = 0; fake_a440_down = 0; fake_tone_on = 0; fake_latch = 0; fake_pedal = 0;
     memset(params, 0, sizeof params);
     for (int i = 0; i < ARPUI_BOOT_TICKS; i++) arpui_tick(&u, &a);     /* past the kill-switch window */
     clear_log();
 }
 static int btn(int id, int value) { return arpui_button(&u, &a, id, value); }
 static void tap_a440(void) { btn(A440, PRESS); btn(A440, RELEASE); }
-static void ticks(int n) { while (n-- > 0) arpui_tick(&u, &a); }
+static void ticks(int n) { while (n-- > 0) { arpui_tick(&u, &a); arp_tick(&a); } }   /* as the glue's tick does */
 
 /* ---- A440 ---------------------------------------------------------------------------- */
 static void test_tap_toggles_arp_with_status_and_led(void) {
@@ -457,8 +460,8 @@ static void test_readout_of_unassigned_buttons(void) {
     btn(A440, PRESS);
     CHECK(btn(OSCB_KEYB, PRESS) == 1 && last_int() == OSCB_KEYB);
     CHECK(btn(OSCB_KEYB, RELEASE) == 1);
-    CHECK(btn(8, PRESS) == 1 && last_int() == 8);                      /* filter Keyboard Amount: unassigned */
-    CHECK(btn(8, RELEASE) == 1);
+    CHECK(btn(16, PRESS) == 1 && last_int() == 16);                    /* a mod-destination button: unassigned */
+    CHECK(btn(16, RELEASE) == 1);
     btn(A440, RELEASE);
     CHECK(!a.enabled);
 }
@@ -811,7 +814,7 @@ static void test_unison_toggles_playback_mode_and_aftertouch_cycles_chord_length
     CHECK(btn(UNISON, RELEASE) == 1);
     CHECK(params[ARPUI_PARAM_OCT] == pack94c(N_8, 1, 0, 1));           /* saved: M */
     btn(UNISON, PRESS); btn(UNISON, RELEASE);
-    CHECK(a.seq_arp == 0 && last_d3_is(CH_P, CH_O, CH_L));             /* POL */
+    CHECK(a.seq_arp == 0 && last_d3_is(CH_S, CH_T, CH_D));             /* Std */
     CHECK(params[ARPUI_PARAM_OCT] == pack94c(N_8, 1, 0, 0));
     static const int CYCLE[][4] = {   /* beats, code, display */
         { 8, 3, 2, CH_B }, { 16, 4, 4, CH_B }, { 1, 1, BLANK, 4 }, { 2, 2, BLANK, 2 }, { 4, 0, BLANK, 1 } };
@@ -850,6 +853,121 @@ static void test_playback_mode_and_chord_length_round_trip_and_old_programs_load
     CHECK(a.enabled);
     arpui_program_loaded(&u, &a);
     CHECK(!a.enabled && a.seq_arp == 0 && a.chord_beats == 4);
+}
+
+/* ---- accompany: playing over a latched arp (spec "Accompany") ------------------------- */
+static void latched_arp(void) {                                        /* arp on, HOLD latch on, C E G latched */
+    reset();
+    tap_a440();
+    note(60, 100); note(64, 100); note(67, 100);
+    fake_latch = 1; arpui_hold(&u, &a, 1);
+    note(60, 0); note(64, 0); note(67, 0);
+    CHECK(a.enabled && a.hold && arp_pool_count(&a) == 3);
+    clear_log();
+}
+static void acc_combo(void) { btn(A440, PRESS); btn(KEYBOARD, PRESS); btn(KEYBOARD, RELEASE); btn(A440, RELEASE); }
+
+static void test_accompany_enters_only_over_a_latched_running_arp(void) {
+    reset();                                                           /* arp off: nothing */
+    btn(A440, PRESS);
+    CHECK(btn(KEYBOARD, PRESS) == 1 && !u.acc && count_type(EV_D3) == 0 && count_type(EV_INT) == 0);
+    CHECK(btn(KEYBOARD, RELEASE) == 1 && btn(A440, RELEASE) == 1 && !a.enabled);   /* consumed, no toggle */
+    tap_a440(); note(60, 100);                                         /* arp on, held but not latched: nothing */
+    acc_combo();
+    CHECK(!u.acc && a.enabled);
+    note(60, 0);
+    latched_arp();
+    acc_combo();
+    CHECK(u.acc && last_d3_is(CH_A, CH_C, CH_C) && a.enabled);        /* ACC */
+    CHECK(btn(KEYBOARD, PRESS) == 0 && btn(KEYBOARD, RELEASE) == 0);  /* without A440: stock */
+}
+
+static void test_accompany_keys_play_directly_and_leave_the_arp_alone(void) {
+    latched_arp(); acc_combo(); clear_log();
+    note(72, 90);
+    CHECK(count_type(EV_VON) == 1 && last_of(EV_VON)->b == 72 && last_of(EV_VON)->c == 90);   /* straight to a voice */
+    CHECK(arp_pool_count(&a) == 3);                                    /* not the arp's */
+    arpui_note(&u, &a, MIDI, 74, 80);
+    CHECK(count_type(EV_VON) == 2 && last_of(EV_VON)->b == 74 && arp_pool_count(&a) == 3);   /* MIDI-in too */
+    ticks(250);
+    CHECK(count_type(EV_VON) == 3 && last_of(EV_VON)->b != 72 && last_of(EV_VON)->b != 74);   /* the arp carries on */
+    note(72, 0); arpui_note(&u, &a, MIDI, 74, 0);
+    CHECK(count_type(EV_VOFF) >= 2);
+    /* with a sequence: a key does not re-transpose it */
+    reset(); tap_a440();
+    enter_rec(); note(60, 100); note(60, 0); note(64, 100); note(64, 0); tap_a440();
+    note(60, 100); fake_latch = 1; arpui_hold(&u, &a, 1); note(60, 0);
+    CHECK(a.seq_trigger == 60);
+    acc_combo(); clear_log();
+    note(67, 100);
+    CHECK(a.seq_trigger == 60 && count_type(EV_VON) == 1);
+    note(67, 0);
+}
+
+static void test_accompany_pedal_sustains_and_does_not_touch_the_latch(void) {
+    latched_arp();
+    CHECK(arpui_sustain(&u, &a) == -1);                                /* not accompanying: not ours to answer */
+    acc_combo(); clear_log();
+    CHECK(arpui_sustain(&u, &a) == 0);                                 /* pedal up: no sustain, latch or not */
+    fake_pedal = 1; ticks(1);
+    CHECK(count_type(EV_DSP_HOLD) == 1 && last_of(EV_DSP_HOLD)->a == 1 && arpui_sustain(&u, &a) == 1);
+    CHECK(a.hold && arp_pool_count(&a) == 3);                          /* the arp's latch untouched */
+    ticks(100);
+    CHECK(count_type(EV_DSP_HOLD) == 1);                               /* transitions only */
+    fake_pedal = 0; ticks(1);
+    CHECK(count_type(EV_DSP_HOLD) == 2 && last_of(EV_DSP_HOLD)->a == 0 && count_type(EV_RELEASE_WALK) == 1);
+    CHECK(arpui_sustain(&u, &a) == 0 && a.hold && arp_pool_count(&a) == 3);
+    fake_pedal = 1; ticks(1);
+    acc_combo();                                                       /* leaving with the pedal down: nothing left stuck */
+    CHECK(!u.acc && last_of(EV_DSP_HOLD)->a == 0 && count_type(EV_RELEASE_WALK) == 2);
+    CHECK(arpui_sustain(&u, &a) == -1);
+}
+
+static void test_accompany_survives_the_arp_toggling_off_and_on(void) {
+    latched_arp(); acc_combo(); clear_log();
+    tap_a440();                                                        /* arp off: latched notes and accompaniment kept */
+    CHECK(!a.enabled && u.acc && arp_pool_count(&a) == 3);
+    CHECK(count_type(EV_HOLD_STOCK) == 1 && !fake_latch);             /* stock's latch (off) restored ... */
+    arpui_hold(&u, &a, 0);                                             /* ... and the hold-off that follows */
+    CHECK(arp_pool_count(&a) == 3 && u.acc);                           /* does not drop the arp's latched notes */
+    CHECK(arpui_sustain(&u, &a) == -1);                                /* arp off: the synth's hold is stock's */
+    note(72, 100); CHECK(count_type(EV_VON) == 1); note(72, 0);
+    clear_log();
+    tap_a440();                                                        /* arp on: resumes from the latched notes */
+    CHECK(a.enabled && u.acc && count_type(EV_VON) == 1 && last_of(EV_VON)->b == 60);
+    CHECK(count_type(EV_HOLD_STOCK) == 1 && fake_latch);              /* the arp's latch replayed on */
+    arpui_hold(&u, &a, 1);
+    note(72, 100);
+    CHECK(arp_pool_count(&a) == 3 && count_type(EV_VON) == 2);        /* keys still on top */
+    note(72, 0);
+}
+
+static void test_accompany_ends_when_there_is_nothing_to_play_over(void) {
+    latched_arp(); acc_combo();
+    CHECK(btn(HOLD, PRESS) == 0 && btn(HOLD, RELEASE) == 0);           /* the HOLD button is stock's: the latch goes off */
+    fake_latch = 0; arpui_hold(&u, &a, 0);
+    CHECK(!u.acc && arp_pool_count(&a) == 0);
+    acc_combo();
+    CHECK(!u.acc);                                                     /* no re-entry without a latched arp */
+    latched_arp(); acc_combo(); arpui_all_notes_off(&u, &a);
+    CHECK(!u.acc);                                                     /* CC 123 */
+    latched_arp(); acc_combo(); enter_rec();
+    CHECK(!u.acc && u.rec);                                            /* record mode */
+    tap_a440();
+    latched_arp(); acc_combo(); params[94] = 1; params[93] = 31; arpui_program_loaded(&u, &a);
+    CHECK(!u.acc);                                                     /* a program load */
+}
+
+static void test_leaving_accompany_hands_the_keys_back(void) {
+    latched_arp(); acc_combo();
+    note(72, 100);                                                     /* a key down, playing directly */
+    acc_combo();
+    CHECK(!u.acc && a.enabled && arp_pool_count(&a) == 3);            /* the key down at leaving is not the arp's */
+    clear_log();
+    note(72, 0);
+    CHECK(count_type(EV_VOFF) == 1 && last_of(EV_VOFF)->b == 72);     /* ... but it still releases */
+    note(72, 100);
+    CHECK(arp_pool_count(&a) == 1);                                    /* pressed again: the arp's (a re-latch, HOLD being on) */
 }
 
 /* ---- two HOLD latches ----------------------------------------------------------------- */
@@ -1011,6 +1129,12 @@ int main(void) {
     test_long_note_values_load_and_old_programs_still_do();
     test_unison_toggles_playback_mode_and_aftertouch_cycles_chord_length();
     test_playback_mode_and_chord_length_round_trip_and_old_programs_load();
+    test_accompany_enters_only_over_a_latched_running_arp();
+    test_accompany_keys_play_directly_and_leave_the_arp_alone();
+    test_accompany_pedal_sustains_and_does_not_touch_the_latch();
+    test_accompany_survives_the_arp_toggling_off_and_on();
+    test_accompany_ends_when_there_is_nothing_to_play_over();
+    test_leaving_accompany_hands_the_keys_back();
     test_arp_latch_and_stock_latch_are_remembered_separately();
     test_pedal_is_momentary_and_program_load_clears_both_latches();
     test_program_without_arp_data_switches_off_and_leaves_settings();

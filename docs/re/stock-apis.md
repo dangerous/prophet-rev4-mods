@@ -222,6 +222,13 @@ idx 6 → all notes off, idx 9 → hold off), `0x20037B2C()` MIDI channel. Globa
 
 ## 7. Display
 
+- **Font**: `display3` → per-digit `0x20036A40(digit 0-2, code, show, dp)`; code 0–0x28 indexes
+  the glyph byte table at **`0x2004E218`** (bits 0–6 = segments a–g, each a panel LED: digit
+  0 at LED 0x2E.., digit 1 at 0x36.., digit 2 at 0x3E..; the 8th LED is the decimal point).
+  Glyphs: 0–9, then A–Z at 0x0A–0x23 (K, W, Z blank; M/X/V approximate), `o` 0x24, blank
+  0x25, `-` 0x26, `_` 0x27, `]` 0x28. The Globals value names live as 3-byte code strings
+  in tables pointed to from `0x2004E290` (see `0x20037F90`). **H**
+
 - `0x20037F24(c0, c1, c2)` writes three chars via `0x20036A40(pos, code, 1, dp)` into the LED table (digit-1 DP =
   editing layer B `ui+0x19E`, digit-2 DP = param 0x59 == 2); `0x20037FF6(int)` signed decimal ('−' + 2 digits when
   negative); `0x2003804E(int)` variant. Any display write clears the "temporary display" flag `0x20054351`. **H**
