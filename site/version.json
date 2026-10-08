@@ -1,9 +1,9 @@
 {
- "version": "2.0.2",
- "built": "2026-10-08",
- "commit": "899dc4d",
+ "version": "2.1.0",
+ "built": "2026-10-09",
+ "commit": "e80cae3",
  "result": {
-  "name": "prophet5_main_2.1.0_patched_2.0.2.syx",
-  "sha256": "8c8a85de4dd880364e687b8a16e3a00542aee8526a7fd60003a850bd592e61c6"
+  "name": "prophet5_main_2.1.0_patched_2.1.0.syx",
+  "sha256": "dc8eb3eaadf83f32a43de3fd28d01aa3f5089270f91f49143cb33567cd320a0f"
  }
 }
