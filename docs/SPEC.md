@@ -188,7 +188,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
   Random → Assign → Up…, Group the other way; display `UP`, `dn`, `Ud`, `rnd`, `ASS` —
   Assign `[HW: verified 2026-10-07, Prophet-10 Rev4]`); Program 1–4 = 1–4 octaves (`o 1`…`o 4`);
   Program 5 = toggle clock source (`int` / `Syn`); Program 6 = clear sequence; Program 7/8 =
-  note value longer/shorter (− / +, + is faster); Unison = tempo tap (below); any other button = id readout. Any of these cancels the toggle
+  note value longer/shorter (− / +, + is faster); Unison = tempo tap (below); Record = flash
+  diagnostic ("Flash diagnostic"); any other button = id readout. Any of these cancels the toggle
   on A440 release. Held-repeat events (value 3) are ignored. A combo button whose release
   arrives after A440 has been released is still consumed **(change: V5 leaked the orphan
   release to stock)**.
@@ -517,7 +518,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
 
 1. Every message the engine puts on the display — mode (`UP dn Ud rnd`), octaves
    (`o N`), clock (`int`/`Syn`), `OFF`, BPM (while Glide Rate turns with A440 held, on a
-   tempo tap, and when the arp is switched on), `tAP`, note value, seq step count, keyboard shift, button id — shows for 1.5 s
+   tempo tap, and when the arp is switched on), `tAP`, note value, seq step count, keyboard shift, button id, the flash diagnostic's `FLA`
+   and its results — shows for 1.5 s
    after the last change and then the display returns to the stock patch display (bank,
    group and program). Nothing stays on the display permanently. `(change from V5, which
    kept OFF / BPM / Syn up for as long as the arp was on)`
@@ -528,10 +530,50 @@ this engine deliberately differs it is marked **(change)** with the reason.
 ### Button id readout `[HW: verified 2026-10-07, Prophet-10 Rev4 — Keyboard 36, GLOBALS 13; Unison read 25 before it became tap tempo]`
 
 While A440 is held, pressing a panel button that the arp does not assign — anything other
-than Program 1–8, Bank, Group, Unison (id 25 / `0x19`, tap tempo), GLOBALS (id 13 / `0x0D`, which must still open its menu) and
+than Program 1–8, Bank, Group, Unison (id 25 / `0x19`, tap tempo), Record (id 11 / `0x0B`, flash
+diagnostic), GLOBALS (id 13 / `0x0D`, which must still open its menu) and
 Lo Freq (id 37, consumed by the keyboard octave shift) — shows that button's id on the
 display and is otherwise ignored (its release is consumed too). An aid for mapping panel
 button ids when designing new combinations.
+
+### Flash diagnostic (read-only) `[HW: unverified]`
+
+A developer aid for the "sequence saved per program" work (`docs/re/flash.md`): it finds out
+how big the serial flash is and whether the two areas the stock OS never references are
+blank. **It only reads.**
+
+1. **Trigger**: while A440 is held, pressing **Record** (button id 11 / `0x0B`) starts a run.
+   The press counts as using the A440 hold (no toggle on release) and is consumed with its
+   release, so stock's program-record mode does not start. A press while a run is in
+   progress is consumed and ignored. Record without A440 is stock Record, as always.
+2. **Chip size**: two 4 KB reference blocks, `R1` at flash offset `0x000000` (bootloader)
+   and `R2` at `0x606000` (factory programs), are compared with the blocks 8 MB higher
+   (`0x800000`, `0xE06000`). A reference block that reads all `0xFF` is unusable. Verdicts:
+   **8 MB** if any usable pair is identical (a 24-bit address wraps on an 8 MB part);
+   **16 MB** if, for every usable pair, the upper block reads all `0xFF` (nothing of stock's
+   lives above 8 MB); **unknown** otherwise (no usable reference, or upper blocks that are
+   neither identical nor blank).
+3. **Blank check**: area 1 = `0x511000–0x5FFFFF`; area 2 = `0x755000` to the end of the
+   chip — `0x7FFFFF` for 8 MB and unknown, `0xFFFFFE` for 16 MB (stock's read routine
+   cannot return the window's last byte). An area is *empty* when every byte read is `0xFF`,
+   otherwise *used*.
+4. **Display**: `FLA` while the run is in progress (kept up for the whole run, like the BPM
+   while the pot turns). When it completes, three results in turn, each a display message
+   like any other (1.5 s, then the next): size `F 8`, `F16` or `F -`; area 1 `1 E` (empty) or
+   `1 U` (used); area 2 `2 E` or `2 U`; then the stock patch display. A message from any other
+   source cancels the rest of the sequence.
+5. **Everything else keeps working** during a run: the arp and seq play, keys, MIDI, buttons
+   and pots behave as specified. A run reads in 1 KB pieces, one per 1 ms tick, through
+   stock's flash read routine (which takes stock's flash mutex, so a run never reads while
+   stock is writing); a whole run takes about 1.7 s on 8 MB and 10 s on 16 MB. The kill switch
+   disables it like everything else.
+6. **Never writes.** The engine contains no path to a flash write ("Safety invariants" 8).
+7. Realisation: a portable `flash.c` state machine (`flash_start`, `flash_tick`, result
+   codes) driven from the UI's button combo and tick, reading through `plat_flash_read(off,
+   dst, len)` = stock `0x2003E2F8(off, dst, len)` (`0` ok, `3` range) — the only new entry in
+   `stock_iface[]`. Two 1 KB buffers in the engine state area. The host harness fakes the
+   flash as a 16 MB window over a chip of configurable size (aliasing above its size),
+   with settable contents for the reference blocks and the two areas.
 
 ### Safety invariants
 
@@ -551,6 +593,9 @@ Enforced by tests on every built image against stock:
    what the hook list says it holds (a `BL` to the named stock entry, or the named word).
 7. The engine's code references no RAM or MMR address outside its own record and the stock
    addresses listed in its interface table, which the tests compare word for word.
+8. The interface table holds no flash-writing entry — neither `0x2003E3E4` (erase +
+   program) nor `0x20036E28` (verified write), nor any other address of the stock flash
+   driver except the read routine `0x2003E2F8`: nothing in the engine can write flash.
 
 ### Re-latch under HOLD `[HW: verified 2026-10-06/07, Prophet-10 Rev4]`
 

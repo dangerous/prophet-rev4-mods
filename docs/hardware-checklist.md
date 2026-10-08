@@ -173,6 +173,22 @@ Manual verification on the instrument. Record results against the spec markers i
       GLOBALS = 13 must still open the menu — it abandons the hold).
 - [ ] Release A440: the arp does not toggle.
 
+## Flash diagnostic (spec "Flash diagnostic") — read-only
+
+- [ ] Back up patches first anyway (Globals → Pgm Dump → ALL → RECORD): the run only reads,
+      but this is the first time the engine touches the flash driver at all.
+- [ ] Hold A440, press Record: `FLA` appears and stays up for about 2 s (10 s on a 16 MB
+      part), then three results of 1.5 s each — `F 8`/`F16`/`F -`, `1 E`/`1 U`, `2 E`/`2 U` —
+      then the patch number. Note all three in `docs/re/flash.md` and the spec marker. If a
+      **number** shows instead of `FLA`, Record's id is not 11: note the number, nothing else
+      happens. Releasing A440 does **not** toggle the arp.
+- [ ] While `FLA` is up: play keys (with the arp on and off), move a pot, press Bank with
+      A440 held — everything behaves as usual; the display message interrupts the sequence.
+- [ ] Record **without** A440: stock program-record as before (LED, destination, save).
+- [ ] Press Record again with A440 held while `FLA` is up: nothing changes; the run completes.
+- [ ] Afterwards: load a few programs, save one, power cycle — everything intact (nothing was
+      written, this just confirms it).
+
 ## If something is wrong
 
 - The engine only runs inside the hooked stock calls. The kill switch (A440 held from before
