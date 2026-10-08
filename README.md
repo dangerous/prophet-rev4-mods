@@ -26,7 +26,7 @@ welcome to fork it and make your own.
 
 - **Arpeggiator** — Up, Down, Up/Down, Random and Assign (the notes in the order you played
   them), 1–4 octaves, HOLD latch with re‑latch, tempo 40–300 BPM by knob or tap, MIDI clock
-  sync, ten note values from half notes to 32nds including triplets and Prophet‑6‑style
+  sync, thirteen note values from four bars to 32nds including triplets and Prophet‑6‑style
   swing.
 - **Polyphonic step sequencer** — up to 64 steps of chords (up to 10 notes each, each note
   with the velocity you played it at), rests and ties, recorded from the keyboard or MIDI,
@@ -40,7 +40,8 @@ welcome to fork it and make your own.
   bypassed at power‑on.
 
 Verified on a Prophet‑10 Rev4 (October 2026); the spec marks the few paths not yet tried on
-hardware. Sequential's own A440 tuning tone remains available from the Globals menu.
+hardware. Sequential's A440 tuning‑reference tone is still there — on A440 + HOLD, since
+A440 itself is now the arp button.
 
 ## Installing
 
@@ -96,19 +97,23 @@ goes away after 1.5 s and the program number comes back.
 | A440 + **Bank** / **Group** | Next / previous mode | `UP` `dn` `Ud` `rnd` `ASS` |
 | A440 + **Program 1–4** | 1–4 octaves | `o 1` … `o 4` |
 | A440 + **Program 5** | Clock: internal / MIDI sync | `int` / `Syn` |
-| A440 + **Program 7** / **8** | Note value longer (−) / shorter (+) | `2 4 8d 8 8S 8t 16 16S 16t 32` |
+| A440 + **Program 7** / **8** | Note value longer (−) / shorter (+) | `4b 2b 1 2 4 8d 8 8S 8t 16 16S 16t 32` |
 | A440 + **Glide Rate** knob | Tempo 40–300 BPM | the BPM |
-| A440 + **Unison** (tap repeatedly) | Tap tempo | `tAP`, then the BPM |
+| A440 + **Velocity** (tap repeatedly) | Tap tempo | `tAP`, then the BPM |
+| A440 + **HOLD** (arp off) | Sequential's A440 tuning tone on / off | A440 LED, as stock |
 | **HOLD** (or pedal in `HLd` mode) | Latch | — |
+
+"HOLD" is the button labelled **RELEASE / HOLD**, with the Release/Hold global set to hold.
 
 - **Modes.** Up and Down by pitch; Up/Down bounces without repeating the top and bottom
   notes; Random picks a note from the held set at every step; **Assign** plays the notes in
   the order you pressed them (press a note again to repeat it in the pattern).
 - **Octaves** play the whole pattern, then the pattern an octave up, and so on — not one
   big sorted set.
-- **Note values** are the Prophet‑6's ten, in its order: half, quarter, dotted 8th, 8th,
-  8th swing, 8th triplet, 16th, 16th swing, 16th triplet, 32nd. The swing values play pairs
-  of steps long–short (2 : 1).
+- **Note values**: 4 bars, 2 bars and a whole note (`4b`, `2b`, `1` — for pad sequences: 64
+  steps of 4 bars is 256 bars), then the Prophet‑6's ten in its order: half, quarter,
+  dotted 8th, 8th, 8th swing, 8th triplet, 16th, 16th swing, 16th triplet, 32nd. The swing
+  values play pairs of steps long–short (2 : 1).
 - **Tempo.** The knob and the taps set the internal clock. Under MIDI sync the arp follows
   the incoming clock and transport (Start/Stop/Continue, 24 ppqn, always on the DAW's grid);
   the tempo it measures from the clock is what the internal clock resumes at when you switch
@@ -118,6 +123,9 @@ goes away after 1.5 s and the program number comes back.
   per step, HOLD or not — the synth's own sustain is suspended while the arp is on.
 - Glide Rate on its own is always the normal glide, even with the arp running. Keys played
   via MIDI In arpeggiate like local keys; MIDI Out carries the keys you play, not the arp.
+- **Tuning tone.** With the arp off, hold A440 and press HOLD: the stock A440 reference tone
+  toggles, lighting the A440 LED as it does in stock. Switching the arp on silences it, so
+  from then on a lit LED means the arp.
 
 ### Step sequencer
 
@@ -178,12 +186,13 @@ and the sequence are global and not saved.
 
 - **Kill switch.** Hold **A440** while powering on and the patch stays completely inactive
   for that session — every hook passes straight through to the stock OS.
-- The **Globals** menu is pure stock while it is open; Sequential's A440 tuning tone is in
-  there.
+- While the **Globals** menu is open every button is passed to the stock OS untouched.
+  (Stock ignores A440 while its menu is open, which is why the tone has its own combo.)
 - **Button id readout.** Hold A440 and press a button the patch doesn't use: its panel id
   is shown. Handy if you want to add controls of your own.
 
 ## For developers
 
 How it is built, tested and laid out: [`docs/DEVELOPING.md`](docs/DEVELOPING.md). The
-behavioural spec is [`docs/SPEC.md`](docs/SPEC.md).
+behavioural spec is [`docs/SPEC.md`](docs/SPEC.md); what changed in each version,
+[`CHANGELOG.md`](CHANGELOG.md).

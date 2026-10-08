@@ -20,6 +20,8 @@ a Python build/packing CLI.
   record appended to stock. "The Arp Mod" = the third-party arpeggiator mod for the Rev4
   that circulated privately before this project, whose documented behaviour the arp was
   modelled on; named only where behaviour deliberately differs from it.
+- "HOLD" = the panel button labelled **RELEASE / HOLD** (id 14), which the Release/Hold
+  global makes a hold latch; "the pedal" = the sustain pedal, in `HLd` mode as "HOLD".
 - Addresses are RAM addresses as loaded by the stock OS loader unless stated otherwise.
 - Each behaviour carries a hardware-verification marker: `[HW: unverified]` or
   `[HW: verified <date>, <unit>]`. Host tests enforce the behaviour; the marker records
@@ -158,7 +160,10 @@ record placement do not require.
   `"kind": "bl" | "word"` (default `bl`).
 - `python3 -m tools fwbuild SRC OUT` cross-compiles `SRC/native.c` for thumbv7a, links it
   at `0x20088000` with the code limit `0x2008E000`, checks the hook symbols are present and
-  writes `native.bin`, `native.map` and `native.layout` into `OUT`.
+  writes `native.bin`, `native.map` and `native.layout` into `OUT`. The compiler is told
+  not to emit jump tables, so the code consists of instructions and literal pools only and
+  the image test's sweep for materialised addresses stays reliable (a `tbb` table once read
+  as a literal load).
 - `python3 -m tools diff A.syx B.syx` — prints every differing byte span of the decoded
   payloads as `image <n> record @0x<offset> ram 0x<lo>..0x<hi>: <n> bytes`, so a reviewer
   can see exactly what a build changed. Record-structure differences are reported as such.
@@ -237,14 +242,28 @@ this engine deliberately differs it is marked **(change)** with the reason.
 #### Controls
 
 - **A440** is the arp button: a tap (press and release with no arp combo in between)
-  toggles the arp; its LED is lit while the arp is on. The stock tuning-reference tone is not
-  available in play mode. **(change)** It remains available from the Globals menu, where all
-  buttons behave as stock (below).
+  toggles the arp; its LED is lit while the arp is on. **(change)** The stock
+  tuning-reference tone moves to **A440 + HOLD**: with the arp **off**, pressing and
+  releasing the HOLD button while A440 is held toggles stock's reference tone on HOLD's
+  release — the tone and its LED (the A440 LED, as in stock) are then stock's. **While the
+  tone sounds, a tap of A440 only switches it off**: the arp stays off, and the next tap
+  toggles the arp as usual `[HW: verified 2026-10-08, Prophet-10 Rev4]` (the first build enabled the arp
+  on that tap, with the LED dark). Should the arp come on by another route while the tone sounds (a
+  program load with the arp saved on), the tone is silenced first, so a lit LED means the
+  arp from then on. With the arp on the combo is consumed and does nothing; in record mode
+  HOLD is rest/tie ("Seq"). It counts as using the A440 hold (no toggle on A440's release)
+  `[HW: verified 2026-10-08, Prophet-10 Rev4 — tone on and off, LED, arp untouched; inert
+  with the arp on]`. The tone is
+  not reachable any other way: not by a tap of A440, and not from the Globals menu either —
+  A440 is passed to stock there, but stock ignores it while its menu is open `[HW: 2026-10-08,
+  Prophet-10 Rev4 — menu open, A440 pressed: no tone, no LED, arp unchanged. Earlier text
+  claimed the tone was reachable from Globals; that came from reading the state machine, not
+  from the instrument]`.
 - **While A440 is held**: Bank = next mode, Group = previous mode (Up → Down → Up/Down →
   Random → Assign → Up…, Group the other way; display `UP`, `dn`, `Ud`, `rnd`, `ASS` —
   Assign `[HW: verified 2026-10-07, Prophet-10 Rev4]`); Program 1–4 = 1–4 octaves (`o 1`…`o 4`);
   Program 5 = toggle clock source (`int` / `Syn`); Program 6 = clear sequence; Program 7/8 =
-  note value longer/shorter (− / +, + is faster); Unison = tempo tap (below); Tune = seq record mode on/off ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; any other button = id readout. Any of these cancels the toggle
+  note value longer/shorter (− / +, + is faster); Velocity = tempo tap (below) `[HW: verified 2026-10-08, Prophet-10 Rev4 — moved from Unison]`; Tune = seq record mode on/off ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; HOLD = stock tuning tone on/off (arp off; above) `[HW: unverified]`; any other button = id readout. Any of these cancels the toggle
   on A440 release. Held-repeat events (value 3) are ignored. A combo button whose release
   arrives after A440 has been released is still consumed **(change: the Arp Mod leaked the orphan
   release to stock)**.
@@ -259,8 +278,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
   patch's glide value is not touched. **Glide Rate alone is always the normal glide control**,
   also while the arp is running. **(change: the Arp Mod, and this engine before 2026-10-07, captured
   the pot as tempo whenever the arp was on, which made glide unusable with the arp running.)**
-- **A440 + Unison is tap tempo** `[HW: verified 2026-10-07, Prophet-10 Rev4]`: while A440 is held, each press of
-  Unison (button id 25 / `0x19`) is a tempo tap. The first tap of a series shows `tAP` and
+- **A440 + Velocity is tap tempo** `[HW: verified 2026-10-07, Prophet-10 Rev4 on Unison; moved to Velocity 2026-10-08 (one hand: it sits beside A440) and verified there the same day]`: while A440 is held, each press of
+  the Velocity button (id 11 / `0x0B`) is a tempo tap. The first tap of a series shows `tAP` and
   records the time; the BPM is unchanged. The **second tap sets the tempo immediately** from
   that single interval; each later tap uses a rolling mean of the most recent four
   intervals of the series (so it steadies without resisting a deliberate change), `BPM =
@@ -269,8 +288,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
   a new one (shows `tAP` again, BPM unchanged); an interval of exactly 2000 ms still counts
   (30 BPM → 40). Intervals are measured on the UI's 1 ms tick. The series only ends by such a
   gap (releasing A440 in between does not end it). A tap counts as using the A440 hold, so the
-  A440 release does not toggle the arp; Unison's press, held repeats and release are
-  consumed like any combo button, and Unison without A440 held is always stock Unison. Taps
+  A440 release does not toggle the arp; Velocity's press, held repeats and release are
+  consumed like any combo button, and Velocity without A440 held is always stock Velocity. Taps
   work whether the arp is on or off. **Under external clock (`Syn`) a tap does nothing** but
   show `Syn` as a hint (a display message like any other): the BPM is unchanged and no
   series is started or continued (a running series ends, so the next tap under `int` shows
@@ -282,9 +301,9 @@ this engine deliberately differs it is marked **(change)** with the reason.
   program display **(change: the Arp Mod left `OFF` / BPM / `Syn` on the display for as long as the
   arp was on)**. Switching the arp on shows the BPM (`Syn` under external clock) for 1.5 s;
   switching it off shows `OFF` for 1.5 s.
-- **Globals menu**: while the stock Globals menu is open, every button including A440
-  behaves exactly as stock (so the stock tuning tone is reachable from there); the arp keeps
-  running with its current settings. Pressing GLOBALS while A440 is held abandons the hold:
+- **Globals menu**: while the stock Globals menu is open, every button including A440 is
+  passed to stock untouched (stock ignores A440 there); the arp keeps running with its
+  current settings. Pressing GLOBALS while A440 is held abandons the hold:
   nothing toggles on the A440 release, and a recording in progress is kept as recorded.
 
 #### Note pool
@@ -409,6 +428,17 @@ this engine deliberately differs it is marked **(change)** with the reason.
 - No code runs at boot; all state is zero in the image and initialised lazily by the first
   hook that runs.
 
+- **Tuning tone, realisation**: stock's main state toggles the DSP reference tone on an A440
+  press when HOLD is *not* physically held (held, it plays a voice note instead), keeping
+  the state in a flag at `ui + 0x16A` and the LED. On HOLD's release of the combo the UI has
+  the glue replay a stock A440 press through the button post (`0x2003BC31(0x0F, 1)`) — HOLD
+  is up by then, so stock takes the tone path. A tap of A440 with the flag set replays the
+  press too (tone off) instead of toggling the arp; an enable from a program load with the
+  flag set replays it before enabling. Stock handles a replayed press a few milliseconds
+  later in its own task and switches the LED off then, so 100 ms after a replay the UI
+  asserts the arp LED again if the arp is on by then (otherwise the LED stays stock's,
+  showing the tone).
+
 #### Realisation (facts asserted by the image tests)
 
 - Base image `fixtures/prophet5_main_2.1.0.syx`; everything added lives in one appended
@@ -459,12 +489,15 @@ this engine deliberately differs it is marked **(change)** with the reason.
    stock Record flow stores it with the program, SysEx program dumps carry it, and a received
    dump restores it. There is no "edited" indication (stock has none beyond the pot
    pass-through).
-4. Realisation: program parameters **93** (0–127) and **94** (0–4) of layer A, which the stock
-   OS stores, dumps and loads verbatim but never reads: 94 = octaves 1–4 (**0 = no arp
-   data**); **93 = note value × 10 + mode × 2 + on/off**, where note value is the position
-   in the "Note value" list (0 = Half … 9 = 32nd), mode 0–4 = Up, Down, Up/Down, Random,
-   Assign, and on/off 0/1 — so 0–99. A 93 above 99 or a 94 outside 1–4 counts as no arp
-   data. `[HW: verified 2026-10-07, Prophet-10 Rev4]`
+4. Realisation: program parameters **93** (0–127) and **94** (0–8) of layer A, which the stock
+   OS stores, dumps and loads verbatim but never reads: **94 = octaves (1–4) + 4 × L**, where
+   L = 0 for one of the Prophet-6's ten note values and L = 1 for a long one (so 1–8; **0 =
+   no arp data**); **93 = n × 10 + mode × 2 + on/off**, where n is the Prophet-6 position
+   (0 = Half … 9 = 32nd) when L = 0 or the long value (0 = Whole, 1 = 2 bars, 2 = 4 bars)
+   when L = 1, mode 0–4 = Up, Down, Up/Down, Random, Assign, and on/off 0/1 — so 93 is 0–99,
+   or 0–29 with L = 1. Anything else counts as no arp data. Programs saved before the long
+   values existed (94 in 1–4) load unchanged. `[HW: verified 2026-10-07, Prophet-10 Rev4 for
+   L = 0; 2026-10-08 for L = 1 and for an older program loading unchanged]`
    Programs saved under the earlier bitfield layout of 93 (on/off | mode << 1 | note code
    << 3 — only test saves made on 2026-10-07) are not converted: they load with the wrong
    settings (or as no arp data) and must be re-saved. Written
@@ -479,8 +512,11 @@ this engine deliberately differs it is marked **(change)** with the reason.
 
 ### Note value (arp/seq step length) `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock and MIDI sync, with the earlier 15-value list; the Prophet-6 list, order and display below: verified 2026-10-07]`
 
-1. The step length is one of the Prophet-6's ten values, in the Prophet-6's order from
-   longest to shortest: **Half** (1/2 note, 2 beats), **Qtr** (1/4, 1 beat), **8th D**
+1. The step length is one of thirteen values, from longest to shortest. Three long ones for
+   pad sequences — **4 bars** (16 beats), **2 bars** (8 beats), **Whole** (1 bar, 4 beats)
+   `[HW: verified 2026-10-08, Prophet-10 Rev4]` **(change: added above the Prophet-6's list, so 64 steps of 4 bars make a
+   256-bar sequence)** — then the Prophet-6's ten values, in the Prophet-6's order:
+   **Half** (1/2 note, 2 beats), **Qtr** (1/4, 1 beat), **8th D**
    (dotted eighth, 3/4 beat), **8th** (1/2 beat), **8th S** (eighth swing), **8th T**
    (eighth triplet, 1/3 beat), **16th** (1/4 beat), **16th S** (sixteenth swing), **16th T**
    (1/6 beat), **32nd** (1/8 beat) `[HW: verified 2026-10-07, Prophet-10 Rev4]`. Power-up default is 8th. Saved with
@@ -491,26 +527,29 @@ this engine deliberately differs it is marked **(change)** with the reason.
    1/3 + 1/6 beat), an 8th S pair two eighths (one beat: 2/3 + 1/3 beat), so the average
    step equals the plain value. The pattern order is unaffected.
 2. A440 + **Program 8** selects the next value in the list (shorter, +), A440 + **Program 7**
-   the previous one (longer, −) — + is faster; the ends do not wrap (Half and 32nd stay).
-   The list order is the Prophet-6's, so a step does not always change the length
-   monotonically: 8th S (average 1/2 beat) sits between 8th and 8th T, 16th S between 16th
-   and 16th T. The display shows the new value, right-aligned in three characters: `2`,
-   `4`, `8d`, `8`, `8S`, `8t`, `16`, `16S`, `16t`, `32` `[HW: verified 2026-10-07, Prophet-10 Rev4]`.
+   the previous one (longer, −) — + is faster; the ends do not wrap (4 bars and 32nd stay).
+   The Prophet-6 part of the list keeps its order, so a step does not always change the
+   length monotonically: 8th S (average 1/2 beat) sits between 8th and 8th T, 16th S between
+   16th and 16th T. The display shows the new value, right-aligned in three characters:
+   `4b`, `2b`, `1` (the long values; `1b` would read like `16`) `[HW: verified 2026-10-08, Prophet-10 Rev4]`, `2`, `4`,
+   `8d`, `8`, `8S`, `8t`, `16`, `16S`, `16t`, `32` `[HW: verified 2026-10-07, Prophet-10 Rev4]`.
 3. Internal clock: the step period is the note value at the current BPM; the note is
    released half-way through the step (each swing step at half of its own length). At
    120 BPM an 8th S pair is 500 ms (steps 334 ms and 166 ms with the remainder carried), a
    16th S pair 250 ms.
-4. MIDI sync: steps follow the incoming clock at the selected value — Half 48, Qtr 24,
+4. MIDI sync: steps follow the incoming clock at the selected value — 4 bars 384, 2 bars
+   192, Whole 96, Half 48, Qtr 24,
    8th D 18, 8th 12, 8th S 24-clock pairs split 16 + 8, 8th T 8, 16th 6, 16th S 12-clock
    pairs split 8 + 4, 16th T 4, 32nd 3 clocks per step — counted from Start (swing pairs
    start at multiples of the pair length), so step boundaries fall exactly on clocks and stay
    on the DAW grid across a change. `[HW: verified 2026-10-07, Prophet-10 Rev4 — incl. the swing values]`
 5. A change takes effect from the next step. Applies to the arp and to seq alike.
-6. Realisation: `rate.c` holds the list in the order above (index 0 = Half … 9 = 32nd;
+6. Realisation: `rate.c` holds the list in the order above (index 0 = 4 bars … 12 = 32nd;
    `rate_step(dir)` moves −1 = longer / Program 7, +1 = shorter / Program 8) and maps each
-   value to beats per step as a fraction (Half → 2 … 32nd → 1/8 beat) plus a swing flag —
-   for a swing value the fraction is the pair length (16th S → 1/2, 8th S → 1); the index
-   is what patch memory stores. The engine's internal period is `60 s / BPM × beats` with the
+   value to beats per step as a fraction (4 bars → 16 … 32nd → 1/8 beat) plus a swing flag —
+   for a swing value the fraction is the pair length (16th S → 1/2, 8th S → 1). Patch memory
+   stores a *code*: the Prophet-6 position (0 = Half … 9 = 32nd) for those ten, and a long
+   flag with 0–2 (Whole, 2 bars, 4 bars) for the others ("Patch memory"). The engine's internal period is `60 s / BPM × beats` with the
    remainder carried (swing: 2/3 and 1/3 of the pair, exact in integers), and the MIDI-clock
    step (pair) is `24 × beats` clocks (always integral, and a multiple of 3 for swing pairs).
 
@@ -602,11 +641,12 @@ this engine deliberately differs it is marked **(change)** with the reason.
 ### Button id readout `[HW: verified 2026-10-07, Prophet-10 Rev4 — Keyboard 36, GLOBALS 13; Unison read 25 before it became tap tempo, Tune read 12 before it became record mode]`
 
 While A440 is held, pressing a panel button that the arp does not assign — anything other
-than Program 1–8, Bank, Group, Unison (id 25 / `0x19`, tap tempo), Tune (id 12 / `0x0C`,
-seq record mode), GLOBALS (id 13 / `0x0D`, which must still open its menu), Lo Freq (id 37,
-consumed by the keyboard octave shift) and, while record mode lasts, HOLD (id 14 / `0x0E`,
-rest/tie) — shows that button's id on the display and is otherwise ignored (its release is
-consumed too). An aid for mapping panel button ids when designing new combinations.
+than Program 1–8, Bank, Group, Velocity (id 11 / `0x0B`, tap tempo), Tune (id 12 / `0x0C`,
+seq record mode), HOLD (id 14 / `0x0E`: the tuning tone, or rest/tie in record mode),
+GLOBALS (id 13 / `0x0D`, which must still open its menu) and Lo Freq (id 37, consumed by
+the keyboard octave shift) — shows that button's id on the display and is otherwise ignored
+(its release is consumed too). An aid for mapping panel button ids when designing new
+combinations.
 
 ### Safety invariants
 

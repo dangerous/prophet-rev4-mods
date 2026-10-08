@@ -1,15 +1,19 @@
 #include "rate.h"
 
-enum { RC_BLANK = 0x25, RC_T = 0x1D, RC_D = 0x0D, RC_S = 0x1C };   /* panel character codes */
+enum { RC_BLANK = 0x25, RC_T = 0x1D, RC_D = 0x0D, RC_S = 0x1C, RC_B = 0x0B };   /* panel character codes */
 
-/* The Prophet-6's list in its panel order, longest first; rate_step +1 (Program 8) moves down
- * the list. bn/bd = beats per step, or per pair of steps for a swing value (sw); 24*bn/bd =
- * MIDI clocks per step (pair). The index is what patch memory
- * stores ("Patch memory"). */
+/* Longest first: three long values for pad sequences (4 bars, 2 bars, Whole — `1`, as `1b`
+ * would read like `16`), then the Prophet-6's list in its panel order; rate_step +1 (Program 8)
+ * moves down the list. bn/bd = beats per step, or per pair of steps for a swing value (sw);
+ * 24*bn/bd = MIDI clocks per step (pair). Patch memory stores a code, not the index
+ * (rate_code: the Prophet-6 position, or 10-12 for the long values). */
 static const struct {
     uint8_t bn, bd, sw;
     uint8_t d[3];
 } R[RATE_COUNT] = {
+    { 16, 1, 0, {RC_BLANK, 4, RC_B} },     /* 4 bars 384 clocks */
+    {  8, 1, 0, {RC_BLANK, 2, RC_B} },     /* 2 bars 192 */
+    {  4, 1, 0, {RC_BLANK, RC_BLANK, 1} }, /* Whole   96 */
     {  2, 1, 0, {RC_BLANK, RC_BLANK, 2} }, /* Half   48 clocks */
     {  1, 1, 0, {RC_BLANK, RC_BLANK, 4} }, /* Qtr    24 */
     {  3, 4, 0, {RC_BLANK, 8, RC_D} },     /* 8th D  18 */
@@ -48,6 +52,21 @@ int rate_set_index(rate_t *r, int i)
         return 0;
     r->delta = (int8_t)(i - RATE_DEFAULT_INDEX);
     return 1;
+}
+
+#define LONG_VALUES 3                 /* list indices 0..2 */
+
+int rate_code(const rate_t *r)
+{
+    int i = rate_index(r);
+    return i < LONG_VALUES ? 12 - i : i - LONG_VALUES;    /* 4 bars 12, 2 bars 11, Whole 10; Half 0 ... */
+}
+
+int rate_set_code(rate_t *r, int code)
+{
+    if (code < 0 || code > 12)
+        return 0;
+    return rate_set_index(r, code < 10 ? code + LONG_VALUES : 12 - code);
 }
 
 void rate_beats(const rate_t *r, int *num, int *den)

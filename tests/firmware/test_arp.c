@@ -466,6 +466,33 @@ static void test_swing_under_midi_clock(void) {
     CHECK(n_on() == 5 && on_tick(2) == 16 && on_tick(3) == 24 && on_tick(4) == 40);
 }
 
+static void test_four_bar_steps_internal_and_midi_clock(void) {
+    reset(); arp_enable(&a, 1);
+    arp_set_beats(&a, 16, 1);                                          /* 4 bars at 120 BPM = 8 s per step */
+    on(C3); on(E3);
+    ticks(3999);
+    CHECK(n_on() == 1 && n_sounding() == 1);
+    ticks(1);
+    CHECK(n_sounding() == 0);                                          /* gate at 4 s */
+    ticks(3999);
+    CHECK(n_on() == 1);
+    ticks(1);
+    CHECK(n_on() == 2 && on_note(1) == E3 && on_tick(1) == 8000);
+    reset(); arp_enable(&a, 1); arp_set_beats(&a, 16, 1); arp_set_ext(&a, 1);
+    on(C3); on(E3);
+    arp_realtime(&a, 0xFA, 0);
+    clocks(1, 0);
+    CHECK(n_on() == 1);
+    clocks(191, 0);
+    CHECK(n_sounding() == 1);
+    clocks(1, 0);                                                      /* clock 192: gate */
+    CHECK(n_sounding() == 0);
+    clocks(191, 0);
+    CHECK(n_on() == 1);
+    clocks(1, 0);                                                      /* clock 384: next step */
+    CHECK(n_on() == 2 && on_note(1) == E3);
+}
+
 /* ---- seq ----------------------------------------------------------------------------- */
 static void record_cege(void) {
     arp_seq_record(&a, 1);
@@ -984,6 +1011,7 @@ int main(void) {
     test_swing_under_midi_clock();
     test_bpm_follows_the_midi_clock_over_a_beat();
     test_bpm_window_restarts_on_transport_and_loss();
+    test_four_bar_steps_internal_and_midi_clock();
     test_seq_records_sounds_directly_and_plays_transposed();
     test_seq_octaves_modes_and_clear();
     test_seq_restarts_on_fresh_key_and_latches();

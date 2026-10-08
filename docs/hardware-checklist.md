@@ -28,7 +28,12 @@ Manual verification on the instrument. Record results against the spec markers i
       Power cycle; this time tap A440 about 1 s after power-on: it must **not** kill the arp
       (tap again later: arp on as usual).
 - [ ] Arp off: play, HOLD, sustain pedal, MIDI in, program change — all as stock. A440 does
-      **not** play the tuning tone (it is the arp button); Globals → A440 still does.
+      **not** play the tuning tone (it is the arp button) — nor with the Globals menu open,
+      where stock ignores it (no tone, no LED, arp unchanged).
+- [ ] Arp off: hold A440, press and release HOLD (RELEASE/HOLD): the tuning tone sounds, A440
+      LED lit, HOLD LED unchanged; release A440: the arp stays off. Again: tone off, LED off.
+      Tone on, then tap A440: tone stops, arp on (LED stays lit for the arp). Arp on: A440 +
+      HOLD does nothing and the A440 release does not toggle.
 - [ ] Tap A440: LED on, display `120`, patch number back after 1.5 s. Hold C‑E‑G: C E G C…
       at 120 BPM, eighths, one note at a time. Tap A440: `OFF`, keys sound again.
 
@@ -42,12 +47,17 @@ Manual verification on the instrument. Record results against the spec markers i
       patch number back after 1.5 s; releasing A440 does **not** toggle the arp. Also with
       the arp off (hold A440, turn, release: still off; tap on: the new BPM). Under `Syn`:
       hold A440 and turn Glide Rate → `Syn`, the tempo is unchanged, no toggle on release.
-- [ ] Tap tempo (spec "A440 + Unison is tap tempo"): hold A440, tap Unison four times at a
-      steady ~120 BPM → `tAP` on the first tap, then ~120 (the tempo follows); tap at ~90 →
-      ~90. Pause 3 s, tap once → `tAP`. Release A440: the arp does **not** toggle. Also with
-      the arp off (then tap A440 on: the tapped BPM). Unison without A440 is stock Unison.
-      Under `Syn` (A440 + Program 5): A440 + Unison shows `Syn`, the tempo is unchanged, and
-      releasing A440 does not toggle the arp; back at `int` the next tap shows `tAP`.
+- [ ] Tap tempo (spec "A440 + Velocity is tap tempo"): hold A440, tap Velocity four times
+      at a steady ~120 BPM → `tAP` on the first tap, then ~120 (the tempo follows); tap at
+      ~90 → ~90. Pause 3 s, tap once → `tAP`. Release A440: the arp does **not** toggle. Also
+      with the arp off (then tap A440 on: the tapped BPM). Velocity without A440 is stock
+      Velocity; A440 + Unison now just shows `25`.
+      Under `Syn` (A440 + Program 5): A440 + Velocity shows `Syn`, the tempo is unchanged,
+      and releasing A440 does not toggle the arp; back at `int` the next tap shows `tAP`.
+- [ ] Note values: from `2` (Half), A440 + Program 7 three more times → `1`, `2b`, `4b`
+      (stays `4b`); at `4b`, 120 BPM, one step every 8 s (16 beats), the note released at 4 s.
+      Save a program at `4b`, load another, reload: `4b` comes back; a program saved before
+      this build loads with its old note value.
 - [ ] Assign (spec "Pattern" — Assign): A440 + Bank to `ASS`. HOLD off, play G C E D (one
       after another, keep them down): G C E D G C E D … (not sorted). Release E: G C D.
 - [ ] Assign + HOLD: hold G down and play C, E, D (releasing them): G C E D. Still holding G,
@@ -188,7 +198,7 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] Each of these shows for about 1.5 s and then the **patch number** returns: A440 +
       Bank (`UP`…), A440 + Program 2 (`o 2`), A440 + Program 5 (`int`/`Syn`), A440 +
       Program 8 (`8S`), tap A440 on (BPM) and off (`OFF`), Lo Freq + Bank (`1`), A440 +
-      Osc B Keyboard (`36`), A440 + Unison (`tAP`). In record mode `rSt` / `tiE` flash for
+      Osc B Keyboard (`36`), A440 + Velocity (`tAP`). In record mode `rSt` / `tiE` flash for
       about a quarter of a second and return to `r N` instead of the patch number.
 - [ ] A new message within the 1.5 s restarts the timing (e.g. Bank, Bank, Bank).
 

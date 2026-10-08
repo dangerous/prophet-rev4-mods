@@ -69,23 +69,44 @@ static void apply_rate(arpui_t *u, arp_t *a)
     arp_set_swing(a, rate_swing(&u->rate));
 }
 
+/* --- stock's tuning tone --------------------------------------------------------------------- */
+/* Replay an A440 press to stock: with HOLD up it toggles its reference tone (and the A440 LED)
+ * a few milliseconds later, in its own task — so the arp LED is asserted again after that. */
+static void stock_tone_toggle(arpui_t *u)
+{
+    plat_stock_a440_press();
+    u->led_fix = ARPUI_LED_FIX_MS;
+}
+
+/* switching the arp on (any route) silences the tone first */
+static void ui_enable(arpui_t *u, arp_t *a, int on)
+{
+    if (on && !a->enabled && plat_tone_on())
+        stock_tone_toggle(u);
+    arp_enable(a, on);
+}
+
 /* --- patch memory ------------------------------------------------------------------------ */
 /* the saved settings live in two spare program parameters ("Patch memory"):
- * 93 = note-value index * 10 + mode * 2 + on/off (0..99), 94 = octaves (0 = no arp data) */
+ * 94 = octaves + 4 * L (L = 1: a long note value; 0 = no arp data),
+ * 93 = n * 10 + mode * 2 + on/off, n = the Prophet-6 position (L = 0) or the long value 0..2 (L = 1) */
 static void store_patch(const arpui_t *u, const arp_t *a)
 {
-    plat_param_store(ARPUI_PARAM_OCT, a->octaves);
-    plat_param_store(ARPUI_PARAM_PACK, rate_index(&u->rate) * 10 + a->mode * 2 + (a->enabled ? 1 : 0));
+    int code = rate_code(&u->rate), lng = code >= 10;
+    plat_param_store(ARPUI_PARAM_OCT, a->octaves + (lng ? 4 : 0));
+    plat_param_store(ARPUI_PARAM_PACK, (lng ? code - 10 : code) * 10 + a->mode * 2 + (a->enabled ? 1 : 0));
 }
 
 void arpui_program_loaded(arpui_t *u, arp_t *a)
 {
     int oct = plat_param_read(ARPUI_PARAM_OCT), pack = plat_param_read(ARPUI_PARAM_PACK);
-    int note, mode, on;
+    int lng = oct >= 5 && oct <= 8, note, mode, on;
     if (u->kill)
         return;
-    if (oct < 1 || oct > 4 || pack < 0 || pack > ARPUI_PACK_MAX) {
-        arp_enable(a, 0);                                  /* no arp data: off, settings untouched */
+    if (lng)
+        oct -= 4;
+    if (oct < 1 || oct > 4 || pack < 0 || pack > (lng ? ARPUI_PACK_MAX_LONG : ARPUI_PACK_MAX)) {
+        ui_enable(u, a, 0);                                /* no arp data: off, settings untouched */
         return;
     }
     note = pack / 10;
@@ -93,9 +114,9 @@ void arpui_program_loaded(arpui_t *u, arp_t *a)
     on = pack & 1;
     arp_set_octaves(a, oct);
     arp_set_mode(a, mode);
-    rate_set_index(&u->rate, note);
+    rate_set_code(&u->rate, lng ? 10 + note : note);
     apply_rate(u, a);
-    arp_enable(a, on);
+    ui_enable(u, a, on);
 }
 
 /* --- seq record mode (A440 + Tune) ------------------------------------------------------ */
@@ -148,7 +169,7 @@ static void rec_leave(arpui_t *u, arp_t *a, int restore)   /* restore = 0 when t
         plat_display_restore();
 }
 
-/* --- tap tempo (A440 + Unison) ---------------------------------------------------------- */
+/* --- tap tempo (A440 + Velocity) -------------------------------------------------------- */
 static void tempo_tap(arpui_t *u, arp_t *a)
 {
     uint32_t iv = u->ms - u->tap_last, sum = 0;
@@ -214,8 +235,12 @@ static void combo(arpui_t *u, arp_t *a, int id)
         if (u->rec)
             show_rec(u, a);                                /* start over, still recording */
         break;
-    case ARPUI_UNISON:
+    case ARPUI_VELOCITY:
         tempo_tap(u, a);
+        break;
+    case ARPUI_HOLD:                                       /* stock's tuning tone, with the arp off */
+        if (!a->enabled)
+            u->tone_pending = 1;                           /* toggled on the release, when HOLD is up */
         break;
     case ARPUI_TUNE:
         if (u->rec)
@@ -257,8 +282,10 @@ int arpui_button(arpui_t *u, arp_t *a, int id, int value)
             if (!u->a440_used) {                           /* a tap */
                 if (u->rec) {
                     rec_leave(u, a, 1);                    /* leaves record mode, nothing else */
+                } else if (!a->enabled && plat_tone_on()) {
+                    stock_tone_toggle(u);                  /* the tone sounds: this tap only stops it */
                 } else {
-                    arp_enable(a, !a->enabled);
+                    ui_enable(u, a, !a->enabled);
                     show_status(u, a);
                     store_patch(u, a);
                 }
@@ -274,8 +301,13 @@ int arpui_button(arpui_t *u, arp_t *a, int id, int value)
         return 0;
     }
     if (u->swallow[id >> 3] & bit) {                       /* press was ours: repeats and release too */
-        if (value == UI_RELEASE)
+        if (value == UI_RELEASE) {
             u->swallow[id >> 3] &= (uint8_t)~bit;
+            if (id == ARPUI_HOLD && u->tone_pending) {
+                u->tone_pending = 0;
+                stock_tone_toggle(u);                      /* HOLD is up now: stock toggles its reference tone */
+            }
+        }
         return 1;
     }
     if (u->rec && id == ARPUI_HOLD) {                      /* record mode: HOLD is rest / tie, A440 held or not */
@@ -376,6 +408,8 @@ void arpui_tick(arpui_t *u, arp_t *a)
         else
             plat_display_restore();
     }
+    if (u->led_fix && --u->led_fix == 0 && a->enabled && !u->rec)
+        u->led_on = 0;                                     /* stock's late LED-off has landed: assert ours again */
     if (u->rec) {                                          /* the LED blinks while recording */
         on = u->rec_ms < ARPUI_BLINK_MS;
         if (++u->rec_ms >= 2 * ARPUI_BLINK_MS)

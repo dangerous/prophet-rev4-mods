@@ -41,6 +41,7 @@ enum {
     NI_PARAM_READ,       /* 0x2003CB69 live program parameter read(layer, param) -> u16 */
     NI_PARAM_STORE,      /* 0x2003CEF5 plain program parameter store(layer, param, value) */
     NI_HOLD_OFF,         /* 0x2003B6B1 hold off (both sources): original callee at the program-loaded hook */
+    NI_TONE_FLAG,        /* 0x200574FA ui + 0x16A: stock's A440 reference tone on (byte != 0) */
     NI_COUNT
 };
 
@@ -67,6 +68,7 @@ const volatile uint32_t stock_iface[NI_COUNT] = {
     [NI_PARAM_READ] = 0x2003CB69u,
     [NI_PARAM_STORE] = 0x2003CEF5u,
     [NI_HOLD_OFF] = 0x2003B6B1u,
+    [NI_TONE_FLAG] = 0x200574FAu,
 };
 
 #define SFN(i, type) ((type)(uintptr_t)stock_iface[i])
@@ -214,6 +216,8 @@ int  plat_a440_down(void) { return *SPTR(NI_A440_HELD, volatile const uint16_t *
 void plat_display_hold(void) { disp_touch(&UI->disp); }   /* oct.c: the shift readout reverts too */
 int  plat_param_read(int param) { return SFN(NI_PARAM_READ, param_read_fn)(0, param); }          /* layer A */
 void plat_param_store(int param, int value) { SFN(NI_PARAM_STORE, param_store_fn)(0, param, value); }
+int  plat_tone_on(void) { return *SPTR(NI_TONE_FLAG, volatile const uint8_t *) != 0; }
+void plat_stock_a440_press(void) { SFN(NI_BUTTON_POST, button_fn)(ARPUI_A440, 1); }   /* stock: tone toggle (HOLD up) */
 
 /* --- hooks: Timer Service task ----------------------------------------------------------- */
 /* stock 0x2003BE9C: the 1 ms keyboard poll. Everything the engine does happens here. */

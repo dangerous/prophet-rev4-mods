@@ -29,7 +29,8 @@ make manifest   # site/manifest.js and site/version.json from that image
 
 ## Releasing
 
-1. Bump `VERSION` (semantic versioning) and make sure `make test` is green.
+1. Bump `VERSION` (semantic versioning), add the entry to `CHANGELOG.md`, and make sure
+   `make test` is green.
 2. `make image`, then `make manifest`; copy the image into the root checkout's `dist/` and
    update `dist/SHA256SUMS` (see `CLAUDE.md` for the dist conventions).
 3. Commit `VERSION`, `site/manifest.js`, `site/version.json` and `dist/SHA256SUMS`

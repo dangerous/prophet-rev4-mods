@@ -53,9 +53,28 @@ behavioural source of truth; this file is the engineering context around it.
   steps (every gesture +1; `rSt` / `tiE` flash, then the count) and holding Lo Freq alone
   shows the current shift from the panel's first held-repeat, such a hold no longer
   toggling Lo Freq on release — both verified 2026-10-08 (image `ce3c737e`, 0.5 s flash).
-  The flash was then shortened to 0.25 s (image `7cfe0b8f`, verified the same day). The
+  The flash was then shortened to 0.25 s (image `7cfe0b8f`, verified the same day — released
+  as 1.0.0 through the browser patcher). The
   shift readout stays the stock zero-padded integer (`001`, `-01`) by David's choice: it
   matches stock's own signed readouts (pitch-bend range).
+- 2026-10-08, **tuning tone** (1.1.0): A440 pressed with the
+  Globals menu open turned out to do nothing in stock (the notes had assumed the main-state
+  handler would be reached), so the tone has its own combo, A440 + HOLD with the arp off,
+  realised by replaying a stock A440 press on HOLD's release (HOLD up → stock's DSP-tone
+  path, not its HOLD-held voice note); enabling the arp clears stock's tone flag
+  (`ui + 0x16A`) the same way first. New stock-interface entry for the flag. First build
+  verified for the tone itself; a tap with the tone on then enabled the arp with the LED
+  dark — the replayed press is handled by stock a few ms later and its LED-off landed after
+  ours. Now a tap while the tone sounds only stops the tone, and the arp LED is asserted
+  again 100 ms after any replay if the arp is on.
+- 2026-10-08, **long note values and tap tempo on Velocity** (1.1.0, image `7468c036`, verified
+  2026-10-08): 4 bars / 2 bars / Whole (`4b` `2b` `1`) above the Prophet-6 list — 64 steps of 4
+  bars = 256 bars for pad sequences; patch memory flags them with `94 = octaves + 4` (93's
+  note digit then 0–2) so programs saved before load unchanged. Tap tempo moved from Unison
+  (id 25, two hands) to Velocity (id 11, beside A440), freeing Unison for a future
+  chord/arpeggiate switch; Unison under A440 is a readout again. The bigger `combo()` switch
+  made clang emit a `tbb` jump table in .text, which the image test's address sweep misread
+  as a literal load; the engine is now built with `-fno-jump-tables`.
 - First native flash attempt stalled the loader at `100` with the eight Program LEDs lit:
   the payload was an exact multiple of 7 and our encoder omitted the empty tail group's MS
   byte, which the loader always reads. Nothing was written; power cycle recovered. Fixed in

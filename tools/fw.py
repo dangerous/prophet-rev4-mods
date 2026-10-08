@@ -23,7 +23,8 @@ CFLAGS = [
     "-target", "thumbv7a-none-eabi", "-mcpu=cortex-a5", "-mthumb", "-mfloat-abi=soft",
     "-Oz", "-ffreestanding", "-fno-builtin", "-nostdlib", "-fno-exceptions",
     "-fno-unwind-tables", "-fno-asynchronous-unwind-tables", "-fno-stack-protector",
-    "-fomit-frame-pointer", "-std=c11", "-Wall", "-Wextra", "-Werror",
+    "-fomit-frame-pointer", "-fno-jump-tables",   # text = instructions + literal pools only (the image
+    "-std=c11", "-Wall", "-Wextra", "-Werror",     # test sweeps it for addresses; a tbb table fooled it)
 ]
 
 

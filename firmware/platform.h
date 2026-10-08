@@ -13,6 +13,8 @@ void plat_display_restore(void);                  /* stock: redraw the patch dis
 int  plat_globals_open(void);                     /* stock Globals menu is open */
 int  plat_a440_down(void);                        /* stock button-held table: A440 is down */
 int  plat_param_read(int param);                  /* stock live program parameter, layer A */
+int  plat_tone_on(void);                          /* stock's A440 reference tone is sounding (ui + 0x16A) */
+void plat_stock_a440_press(void);                 /* replay an A440 press to stock: toggles its tone (HOLD up) */
 void plat_param_store(int param, int value);      /* stock plain parameter store, layer A */
 
 #endif

@@ -69,6 +69,7 @@ IFACE = [
     0x2003CB69,   # live program parameter read(layer, param)
     0x2003CEF5,   # plain program parameter store(layer, param, value)
     0x2003B6B1,   # hold off (both sources): the original callee at the program-loaded hook
+    0x200574FA,   # ui + 0x16A: stock's A440 reference tone flag (byte)
 ]
 
 
