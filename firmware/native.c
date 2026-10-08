@@ -110,6 +110,7 @@ enum { Q_NOTE = 1, Q_HOLD = 2, Q_ANO = 3, Q_PROGRAM = 4 };
 #define VHOLD   ((vhold_t *)0x2008F920u)
 #define QUEUE   ((queue_t *)0x2008F940u)
 #define INITED  ((volatile uint8_t *)0x2008FB40u)
+#define GEN_OFF ((volatile uint8_t *)0x2008FB44u)   /* a generated note's note_off is in progress ("HOLD while the arp is on") */
 _Static_assert(sizeof(seq_t) <= 0x3400, "seq state too large");
 _Static_assert(sizeof(arp_t) <= 0x400, "arp state too large");
 _Static_assert(sizeof(arpui_t) <= 0x80, "ui state too large");
@@ -212,8 +213,13 @@ static void q_drain(void)
 
 /* --- platform ---------------------------------------------------------------------------- */
 void plat_voice_on(int src, int note, int vel) { SFN(NI_NOTE_ON, note3_fn)(src, note, vel); }
-void plat_voice_off(int src, int note) { SFN(NI_NOTE_OFF, note2_fn)(src, note); }   /* a generated note */
-void plat_live_off(int src, int note) { SFN(NI_NOTE_OFF, note2_fn)(src, note); }    /* a live note (the engine sustains it itself while suspended) */
+void plat_voice_off(int src, int note)                     /* a generated note: the hold query answers "off" */
+{
+    *GEN_OFF = 1;
+    SFN(NI_NOTE_OFF, note2_fn)(src, note);
+    *GEN_OFF = 0;
+}
+void plat_live_off(int src, int note) { SFN(NI_NOTE_OFF, note2_fn)(src, note); }   /* a live note: stock's hold applies */
 void plat_led(int led, int on) { SFN(NI_LED, button_fn)(led, on != 0); }
 void plat_display3(int c0, int c1, int c2) { SFN(NI_DISPLAY3, disp3_fn)(c0, c1, c2); }
 void plat_display_int(int v) { SFN(NI_DISPLAY_INT, int_fn)(v); }
@@ -238,7 +244,7 @@ int hook_kbd_scan(void *fifo)
     if (!killed()) {
         int post;
         q_drain();
-        post = vhold_tick(VHOLD, arpui_suspended(UI, ARP, SEQ), stock_hold_active());
+        post = vhold_tick(VHOLD, arpui_suspended(UI, ARP), stock_hold_active());
         if (post >= 0)
             dsp_post(DSP_HOLD_MSG | (uint32_t)post);       /* "HOLD while the arp is on" */
         if (!seq_tick(SEQ, ARP))                           /* a chord handed to the arp is its step for this ms */
@@ -388,7 +394,7 @@ __attribute__((used)) void hook_hold_dispatch(uint32_t msg, int new_state)
 {
     int on = new_state & 1;
     ensure_init();
-    if (killed() || vhold_post_on_hold_change(arpui_suspended(UI, ARP, SEQ)))
+    if (killed() || vhold_post_on_hold_change(arpui_suspended(UI, ARP)))
         dsp_post(msg);
     if (!killed())
         q_push(Q_HOLD, on, 0, 0);
@@ -419,5 +425,9 @@ int hook_hold_query(void)
     int stock;
     ensure_init();
     stock = stock_hold_active();
-    return killed() ? stock : vhold_query(arpui_suspended(UI, ARP, SEQ), stock);
+    if (killed())
+        return stock;
+    if (*GEN_OFF)
+        return 0;                                          /* a generated note keeps its gate under HOLD */
+    return vhold_query(arpui_suspended(UI, ARP), stock);
 }

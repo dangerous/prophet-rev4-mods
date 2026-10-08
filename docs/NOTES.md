@@ -91,15 +91,10 @@ behavioural source of truth; this file is the engineering context around it.
 - Rule we hold ourselves to: no engine code at boot; only proven entry points; everything in
   the engine's own record; the kill switch bypasses every hook.
 
-- 2026-10-08, **2.0.0** (`seq2`): the sequencer redesigned as an independent generator
-  (Prophet-6 model). First build `8d8f99ed` flashed and run through the 16-step panel test:
-  two findings — Program 7 from 8th goes to `8d` before `4` (correct, my run-through was
-  wrong), and **HOLD sustained the sequence's chords**: the voice engine's own hold flag
-  decides, the per-note "off" answer at the hold query changes nothing. Fixed by suspending
-  the synth's hold while the sequencer runs and sustaining live notes in the engine
-  (`arp_set_sustain`, spec 4a). The rest of the run-through passed by exception (no other
-  deviations reported); the 2.0.0 markers stay `[HW: unverified]` until David confirms the
-  checklist's "Seq" section against the second build.
+- 2026-10-08, **2.0.0** (`seq2`, image `8d8f99ed`): the sequencer redesigned as an independent
+  generator (Prophet-6 model) — built, all host tests green (tooling 55, image 11,
+  harnesses 1011 checks), handed to the root `dist/`, **not flashed, not pushed**. Every
+  2.0.0 behaviour is `[HW: unverified]`; the checklist's "Seq" section is the test plan.
 
 ## Build/test
 
@@ -223,16 +218,10 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
   (FC; FB resumes, FA → event 1), own `loss` counter; the arp owns the port lock
   (`arp_rt_accept`). The UI re-applies the arp's own note value in `ui_enable(on)` because
   the Arpeggiated style sets the arp's beats to the seq's.
-- Live sustain (spec 4a): *suspended* now includes "SEq selected and running", so the DSP
-  hold flag is off while the sequence plays (as for the arp) and generated notes release at
-  their gates. Live notes are sustained by the engine: `arp_set_sustain(a, on)` (the UI sets
-  it from `seq_runs && !rec` at every transition and in the tick); in the live path a release
-  with `sustain_on && hold` only marks `sustained[]`, `arp_hold(0)` releases the set, a
-  re-pressed key releases its old note first, `arp_set_sustain(0)` keeps the set (a flush at
-  stop would race the hold-on message to the DSP and release the notes instead).
-  `plat_voice_off` / `plat_live_off` both map to stock `note_off`; the per-note flag tried
-  first (2026-10-08) did nothing on hardware — the DSP sustains any released voice while its
-  flag is on.
+- Generated vs live releases: `plat_voice_off` (generated: arp steps, seq chords) sets a
+  flag around stock `note_off` so the hold-query hook answers "off"; `plat_live_off` (direct
+  notes) leaves stock's answer. Whether stock honours the per-note answer is the 2.0.0
+  hardware question (spec "HOLD while the arp is on" 4a).
 - Keyboard octave shift (`oct.c`): Lo Freq's held-repeat (panel value 3) is the hold
   detection — it shows the shift and marks the hold used, so only a press released before
   the panel's repeat delay is a tap (replayed to stock). Bank/Group repeats are ignored.
@@ -296,9 +285,12 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
   been exercised on hardware.
 - **2.0.0 is entirely unverified on hardware** (independent sequencer: generator select,
   transport incl. MIDI arm/Stop/Continue, orders, transposition, Back, 512 steps, two note
-  values, per-note hold answer for generated notes). Checklist: `docs/hardware-checklist.md` "Seq". The per-note hold question is answered
-  (the DSP decides; see "Live sustain" above); the engine-side sustain of live notes is the
-  remaining unverified piece of 4a.
+  values, per-note hold answer for generated notes). Checklist: `docs/hardware-checklist.md`
+  "Seq". Open stock question: does the voice engine honour a per-note "hold off" answer at
+  `0x2003EACE` (generated notes release under HOLD while live notes sustain), or is hold
+  decided per voice elsewhere? If generated notes sustain, options are: suspend the synth's
+  hold while the sequencer plays (as the arp does — then live notes don't sustain either), or
+  accept it.
 - Decisions made while implementing 2.0.0, folded into the spec: selecting `SEq` with
   nothing recorded is refused (`---`, `ArP` stays) rather than selecting an empty generator;
   A440 + Program 6 with the arp running leaves the arp running; a clock-source change

@@ -268,40 +268,12 @@ static int clocked(const arp_t *a)
 }
 
 /* --- events ---------------------------------------------------------------------------- */
-static void release_direct(arp_t *a)                      /* live notes, sustained ones included */
+static void release_direct(arp_t *a)                      /* live notes: unflagged releases */
 {
     for (int i = 0; i < 128; i++)
         if (a->direct[i]) {
             a->direct[i] = 0;
             plat_live_off(ARP_SRC_LOCAL, i);
-        }
-    zero(a->sustained, sizeof a->sustained);
-}
-
-static int is_sustained(const arp_t *a, int note) { return (a->sustained[note >> 3] >> (note & 7)) & 1; }
-
-static void live_off(arp_t *a, int src, int note)          /* a live release: now, or deferred under HOLD */
-{
-    if (!a->direct[note])
-        return;
-    if (a->sustain_on && a->hold) {
-        a->sustained[note >> 3] |= (uint8_t)(1u << (note & 7));
-        return;
-    }
-    a->direct[note] = 0;
-    a->sustained[note >> 3] &= (uint8_t)~(1u << (note & 7));
-    plat_live_off(src, note);
-}
-
-static void release_sustained(arp_t *a)                    /* HOLD went off */
-{
-    for (int i = 0; i < 128; i++)
-        if (is_sustained(a, i)) {
-            a->sustained[i >> 3] &= (uint8_t)~(1u << (i & 7));
-            if (a->direct[i]) {
-                a->direct[i] = 0;
-                plat_live_off(ARP_SRC_LOCAL, i);
-            }
         }
 }
 
@@ -311,11 +283,6 @@ void arp_note(arp_t *a, int src, int note, int vel)
         return;
     if (!a->enabled) {                                     /* pass straight through (live), tracked */
         if (vel > 0) {
-            if (is_sustained(a, note)) {                   /* pressed again: its sustained note goes first */
-                a->sustained[note >> 3] &= (uint8_t)~(1u << (note & 7));
-                a->direct[note] = 0;
-                plat_live_off(src, note);
-            }
             a->held[note] = (uint8_t)vel;
             a->direct[note] = (uint8_t)vel;
             asg_add(a, note, vel);
@@ -323,7 +290,10 @@ void arp_note(arp_t *a, int src, int note, int vel)
         } else {
             a->held[note] = 0;
             asg_prune(a);
-            live_off(a, src, note);
+            if (a->direct[note]) {
+                a->direct[note] = 0;
+                plat_live_off(src, note);
+            }
         }
         return;
     }
@@ -367,20 +337,13 @@ void arp_hold(arp_t *a, int on)
         asg_prune(a);
         if (a->enabled)
             pool_changed(a);
-        release_sustained(a);
     }
-}
-
-void arp_set_sustain(arp_t *a, int on)
-{
-    a->sustain_on = (uint8_t)(on != 0);                    /* what is deferred stays so until HOLD off */
 }
 
 void arp_all_notes_off(arp_t *a)
 {
     release(a);
     zero(a->direct, sizeof a->direct);                     /* stock's all_notes_off silenced them already */
-    zero(a->sustained, sizeof a->sustained);
     zero(a->held, sizeof a->held);
     zero(a->latched, sizeof a->latched);
     a->asg_len = 0;

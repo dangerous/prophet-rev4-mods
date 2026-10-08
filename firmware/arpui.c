@@ -121,17 +121,6 @@ static int gen_running(const arpui_t *u, const arp_t *a, const seq_t *q)   /* th
     return u->gen == ARPUI_GEN_SEQ ? seq_running(q) : a->enabled;
 }
 
-static int seq_runs(const arpui_t *u, const seq_t *q)      /* the sequencer runs as the selected generator */
-{
-    return u->gen == ARPUI_GEN_SEQ && seq_running(q);
-}
-
-/* while the sequencer runs the synth's hold is suspended and the engine sustains live notes */
-static void update_sustain(arpui_t *u, arp_t *a, const seq_t *q)
-{
-    arp_set_sustain(a, seq_runs(u, q) && !u->rec);
-}
-
 /* --- stock's tuning tone --------------------------------------------------------------------- */
 /* Replay an A440 press to stock: with HOLD up it toggles its reference tone (and the A440 LED)
  * a few milliseconds later, in its own task — so the LED is asserted again after that. */
@@ -178,7 +167,6 @@ static void select_gen(arpui_t *u, arp_t *a, seq_t *q, int gen)
     else
         seq_stop(q, a);
     u->gen = (uint8_t)gen;
-    update_sustain(u, a, q);
     show_gen(u);
 }
 
@@ -224,7 +212,6 @@ void arpui_program_loaded(arpui_t *u, arp_t *a, seq_t *q)
     if (u->gen != ARPUI_GEN_ARP)
         on = 0;                                            /* a saved "on" starts the Arp only while ArP is selected */
     ui_enable(u, a, on);
-    update_sustain(u, a, q);
 }
 
 /* --- seq record mode (A440 + Tune) ------------------------------------------------------ */
@@ -269,15 +256,14 @@ static void rec_enter(arpui_t *u, arp_t *a, seq_t *q)
         u->gen = ARPUI_GEN_SEQ;
     }
     seq_rec_begin(q, a);
-    update_sustain(u, a, q);
     show_rec(u, q);
 }
 
 static void rec_leave(arpui_t *u, arp_t *a, seq_t *q, int restore)   /* restore = 0 when the Globals menu takes the display */
 {
+    (void)a;
     u->rec = 0;
     seq_rec_end(q);                                        /* SEq stays selected, stopped */
-    update_sustain(u, a, q);
     disp_cancel(&u->disp);                                 /* the readout goes with the mode */
     if (restore)
         plat_display_restore();
@@ -360,7 +346,6 @@ static void combo(arpui_t *u, arp_t *a, seq_t *q, int id)
             u->gen = ARPUI_GEN_ARP;                        /* nothing left to select */
             show_none(u);
         }
-        update_sustain(u, a, q);
         break;
     case ARPUI_VELOCITY:
         tempo_tap(u, a);
@@ -426,7 +411,6 @@ static void tap(arpui_t *u, arp_t *a, seq_t *q)
         } else {
             show_none(u);                                  /* nothing recorded */
         }
-        update_sustain(u, a, q);
     } else {
         ui_enable(u, a, !a->enabled);
         show_running(u, a, a->enabled);
@@ -553,7 +537,6 @@ void arpui_all_notes_off(arpui_t *u, arp_t *a, seq_t *q)
         return;
     seq_all_notes_off(q, a);
     arp_all_notes_off(a);
-    update_sustain(u, a, q);
 }
 
 void arpui_realtime(arpui_t *u, arp_t *a, seq_t *q, int byte, int port)
@@ -566,9 +549,9 @@ void arpui_realtime(arpui_t *u, arp_t *a, seq_t *q, int byte, int port)
     }
 }
 
-int arpui_suspended(const arpui_t *u, const arp_t *a, const seq_t *q)
+int arpui_suspended(const arpui_t *u, const arp_t *a)
 {
-    return !u->kill && (a->enabled || u->rec || seq_runs(u, q));
+    return !u->kill && (a->enabled || u->rec);
 }
 
 /* --- Glide Rate -------------------------------------------------------------------------- */
@@ -615,7 +598,6 @@ void arpui_tick(arpui_t *u, arp_t *a, seq_t *q)
     }
     if (u->kill)
         return;
-    update_sustain(u, a, q);                               /* catches changes the clock made (loss, CC) */
     if (disp_tick(&u->disp)) {
         if (u->rec)
             draw_rec(q);                                   /* a message over the readout: back to r N */

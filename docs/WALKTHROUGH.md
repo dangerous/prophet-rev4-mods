@@ -67,8 +67,8 @@ isn't already. "A440 + X" always means: hold A440 down, press X, let go of both.
 
 20. **Tap A440.** You hear C, E, G, the chord, a rest, then D held for three steps, round and
     round, at the tempo and the sequencer's note value (8ths to start with); the A440 LED is
-    lit while it runs. **Play along** — the keyboard is yours, HOLD and the pedal sustain what you play (and
-    only that), and nothing you play disturbs the sequence.
+    lit while it runs. **Play along** — the keyboard is yours, with the synth's own hold, and
+    nothing you play disturbs the sequence.
 21. **Hold A440 and press a D**: from the next step the whole sequence is up a tone — middle C
     is "as recorded", any other key is that many semitones away. The key you press is a
     command and doesn't sound. **A440 + middle C** puts it back.

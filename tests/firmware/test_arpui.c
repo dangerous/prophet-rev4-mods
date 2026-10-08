@@ -466,24 +466,17 @@ static void test_notes_while_a440_is_held_are_ordinary_with_arp_selected(void) {
 
 static void test_suspended_is_arp_on_or_record_mode(void) {
     reset();
-    CHECK(!arpui_suspended(&u, &a, &q));
+    CHECK(!arpui_suspended(&u, &a));
     tap_a440();
-    CHECK(arpui_suspended(&u, &a, &q));
+    CHECK(arpui_suspended(&u, &a));
     tap_a440();
-    CHECK(!arpui_suspended(&u, &a, &q));
+    CHECK(!arpui_suspended(&u, &a));
     enter_rec();
-    CHECK(arpui_suspended(&u, &a, &q));
+    CHECK(arpui_suspended(&u, &a));
     tap_a440();
-    CHECK(!arpui_suspended(&u, &a, &q));
+    CHECK(!arpui_suspended(&u, &a));
     record_cde(); tap_a440();
-    CHECK(q.playing && arpui_suspended(&u, &a, &q));                   /* the sequencer runs: the synth's hold is suspended */
-    tap_a440();
-    CHECK(!q.playing && !arpui_suspended(&u, &a, &q));
-    arp_set_ext(&a, 1); tap_a440();
-    CHECK(q.armed && arpui_suspended(&u, &a, &q));                     /* armed counts as running */
-    tap_a440(); arp_set_ext(&a, 0);
-    select_gen();                                                      /* ArP selected: the sequencer's state is moot */
-    CHECK(!arpui_suspended(&u, &a, &q));
+    CHECK(q.playing && !arpui_suspended(&u, &a));                      /* the sequencer: live notes under stock hold */
 }
 
 static void test_orphan_release_is_consumed_and_other_buttons_pass(void) {
@@ -1050,44 +1043,21 @@ static void test_tone_combo_follows_the_selected_generators_state(void) {
     CHECK(!fake_tone_on && count_type(EV_A440_STOCK) == 2 && q.playing);
 }
 
-static void test_live_notes_sustain_under_hold_while_the_sequence_runs_generated_ones_do_not(void) {
+static void test_live_releases_are_unflagged_and_generated_ones_flagged(void) {
     reset(); record_cde();
-    hold_press_to_stock();                                             /* HOLD on (stock's latch, SEq stopped) */
-    CHECK(a.hold && fake_latch);
-    note(50, 100); note(50, 0);
-    CHECK(count_type(EV_LOFF) == 1);                                   /* stopped: the release goes to stock, whose hold sustains it */
-    tap_a440();                                                        /* SEq playing, HOLD on */
-    CHECK(q.playing && arpui_suspended(&u, &a, &q) && count_type(EV_VON) == 2);
-    note(52, 100);
-    note(52, 0);
-    CHECK(count_type(EV_LOFF) == 1);                                   /* deferred: the engine sustains it */
+    tap_a440();                                                        /* SEq playing */
+    note(50, 100);
+    CHECK(count_type(EV_VON) == 2 && !arpui_suspended(&u, &a));        /* live: sounds at once, stock hold applies */
+    note(50, 0);
+    CHECK(count_type(EV_LOFF) == 1 && count_type(EV_VOFF) == 0);
     ticks(125);
-    CHECK(count_type(EV_VOFF) == 1 && count_type(EV_LOFF) == 1);       /* the chord's gate: a generated release, HOLD or not */
-    ticks(125);
-    CHECK(count_type(EV_VON) == 4);                                    /* the next step sounds */
-    note(52, 100);                                                     /* pressed again: released first, then sounds */
-    CHECK(count_type(EV_LOFF) == 2 && count_type(EV_VON) == 5);
-    note(52, 0);
-    tap_a440();                                                        /* stopped with HOLD on: still sustained by us */
-    CHECK(!q.playing && count_type(EV_LOFF) == 2);
-    note(54, 100); note(54, 0);
-    CHECK(count_type(EV_LOFF) == 3);                                   /* a new release is stock's (its hold is back) */
-    hold_press_to_stock();                                             /* HOLD off */
-    CHECK(!a.hold && count_type(EV_LOFF) == 4);                        /* ours released now */
-    hold_press_to_stock();                                             /* HOLD on again, SEq stopped */
-    tap_a440();                                                        /* playing */
-    note(55, 100); note(55, 0);
-    CHECK(count_type(EV_LOFF) == 4);                                   /* sustained */
-    select_gen();                                                      /* ArP: the sequencer stops; the note stays until HOLD off */
-    CHECK(count_type(EV_LOFF) == 4);
-    tap_a440();                                                        /* the arp starts: live notes are cut as always */
-    CHECK(a.enabled && count_type(EV_LOFF) == 5);
-    tap_a440(); fake_latch = 0; arpui_hold(&u, &a, &q, 0);
-    enter_rec();                                                       /* recording: pedal / HOLD are rest and tie, notes release on key-up */
-    arpui_hold(&u, &a, &q, 1);
-    note(57, 100); note(57, 0);
-    CHECK(count_type(EV_LOFF) == 6);
-    arpui_hold(&u, &a, &q, 0);
+    CHECK(count_type(EV_VOFF) == 1 && count_type(EV_LOFF) == 1);       /* the step's gate: a generated release */
+    tap_a440();
+    select_gen(); tap_a440();                                          /* the arp on */
+    note(50, 100); ticks(125);
+    CHECK(count_type(EV_VOFF) == 2);                                   /* an arp step release is generated too */
+    note(50, 0);
+    CHECK(count_type(EV_LOFF) == 1);                                   /* the key's release is the pool's business */
 }
 
 static void test_group_alone_is_back_in_record_mode(void) {
@@ -1315,7 +1285,7 @@ static void test_generator_switch_hands_the_latch_over_with_the_arp(void) {
     CHECK(!a.enabled && count_type(EV_HOLD_STOCK) == 1 && !fake_latch);
     arpui_hold(&u, &a, &q, 0);
     hold_press_to_stock();                                             /* stock's latch on for the live notes */
-    CHECK(fake_latch && !arpui_suspended(&u, &a, &q));
+    CHECK(fake_latch && !arpui_suspended(&u, &a));
     select_gen();                                                      /* ArP, stopped: stock's hold stays in use */
     CHECK(count_type(EV_HOLD_STOCK) == 1 && fake_latch);
     tap_a440();                                                        /* arp on: its latch (on) wanted, stock's remembered */
@@ -1373,7 +1343,7 @@ int main(void) {
     test_tap_starts_and_stops_the_sequencer();
     test_switching_generators_stops_the_running_one();
     test_tone_combo_follows_the_selected_generators_state();
-    test_live_notes_sustain_under_hold_while_the_sequence_runs_generated_ones_do_not();
+    test_live_releases_are_unflagged_and_generated_ones_flagged();
     test_group_alone_is_back_in_record_mode();
     test_a440_key_sets_the_transposition_with_seq_selected();
     test_program_7_8_edit_the_selected_generators_note_value();

@@ -22,8 +22,6 @@ typedef struct {
     uint8_t  held[128];               /* velocity while the key / MIDI note is down (0 = up) */
     uint8_t  latched[128];            /* velocity kept by HOLD after release (0 = not latched) */
     uint8_t  direct[128];             /* notes sounding directly through stock while the arp is off */
-    uint8_t  sustain_on;              /* live sustain: the synth's hold is suspended for the sequencer, we sustain live notes */
-    uint8_t  sustained[16];           /* live notes released under HOLD and kept sounding (bitmap) */
     uint8_t  enabled, hold, mode, octaves, ext;
     uint8_t  running;                 /* MIDI transport: Start/Continue seen and no Stop since */
     uint8_t  port;                    /* MIDI clock port lock, ARP_NONE = none */
@@ -87,11 +85,6 @@ void arp_set_ext(arp_t *a, int ext);                     /* clock source: 0 inte
  * releases and returns the arp to its pool. */
 void arp_chord_set(arp_t *a, const uint8_t *notes, const uint8_t *vels, int n);
 void arp_chord_clear(arp_t *a);
-
-/* Live sustain ("HOLD while the arp is on" 4a): while on and HOLD is active, a live note's
- * release is deferred — the note stays in the direct table and is released when HOLD goes
- * off or the key is pressed again. Switching it off keeps what is deferred until HOLD off. */
-void arp_set_sustain(arp_t *a, int on);
 
 /* Queries for the UI */
 int  arp_pool_count(const arp_t *a);
