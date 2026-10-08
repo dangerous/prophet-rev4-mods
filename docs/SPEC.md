@@ -163,6 +163,55 @@ record placement do not require.
   payloads as `image <n> record @0x<offset> ram 0x<lo>..0x<hi>: <n> bytes`, so a reviewer
   can see exactly what a build changed. Record-structure differences are reported as such.
 
+### Patcher (distribution) `[HW: n/a]`
+
+Users install the engine without the toolchain: a static web page applies a published
+**patch manifest** to their own copy of Sequential's Main OS 2.1.0 file, in the browser,
+and hands back the image to install. Nothing is uploaded, the page loads no external
+resources, and it works equally from a local copy of its directory.
+
+#### Patch manifest
+
+- `python3 -m tools manifest --base BASE.syx --image IMAGE.syx -o site/manifest.js` writes a
+  JavaScript file that assigns `window.PATCH` one JSON object: `format` (1), `name`
+  (`prophet10_native`), `built` (ISO date), `commit` (the repository's short HEAD hash, or
+  `unknown`), `base` and `result` — each `{name, size, sha256}` of the stock file and of the
+  image — and `spans`: the edits that turn the base's **decoded payload** into the image's,
+  each `{offset, data}` with `data` base64 and `offset` a position in the base payload, in
+  ascending order and non-overlapping. A span **replaces** the bytes at its offset
+  (differences less than 16 bytes apart share one span); the engine record is the last span
+  and an **insertion** (`insert: true`) at the end of image A, so the SHARC image that
+  follows it is shifted, not copied. The manifest therefore carries the engine's own bytes
+  and the retargeted words — a few hundred bytes of edits plus the 32 KB record — and
+  nothing else of the OS.
+- **Applying** a manifest: decode the base file under every container rule ("SysEx
+  container"); require SHA-256(base file) = `base.sha256`; apply the spans in order
+  (replacing, or inserting before the base byte at `offset`); encode as a Main OS file;
+  require SHA-256(result) = `result.sha256`. The result is byte-identical to `python3 -m
+  tools build` for the same inputs.
+- `python3 -m tools apply MANIFEST.js BASE.syx OUT.syx` is the reference applier. It writes
+  nothing and prints one line on stderr (exit status 1) when the base is not the file the
+  manifest was made for (naming the file's hash and the expected one) or when the result's
+  hash does not match the manifest's.
+
+#### The page (`site/index.html`, `site/patcher.js`, `site/manifest.js`)
+
+- Published by GitHub Pages at `https://dangerous.github.io/prophet-rev4-mods/` from the
+  `site/` directory **alone** (a GitHub Actions deployment of that directory; nothing else
+  in the repository is served).
+- Shows what it builds (name, date, commit) and the two hashes it will check. The user picks
+  or drops their stock `.syx`; the page applies the manifest under the rules above, in the
+  browser, and then: a base-hash mismatch names the problem (not Sequential's Main OS
+  2.1.0 — the file's hash and the expected one), nothing is offered; a result-hash mismatch
+  says so and offers no download; success shows the result's SHA-256 marked as matching
+  the release and offers `prophet10_native.syx` for download, with the install steps
+  (SysEx Librarian or equivalent, Globals → MIDI SysEx = USB) and the warranty/risk notice.
+- The page's applier (`patcher.js`, plain JavaScript, no framework) produces the same bytes
+  as the reference applier; the acceptance test runs it under Node.js against the fixture
+  when Node is available and skips otherwise.
+- The stock file never leaves the browser: no requests other than the page's own files, no
+  analytics.
+
 ### Arp engine `[HW: verified 2026-10-07, Prophet-10 Rev4 — the whole checklist]`
 
 The arp proper. The behaviours specified in their own sections (re-latch, seq, note

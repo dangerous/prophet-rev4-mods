@@ -2,7 +2,7 @@ PYTHON ?= python3
 CC ?= cc
 BUILD := build
 
-.PHONY: test test-tooling test-firmware test-image image image-native clean
+.PHONY: test test-tooling test-firmware test-image image image-native manifest clean
 
 test: test-tooling test-firmware test-image
 
@@ -57,6 +57,11 @@ image: $(BUILD)/native.bin
 		--hooks firmware/hooks_native.json -o $(BUILD)/prophet10_native.syx
 
 image-native: image
+
+# The browser patcher's manifest (site/manifest.js): the image as byte spans over stock.
+manifest: image
+	$(PYTHON) -m tools manifest --base fixtures/prophet5_main_2.1.0.syx \
+		--image $(BUILD)/prophet10_native.syx -o site/manifest.js
 
 $(BUILD)/native.bin: firmware/*.c firmware/*.h tools/fw.py tools/fwlink.py
 	@mkdir -p $(BUILD)

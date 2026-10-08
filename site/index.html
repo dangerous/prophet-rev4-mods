@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prophet-5 / Prophet-10 Rev4 — arpeggiator &amp; sequencer patcher</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         max-width: 44rem; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.6rem; margin-bottom: .25rem; }
+  h2 { font-size: 1.15rem; margin-top: 2rem; }
+  code, .hash { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
+  .hash { word-break: break-all; }
+  .sub { color: #777; margin-top: 0; }
+  table { border-collapse: collapse; }
+  td { padding: .15rem .8rem .15rem 0; vertical-align: top; }
+  td:first-child { color: #777; white-space: nowrap; }
+  #drop { border: 2px dashed #999; border-radius: .6rem; padding: 2rem 1rem; text-align: center; margin: 1rem 0; }
+  #drop.over { border-color: #39f; background: rgba(51, 153, 255, .08); }
+  #status { padding: .8rem 1rem; border-radius: .4rem; margin: 1rem 0; display: none; }
+  #status.ok { display: block; background: rgba(46, 160, 67, .15); }
+  #status.bad { display: block; background: rgba(218, 54, 51, .15); }
+  #status.busy { display: block; background: rgba(128, 128, 128, .12); }
+  #download { display: none; font-size: 1.1rem; padding: .6rem 1.2rem; border-radius: .4rem;
+              background: #2d6cdf; color: #fff; text-decoration: none; }
+  .notice { border-left: 4px solid #d9a400; padding: .4rem 1rem; margin: 1rem 0; }
+  footer { margin-top: 3rem; color: #777; font-size: .9em; }
+</style>
+</head>
+<body>
+<h1>Prophet‑5 / Prophet‑10 Rev4 — arpeggiator &amp; sequencer</h1>
+<p class="sub">Builds the patched Main OS from your own copy of Sequential's firmware. Everything happens in your browser; nothing is uploaded.</p>
+
+<h2>What this installs</h2>
+<table>
+  <tr><td>Image</td><td><span id="p-name"></span>, built <span id="p-built"></span> from commit <code id="p-commit"></code></td></tr>
+  <tr><td>Needs</td><td>Sequential's <code id="p-base-name"></code> (<span id="p-base-size"></span> bytes)<br><span class="hash" id="p-base-hash"></span></td></tr>
+  <tr><td>Produces</td><td><code id="p-result-name"></code> (<span id="p-result-size"></span> bytes)<br><span class="hash" id="p-result-hash"></span></td></tr>
+</table>
+<p>The page checks that your file is exactly the stock Main OS 2.1.0 before patching, and that the result is exactly the released image afterwards — the two hashes above.</p>
+
+<h2>1. Your stock file</h2>
+<p>Download <strong>Main OS 2.1.0</strong> for the Prophet‑5 / Prophet‑10 Rev4 from <a href="https://sequential.com/support/download/prophet-5-10-operating-system/">Sequential's download page</a> and unzip it. The Main OS file is named <code>prophet5_main_2.1.0.syx</code> — choose that one here (not the Panel OS).</p>
+<div id="drop">
+  <p>Drop <code id="p-base-name2"></code> here, or</p>
+  <input type="file" id="file" accept=".syx">
+</div>
+<div id="status"></div>
+
+<h2>2. Download</h2>
+<p><a id="download" href="#">Download the patched OS</a><span id="download-hint">The download appears once your file has been checked and patched.</span></p>
+
+<h2>3. Install</h2>
+<ol>
+  <li>On the synth: Globals → <em>MIDI SysEx</em> = <strong>USB</strong>.</li>
+  <li>Connect by USB and send the file with a SysEx utility (SysEx Librarian on macOS, MIDI‑OX on Windows, SendMIDI anywhere) — exactly as you would an official OS update.</li>
+  <li>The display counts to 100 while the OS is written; the synth restarts into the new OS. Tap <strong>A440</strong>: the LED lights and the arpeggiator is on.</li>
+</ol>
+<p class="notice"><strong>Not affiliated with Sequential.</strong> This is a hobby project that modifies the instrument's firmware. Installing a modified OS is at your own risk and may void your warranty. Holding <strong>A440</strong> while powering on bypasses the patch for that session, and the official 2.1.0 file re‑installs the stock OS at any time. If an OS update ever fails to boot, recovery is through <a href="https://support.sequential.com/hc/en-gb/articles/5314996425362-Prophet-5-10-Keyboard-Troubleshooting">bootloader mode</a>, which needs a <strong>5‑pin DIN MIDI</strong> connection — have one available before you start.</p>
+
+<footer>
+  Manual, controls and source: <a href="https://github.com/dangerous/prophet-rev4-mods">github.com/dangerous/prophet-rev4-mods</a>.
+  Only the project's own code is published; Sequential's OS files are not redistributed.
+</footer>
+
+<script src="patcher.js"></script>
+<script src="manifest.js"></script>
+<script>
+(function () {
+  'use strict';
+  var P = window.Patcher, patch = window.PATCH;
+  function $(id) { return document.getElementById(id); }
+  function text(id, v) { $(id).textContent = v; }
+
+  text('p-name', patch.name); text('p-built', patch.built); text('p-commit', patch.commit);
+  text('p-base-name', patch.base.name); text('p-base-name2', patch.base.name);
+  text('p-base-size', patch.base.size.toLocaleString()); text('p-base-hash', patch.base.sha256);
+  text('p-result-name', patch.result.name); text('p-result-size', patch.result.size.toLocaleString());
+  text('p-result-hash', patch.result.sha256);
+
+  var status = $('status'), link = $('download'), hint = $('download-hint'), url = null;
+  function show(cls, msg) { status.className = cls; status.textContent = msg; }
+  function clearDownload() {
+    if (url) { URL.revokeObjectURL(url); url = null; }
+    link.style.display = 'none'; hint.style.display = '';
+  }
+
+  function handle(file) {
+    clearDownload();
+    show('busy', 'Checking ' + file.name + ' …');
+    var reader = new FileReader();
+    reader.onerror = function () { show('bad', 'The file could not be read.'); };
+    reader.onload = function () {
+      var r = P.apply(patch, new Uint8Array(reader.result));
+      if (!r.ok) { show('bad', r.error); return; }
+      url = URL.createObjectURL(new Blob([r.bytes], { type: 'application/octet-stream' }));
+      link.href = url; link.download = patch.result.name;
+      link.style.display = 'inline-block'; hint.style.display = 'none';
+      show('ok', 'Built ' + patch.result.name + ' (' + r.bytes.length.toLocaleString() + ' bytes). SHA-256 ' +
+           r.sha256 + ' — matches the release.');
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  $('file').addEventListener('change', function (e) { if (e.target.files[0]) handle(e.target.files[0]); });
+  var drop = $('drop');
+  drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', function () { drop.classList.remove('over'); });
+  drop.addEventListener('drop', function (e) {
+    e.preventDefault(); drop.classList.remove('over');
+    if (e.dataTransfer.files[0]) handle(e.dataTransfer.files[0]);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-"""Command-line interface: python3 -m tools {inspect,unpack,pack} ..."""
+"""Command-line interface: python3 -m tools {inspect,unpack,pack,diff,fwbuild,build,manifest,apply} ..."""
 from __future__ import annotations
 
 import argparse
@@ -6,7 +6,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import build, fw, records, syx
+from . import build, fw, manifest, records, syx
 
 
 def cmd_inspect(args) -> int:
@@ -77,6 +77,24 @@ def cmd_diff(args) -> int:
     return 0
 
 
+def cmd_manifest(args) -> int:
+    base, image = Path(args.base).read_bytes(), Path(args.image).read_bytes()
+    text = manifest.generate_js(base, image, commit=args.commit, built=args.built)
+    Path(args.out).write_text(text)
+    m = manifest.parse_js(text)
+    print("wrote %s: %d span(s), result %s %s" % (args.out, len(m["spans"]), m["result"]["name"],
+                                                   m["result"]["sha256"]))
+    return 0
+
+
+def cmd_apply(args) -> int:
+    m = manifest.parse_js(Path(args.manifest).read_text())
+    out = manifest.apply(m, Path(args.base).read_bytes())    # raises before anything is written
+    Path(args.out).write_bytes(out)
+    print("wrote %s (%d bytes, SHA-256 %s)" % (args.out, len(out), m["result"]["sha256"]))
+    return 0
+
+
 def cmd_fwbuild(args) -> int:
     bin_path, map_path = fw.build_wrapper(args.src, args.out)
     print("wrote %s and %s" % (bin_path, map_path))
@@ -102,6 +120,20 @@ def main(argv=None) -> int:
     p.add_argument("--record", default="0x%X:0x%X" % (build.WRAPPER_REC_BASE, build.WRAPPER_REC_SIZE),
                    help="appended record BASE:SIZE (hex)")
     p.set_defaults(func=cmd_build)
+
+    p = sub.add_parser("manifest", help="write the patch manifest (site/manifest.js) for an image")
+    p.add_argument("--base", required=True)
+    p.add_argument("--image", required=True)
+    p.add_argument("-o", "--out", required=True)
+    p.add_argument("--commit", help="recorded commit (default: git HEAD)")
+    p.add_argument("--built", help="recorded date, YYYY-MM-DD (default: today)")
+    p.set_defaults(func=cmd_manifest)
+
+    p = sub.add_parser("apply", help="apply a patch manifest to the stock OS file (the reference applier)")
+    p.add_argument("manifest")
+    p.add_argument("base")
+    p.add_argument("out")
+    p.set_defaults(func=cmd_apply)
 
     p = sub.add_parser("diff", help="list differing byte spans between two OS .syx files")
     p.add_argument("a")
@@ -130,7 +162,8 @@ def main(argv=None) -> int:
         print("error: input file not found: %s -- see fixtures/README.md for the files this "
               "project needs and where to get them" % e.filename, file=sys.stderr)
         return 1
-    except (syx.SyxError, records.RecordError, build.BuildError, fw.FirmwareBuildError, OSError) as e:
+    except (syx.SyxError, records.RecordError, build.BuildError, fw.FirmwareBuildError,
+            manifest.ManifestError, OSError) as e:
         print("error: %s" % e, file=sys.stderr)
         return 1
 
