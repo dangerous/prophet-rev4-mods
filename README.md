@@ -5,17 +5,15 @@
 An arpeggiator and a polyphonic step sequencer for the Sequential **Prophet‑5 / Prophet‑10
 Rev4**, added to Sequential's own Main OS 2.1.0 as a firmware patch. You apply the patch to
 your copy of the official OS in your browser and install the result over USB like any OS
-update. Everything is controlled from the front panel — no menus, no computer at the gig.
+update. Everything is controlled from the front panel.
 
 **Built on someone else's idea.** The notion of patching the Rev4's firmware, and the proof
 that it works, belong to another person: an arpeggiator mod that circulated privately
 showed the way and set the control conventions this project keeps (A440 as the arp button,
 Bank/Group for modes, Glide Rate for tempo). This project began as additions chained in
-front of that mod and grew into its own engine with a good deal more — the polyphonic
-sequencer with rests and ties, the keyboard octave shift, tap tempo, patch memory, a kill
-switch — and with design decisions of my own wherever I thought the behaviour should
-differ (the spec marks each one), which is why it is published in its own right. You are
-welcome to fork it and make your own.
+front of that mod and makes several additions — the polyphonic
+sequencer with rests and ties, the keyboard octave shift, tap tempo, patch memory, tempo divisions,
+and more.
 
 New here? The [walkthrough](docs/WALKTHROUGH.md) takes you through every feature at the
 instrument, step by step; the manual below is the reference.
