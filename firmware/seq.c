@@ -85,8 +85,6 @@ static void sound_event(seq_t *q, arp_t *a)
     uint8_t notes[SEQ_CHORD], vels[SEQ_CHORD];
     int n = 0;
     q->remain = e->dur;
-    q->chord_acc = 0;
-    q->chord_clk = 0;
     for (int k = 0; k < e->n; k++) {
         int p = e->note[k] + q->transpose;
         if (p >= 0 && p <= 127) {                          /* out of range: silent */
@@ -108,19 +106,22 @@ static void sound_event(seq_t *q, arp_t *a)
     }
 }
 
-static void begin(seq_t *q, arp_t *a)                      /* from event 1 */
+static void begin(seq_t *q, arp_t *a)                      /* from event 1: the chord clock afresh */
 {
     apply_pending(q);
     q->pos = first_pos(q);
     q->playing = 1;
     q->restart = 0;
+    q->chord_acc = 0;
+    q->chord_clk = 0;
     sound_event(q, a);
 }
 
-static void next_event(seq_t *q, arp_t *a)
+static void next_event(seq_t *q, arp_t *a)                 /* a boundary: the chord clock's remainder is carried */
 {
     advance(q);
     apply_pending(q);
+    q->chord_clk = 0;
     sound_event(q, a);
 }
 
@@ -152,6 +153,7 @@ void seq_stop(seq_t *q, arp_t *a)
     q->armed = 0;
     q->paused = 0;
     q->restart = 0;
+    apply_pending(q);                                      /* a change queued while playing is current now */
 }
 
 void seq_all_notes_off(seq_t *q, arp_t *a)
@@ -206,7 +208,6 @@ int seq_tick(seq_t *q, arp_t *a)
             q->playing = 0;
             q->paused = 0;
             q->restart = 0;
-            q->clk = 0;
         }
         return 0;
     }
@@ -231,6 +232,7 @@ int seq_tick(seq_t *q, arp_t *a)
     if (q->style == SEQ_ARPEGGIATED && !q->restart && !set) {   /* the chord clock: beats x tempo, remainder carried */
         q->chord_acc += a->bpm;
         if (q->chord_acc >= chord_target_ticks(q)) {
+            q->chord_acc -= chord_target_ticks(q);
             next_event(q, a);                              /* cuts an arp step in progress */
             set = 1;
         }
@@ -238,21 +240,21 @@ int seq_tick(seq_t *q, arp_t *a)
     return set;
 }
 
-/* an accepted clock (the arp counts it after us): the grid is counted from Start, a step
- * (or swing pair) every sc clocks, the gate half-way through the event's last step */
+/* an accepted clock (the arp counts it after us, so a->clocks is this clock's index on the
+ * grid counted from Start — kept while the sequencer is disarmed): a step (or swing pair)
+ * every sc clocks, the gate half-way through the event's last step */
 static void on_clock(seq_t *q, arp_t *a)
 {
     unsigned sc = seq_step_clocks(q), lng = q->swing ? sc / 3 * 2 : sc, m;
     q->loss = 0;
     if (!q->armed || q->paused)
         return;
-    m = q->clk % sc;
+    m = a->clocks % sc;
     if (!q->playing || q->restart) {                       /* waiting for the grid */
         if (m == 0) {
             silence(q, a);
             begin(q, a);
         }
-        q->clk++;
         return;
     }
     if (q->style == SEQ_CHORDS) {
@@ -263,7 +265,6 @@ static void on_clock(seq_t *q, arp_t *a)
     } else if (++q->chord_clk >= chord_target_clocks(q)) {
         next_event(q, a);                                  /* on the beat grid, whatever the note value */
     }
-    q->clk++;
 }
 
 void seq_realtime(seq_t *q, arp_t *a, int byte)
@@ -274,25 +275,19 @@ void seq_realtime(seq_t *q, arp_t *a, int byte)
         break;
     case 0xFA:                                             /* Start: event 1 on the next clock */
         silence(q, a);
-        q->clk = 0;
         q->paused = 0;
         q->playing = 0;
         q->restart = 0;
         break;
-    case 0xFB:                                             /* Continue: position, phase and remaining duration kept */
-        if (q->paused) {
-            q->paused = 0;
-            if (q->playing && q->style == SEQ_ARPEGGIATED) {
-                uint32_t keep = q->chord_clk;              /* the chord resumes; its clock count is kept */
-                sound_event(q, a);
-                q->chord_clk = keep;
-            }
-        }
+    case 0xFB:                                             /* Continue: position, phase and remaining duration kept
+                                                              (the arp keeps its chord source and pattern position too) */
+        q->paused = 0;
         break;
-    case 0xFC:                                             /* Stop: pause */
+    case 0xFC:                                             /* Stop: pause — the generated notes go, the arp keeps its
+                                                              chord source (its own Stop releases its note) */
         if (q->armed) {
             q->paused = 1;
-            silence(q, a);
+            gen_release(q);
         }
         break;
     default:
@@ -339,6 +334,7 @@ void seq_set_beats(seq_t *q, int num, int den)
         q->pend_den = (uint8_t)den;
         return;
     }
+    q->pend = 0;
     q->beats_num = (uint8_t)num;
     q->beats_den = (uint8_t)den;
 }
@@ -351,6 +347,7 @@ void seq_set_swing(seq_t *q, int on)
         q->pend_swing = (uint8_t)on;
         return;
     }
+    q->pend = 0;
     if (on != q->swing) {
         q->swing = (uint8_t)on;
         q->swing_short = 0;

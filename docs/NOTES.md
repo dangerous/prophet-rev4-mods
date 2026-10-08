@@ -97,6 +97,10 @@ behavioural source of truth; this file is the engineering context around it.
   **HOLD sustains the sequence's chords**: the voice engine's own hold flag decides, the
   per-note "off" answer at the hold query is inert. David: good enough to publish as is.
   The other run-through steps passed by exception.
+- 2026-10-08, **2.0.2** (`seq-review-fixes`): four review findings in `seq.c` — arming off the
+  grid, Continue resetting the arpeggio, a stale pending note value, chord-clock drift —
+  each with a regression test; unflashed (MIDI-sync paths and a 137 BPM drift that the panel
+  run-through could not reach).
 - 2026-10-08, **2.0.1** (`seq-hold-sustain`, image `5c262af7`): the HOLD fix — *suspended*
   += "SEq selected and running" (the DSP hold flag goes off as for the arp), live notes
   sustained in the engine (`arp_set_sustain`), spec 4a rewritten, 28 more harness checks.
@@ -223,9 +227,11 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
   set *on* a tick/clock is the arp's step for it (`seq_tick` returns 1 → the glue skips
   `arp_tick`; `arp_rt_apply` skips the step when `chord_clk == 0`), otherwise the old chord
   stepped once more at every boundary (one extra note per chord) or the first step came a
-  tick early. Under `Syn`: `armed` (A440 start, waiting for `clk % sc == 0`), `paused`
-  (FC; FB resumes, FA → event 1), own `loss` counter; the arp owns the port lock
-  (`arp_rt_accept`). The UI re-applies the arp's own note value in `ui_enable(on)` because
+  tick early. Under `Syn`: `armed` (A440 start, waiting for `a->clocks % sc == 0` — the arp's clock
+  count is the grid, counted whether or not the sequencer is armed; 2.0.2), `paused` (FC;
+  FB resumes, FA → event 1), own `loss` counter; the arp owns the port lock
+  (`arp_rt_accept`). `seq_stop` resolves a pending note value; `begin` zeroes the chord
+  clock, `next_event` only its clock count so the internal remainder carries (2.0.2). The UI re-applies the arp's own note value in `ui_enable(on)` because
   the Arpeggiated style sets the arp's beats to the seq's.
 - Live sustain (spec 4a): *suspended* now includes "SEq selected and running", so the DSP
   hold flag is off while the sequence plays (as for the arp) and generated notes release at
@@ -306,8 +312,9 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
 - Decisions made while implementing 2.0.0, folded into the spec: selecting `SEq` with
   nothing recorded is refused (`---`, `ArP` stays) rather than selecting an empty generator;
   A440 + Program 6 with the arp running leaves the arp running; a clock-source change
-  restarts a running sequence; MIDI Continue in the Arpeggiated style re-sets the current
-  chord at the Continue (its first note sounds then, the chord clock continues).
+  restarts a running sequence. (A first version re-set the chord on MIDI Continue; that
+  contradicted rule 6 and went in 2.0.2 — the arp keeps its chord source and position across
+  Stop/Continue by itself.)
 - Per-program sequence storage (as the Prophet-6): the 29 spare flash bytes above would
   hold a pitch-only mono sequence, not 64 chord steps with velocity; a SysEx dump/restore of
   the sequence is the realistic alternative.

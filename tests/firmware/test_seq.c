@@ -425,6 +425,75 @@ static void test_clock_loss_releases_and_recovery_restarts_an_armed_sequence(voi
     CHECK(on_note(n_on() - 1) == C4);
 }
 
+/* ---- review findings 2026-10-08 (regressions) ------------------------------------------- */
+static void test_arming_under_midi_clock_waits_for_the_grids_next_step(void) {
+    reset(); record_four();
+    arp_set_ext(&a, 1);
+    rt(0xFA);
+    clocks(5);                                                         /* the DAW runs: clocks 0..4 */
+    seq_start(&q, &a);                                                 /* armed mid-grid */
+    clocks(7);                                                         /* clocks 5..11: not a boundary */
+    CHECK(n_on() == 0 && q.armed && !q.playing);
+    clocks(1);                                                         /* clock 12: the next eighth */
+    CHECK(n_on() == 1 && on_note(0) == C4 && q.playing);
+    clocks(12);
+    CHECK(n_on() == 3 && sounding[E4]);                                /* clock 24: the chord, on the grid */
+    seq_stop(&q, &a);
+    clocks(5);                                                         /* clocks 37..41 while stopped */
+    seq_start(&q, &a);
+    clocks(6);                                                         /* 42..47 */
+    CHECK(n_on() == 3);
+    clocks(1);                                                         /* 48 */
+    CHECK(n_on() == 4 && on_note(3) == C4);
+}
+
+static void test_midi_continue_resumes_the_arpeggio_where_it_stopped(void) {
+    reset(); record_two_chords();
+    seq_set_style(&q, &a, SEQ_ARPEGGIATED);
+    arp_set_ext(&a, 1);
+    seq_start(&q, &a); rt(0xFA);
+    clocks(25);                                                        /* clock 0 C, 12 E, 24 G */
+    CHECK(n_on() == 3 && on_note(2) == 67);
+    rt(0xFC);                                                          /* Stop on the G */
+    CHECK(n_sounding() == 0);
+    clocks(40);
+    rt(0xFB);                                                          /* Continue: nothing retriggers ... */
+    CHECK(n_on() == 3 && n_sounding() == 0);
+    clocks(11);                                                        /* ... the step in progress runs out (11 clocks were left) */
+    CHECK(n_on() == 3);
+    clocks(1);
+    CHECK(n_on() == 4 && on_note(3) == C4);                            /* then the pattern goes on: C after G */
+    clocks(59);
+    CHECK(n_on() == 8);                                                /* E G C E */
+    clocks(1);                                                         /* 96 counted clocks since the chord began */
+    CHECK(n_on() == 9 && on_note(8) == F4);                            /* the next chord, its remaining duration kept */
+}
+
+static void test_a_note_value_queued_while_playing_does_not_outlive_a_stop(void) {
+    reset(); record_four();
+    seq_start(&q, &a); ticks(100);
+    seq_set_beats(&q, 1, 1);                                           /* quarters, pending */
+    seq_set_swing(&q, 1);
+    CHECK(q.beats_den == 2 && !q.swing);                               /* still 8ths until the next event */
+    seq_stop(&q, &a);
+    CHECK(q.beats_num == 1 && q.beats_den == 1 && q.swing);            /* the stop resolves what was queued */
+    seq_set_beats(&q, 1, 4);                                           /* sixteenths, chosen while stopped */
+    seq_set_swing(&q, 0);
+    play(); ticks(125);
+    CHECK(q.beats_den == 4 && !q.swing);                               /* the newer choice stands */
+    CHECK(n_on() == 3 && on_tick(1) == 125);                           /* 16ths: the chord at 125 ms */
+}
+
+static void test_arpeggiated_chord_boundaries_carry_the_remainder(void) {
+    reset(); record_two_chords();
+    seq_set_style(&q, &a, SEQ_ARPEGGIATED); seq_set_chord_beats(&q, 1);   /* a beat per chord */
+    seq_set_beats(&q, 4, 1);                                           /* one arp note per chord */
+    arp_set_bpm(&a, 137);                                              /* 437.96 ms per beat: a remainder every time */
+    play(); ticks(60000);                                              /* a minute = 137 beats exactly */
+    CHECK(n_on() == 138 && on_tick(137) == 60000);                     /* the 137th boundary on the minute, not 6 ms late */
+    CHECK(on_tick(1) == 438 && on_tick(2) == 876);                     /* 437.96 rounded up, then carried */
+}
+
 /* ---- clear, all notes off, record mode and transport ---------------------------------- */
 static void test_recording_stops_playback_and_ends_stopped(void) {
     reset(); record_four();
@@ -472,6 +541,10 @@ int main(void) {
     test_midi_continue_resumes_the_remaining_duration();
     test_midi_clock_arpeggiated_chord_boundaries_on_the_grid();
     test_clock_loss_releases_and_recovery_restarts_an_armed_sequence();
+    test_arming_under_midi_clock_waits_for_the_grids_next_step();
+    test_midi_continue_resumes_the_arpeggio_where_it_stopped();
+    test_a_note_value_queued_while_playing_does_not_outlive_a_stop();
+    test_arpeggiated_chord_boundaries_carry_the_remainder();
     test_recording_stops_playback_and_ends_stopped();
     test_clear_and_all_notes_off();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);

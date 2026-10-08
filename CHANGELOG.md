@@ -4,6 +4,21 @@ Versions of the patch as published through the patcher — the `VERSION` file, t
 name (`prophet5_main_2.1.0_patched_<version>.syx`) and `site/version.json`. Each entry names
 the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
 
+## 2.0.2 — 2026-10-08
+
+Four sequencer timing fixes from a code review (host-tested; none of them was reachable in
+the panel run-through — three are MIDI-sync paths, one needs an odd tempo).
+
+### Fixed
+- Under MIDI sync, arming the sequencer while the DAW was already running started it on
+  the next clock instead of the next step of the grid.
+- MIDI Continue restarted the current chord's arpeggio from its first note; it now carries
+  on where Stop left it.
+- A note value (or swing) chosen while the sequence played, then stopping and choosing
+  another, brought the first one back on the next start.
+- Arpeggiated chord changes under the internal clock dropped the timing remainder at each
+  boundary (6 ms a minute at 137 BPM); the remainder is carried, as the spec says.
+
 ## 2.0.1 — 2026-10-08
 
 ### Fixed

@@ -47,8 +47,7 @@ typedef struct {
     uint8_t  gate_open;
     uint8_t  snd_n;
     uint8_t  snd[SEQ_CHORD];          /* Chords: the generated notes sounding */
-    uint32_t acc;                     /* internal step clock, as the arp's */
-    uint32_t clk;                     /* MIDI: clocks since Start (the step grid) */
+    uint32_t acc;                     /* internal step clock, as the arp's; the MIDI step grid is the arp's clock count */
     uint32_t chord_acc;               /* Arpeggiated, internal: bpm per tick, a boundary at 60000 x beats x dur */
     uint32_t chord_clk;               /* Arpeggiated, MIDI: clocks since the chord began */
     uint16_t loss;                    /* ticks since the last MIDI clock */
