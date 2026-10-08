@@ -129,10 +129,11 @@ The third caller, `0x2003704E`, is the load path initialising an erased record. 
   Service tick. Read with **`0x2003E2F8`** from the program-loaded hook (same task, so our
   reads never contend with our writes). Both are plain stock entry points of the kind
   `native.c` already lists in `stock_iface[]`.
-- Before any write, a **read-only check on the instrument**: a diagnostic build that
-  (a) reads `0x800000…` and compares it with `0x000000…` — an 8 MB part aliases (identical
-  bytes), a 16 MB part shows different data or `0xFF`; and (b) scans both candidate areas for
-  anything other than `0xFF`; result on the display or over MIDI. Nothing is written.
+- Before any write, a **read-only check on the instrument**: the "Flash diagnostic" (spec;
+  A440 + Sync, in 2.1.0) compares two reference blocks with the blocks 8 MB higher — an 8 MB
+  part aliases (identical bytes), a 16 MB part reads `0xFF` there — and scans both candidate
+  areas for anything other than `0xFF`; results on the display. Nothing is written.
+  **Readings: not yet taken.**
 - Unknowns: what the bootloader touches beyond the headers and slots; whether a future
   Sequential OS claims `0x511000+` (it looks like growth room for programs/tunings); the chip
   part number (readable on the board).

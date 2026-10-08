@@ -4,6 +4,16 @@ Versions of the patch as published through the patcher — the `VERSION` file, t
 name (`prophet5_main_2.1.0_patched_<version>.syx`) and `site/version.json`. Each entry names
 the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
 
+## 2.1.0 — 2026-10-08
+
+### Added
+- **Flash diagnostic (read-only)**: A440 + Sync (Osc A Sync) reads the serial flash to
+  find the chip's size and whether the two areas the stock OS never references are blank —
+  the groundwork for saving sequences with programs. `FLA` while it runs (about 3 s on an
+  8 MB part, 20 s on 16 MB; everything keeps working), then three results of 1.5 s each:
+  `F 8` / `F16` / `F -` (size), `1 E` / `1 U` (area 1 empty / used), `2 E` / `2 U` (area 2).
+  Nothing is written; the image test asserts the engine holds no flash-writing entry.
+
 ## 2.0.2 — 2026-10-08
 
 Four sequencer timing fixes from a code review (host-tested; none of them was reachable in
