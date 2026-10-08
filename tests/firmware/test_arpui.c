@@ -535,10 +535,10 @@ static void test_glide_is_tempo_only_with_a440_held(void) {
     CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0 && a.bpm == 120);
     btn(A440, PRESS);                                                  /* arp off + A440 held: tempo */
     clear_log();
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 1023) == 1 && a.bpm == 300 && last_int() == 300);
+    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 0) == 1 && a.bpm == 40 && last_int() == 40);   /* from 500 (167) down through 120: caught */
     CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 1);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 0);
-    CHECK(a.bpm == 40 && last_int() == 40);
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 1023);
+    CHECK(a.bpm == 300 && last_int() == 300);
     arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 512);
     CHECK(a.bpm == 40 + (260 * 512 + 511) / 1023);
     CHECK(arpui_pot_store(&u, &a, 0x15, 900) == 0);                    /* another pot: stock */
@@ -559,8 +559,8 @@ static void test_glide_is_tempo_only_with_a440_held(void) {
     btn(A440, RELEASE);
     CHECK(a.enabled);                                                  /* no toggle */
     arp_set_ext(&a, 0);
-    btn(A440, PRESS);                                                  /* int again: tempo */
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 100) == 1 && a.bpm == 40 + (260 * 100 + 511) / 1023);
+    btn(A440, PRESS);                                                  /* int again: tempo (the knob sits at 100 = 65, the tempo is 170) */
+    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 600) == 1 && a.bpm == 40 + (260 * 600 + 511) / 1023);   /* 65 -> 192 crosses 170: caught */
     btn(A440, RELEASE);
     arp_set_ext(&a, 1);
     CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 600) == 0 && arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0);
@@ -708,6 +708,52 @@ static void test_tap_tempo_consumption_and_scope(void) {
     CHECK(btn(VELOCITY, PRESS) == 0 && btn(VELOCITY, RELEASE) == 0);
     ticks(500);
     CHECK(btn(VELOCITY, PRESS) == 0 && a.bpm == 120 && count_type(EV_D3) == 0 && count_type(EV_INT) == 0);
+}
+
+/* ---- tempo pickup: the knob catches the tempo instead of jumping to it ----------------- */
+static int raw_bpm(int raw) { return 40 + (260 * raw + 511) / 1023; }
+
+static void test_glide_picks_the_tempo_up_instead_of_jumping(void) {
+    reset();                                                           /* 120 BPM */
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 900);                     /* A440 up: glide — but the knob is known to sit at 900 (269) */
+    btn(A440, PRESS);
+    clear_log();
+    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 800) == 1 && a.bpm == 120 && last_int() == 120);   /* above the tempo: inert, the target shown */
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 400);                     /* 141: still above */
+    CHECK(a.bpm == 120 && last_int() == 120);
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 300);                     /* 116: crossed 120 on the way down */
+    CHECK(a.bpm == raw_bpm(300) && last_int() == a.bpm);
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 600);                     /* caught: it follows */
+    CHECK(a.bpm == raw_bpm(600));
+    CHECK(btn(A440, RELEASE) == 1 && !a.enabled);                      /* used the hold */
+    btn(A440, PRESS);                                                  /* a new hold with the knob where the tempo is: live at once */
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 700);
+    CHECK(a.bpm == raw_bpm(700));
+    tap(); ticks(1000); tap();                                         /* a tap series sets 60: the knob (700 = 218) is far away again */
+    CHECK(a.bpm == 60);
+    clear_log();
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 650);                     /* 205: inert, re-armed by the tap */
+    CHECK(a.bpm == 60 && last_int() == 60);
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 80);                      /* exactly 60: reached */
+    CHECK(a.bpm == 60);
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 200);                     /* follows */
+    CHECK(a.bpm == raw_bpm(200));
+    btn(A440, RELEASE);
+    arp_set_bpm(&a, 150);                                              /* the tempo changed elsewhere between holds */
+    btn(A440, PRESS);
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 250);                     /* 104, from 200 (90): below, inert */
+    CHECK(a.bpm == 150);
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 500);                     /* 167: crossed from below */
+    CHECK(a.bpm == raw_bpm(500));
+    btn(A440, RELEASE);
+    arpui_init(&u); arp_init(&a); seq_init(&q); clear_log();           /* power-up: the knob's position is unknown ... */
+    ticks(ARPUI_BOOT_TICKS);
+    btn(A440, PRESS);
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 700);                     /* ... so the first report alone decides: 218 is not 120 */
+    CHECK(a.bpm == 120);
+    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 200);                     /* 90: crossed */
+    CHECK(a.bpm == raw_bpm(200));
+    btn(A440, RELEASE);
 }
 
 /* ---- display revert and LED ---------------------------------------------------------- */
@@ -1358,6 +1404,7 @@ int main(void) {
     test_tap_tempo_consumption_and_scope();
     test_globals_menu_open_passes_everything();
     test_glide_is_tempo_only_with_a440_held();
+    test_glide_picks_the_tempo_up_instead_of_jumping();
     test_messages_revert_to_patch_display_after_1500_ticks();
     test_led_follows_enabled_only_when_it_changes();
     test_a440_held_at_power_on_disables_everything();

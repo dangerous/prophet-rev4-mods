@@ -39,6 +39,7 @@
 #define ARPUI_OCT_MAX 80
 #define ARPUI_BOOT_TICKS 3000       /* kill-switch window after power-on (3 s; the panel link comes up late) */
 #define ARPUI_MIDDLE_C 60           /* the transposition command's zero (the key's number before the octave shift) */
+#define ARPUI_RAW_NONE 0xFFFF       /* the glide pot has not reported since power-on */
 
 enum { ARPUI_GEN_ARP = 0, ARPUI_GEN_SEQ = 1 };
 
@@ -65,6 +66,9 @@ typedef struct {
     uint8_t  tone_pending;            /* A440 + HOLD pressed with the generator stopped: toggle the tone on HOLD's release */
     uint8_t  led_fix;                 /* ms until the LED is asserted again after a replayed A440 press */
     uint8_t  hold_arp, hold_stock;    /* the two HOLD latches: the one not in use is remembered here */
+    uint8_t  tempo_caught;            /* this A440 hold: the glide knob has reached the tempo and sets it */
+    uint8_t  pad;
+    uint16_t glide_raw;               /* the glide pot's last raw value, tempo or glide (ARPUI_RAW_NONE: unknown) */
 } arpui_t;
 
 void arpui_init(arpui_t *u);

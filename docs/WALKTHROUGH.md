@@ -25,8 +25,10 @@ isn't already. "A440 + X" always means: hold A440 down, press X, let go of both.
 
 ## 2. Tempo and note values
 
-6. Arp on, chord held. **Hold A440 and turn Glide Rate**: the display follows the tempo,
-   40–300 BPM. (Glide Rate on its own is still glide, even with the arp running.)
+6. Arp on, chord held. **Hold A440 and turn Glide Rate**: at first nothing happens — the
+   display shows `120`, the tempo to reach — then as the knob passes 120 the tempo follows
+   it, 40–300 BPM. The knob picks the tempo up like that at every A440 hold, so it never
+   lurches. (Glide Rate on its own is still glide, even with the arp running.)
 7. **Hold A440 and tap Velocity** in time: `tAP` on the first tap, then the tempo you tapped
    from the second on. Four taps settle it.
 8. **A440 + Program 8**: `8S` — eighth-note swing. Again: `8t` (triplets), `16`, `16S`,

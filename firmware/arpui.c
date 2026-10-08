@@ -47,6 +47,7 @@ void arpui_init(arpui_t *u)
     rate_init(&u->seq_rate);
     disp_init(&u->disp);
     u->cmd_key = ARP_NONE;
+    u->glide_raw = ARPUI_RAW_NONE;
 }
 
 /* --- display ---------------------------------------------------------------------------- */
@@ -311,6 +312,7 @@ static void tempo_tap(arpui_t *u, arp_t *a)
     if (bpm < 40) bpm = 40;
     if (bpm > 300) bpm = 300;
     arp_set_bpm(a, bpm);
+    u->tempo_caught = 0;                                   /* the knob is no longer where the tempo is */
     show_int(u, a->bpm);
 }
 
@@ -450,6 +452,7 @@ int arpui_button(arpui_t *u, arp_t *a, seq_t *q, int id, int value)
             u->a440_seen = 1;                              /* a real press: not held from power-on */
             u->a440_held = 1;
             u->a440_used = 0;
+            u->tempo_caught = 0;                           /* the glide knob has to pick the tempo up again */
         } else if (value == UI_RELEASE && u->a440_held) {
             end_hold(u);
             if (!u->a440_used)
@@ -578,8 +581,20 @@ static int glide_is_tempo(const arpui_t *u, int pot)
     return pot == ARPUI_POT_GLIDE && !u->kill && u->a440_held;
 }
 
+static int raw_bpm(int raw)                                /* the tempo a knob position maps to */
+{
+    return 40 + (260 * raw + 511) / 1023;
+}
+
 int arpui_pot_store(arpui_t *u, arp_t *a, int pot, int raw)
 {
+    int prev = ARPUI_RAW_NONE, cur;
+    if (raw < 0) raw = 0;
+    if (raw > 1023) raw = 1023;
+    if (pot == ARPUI_POT_GLIDE && !u->kill) {              /* remember where the knob is, tempo or glide */
+        prev = u->glide_raw;
+        u->glide_raw = (uint16_t)raw;
+    }
     if (!glide_is_tempo(u, pot))
         return 0;
     u->a440_used = 1;                                      /* the pot used the hold: no toggle */
@@ -587,10 +602,15 @@ int arpui_pot_store(arpui_t *u, arp_t *a, int pot, int raw)
         show_clock(u, a);
         return 1;
     }
-    if (raw < 0) raw = 0;
-    if (raw > 1023) raw = 1023;
-    arp_set_bpm(a, 40 + (260 * raw + 511) / 1023);
-    show_int(u, a->bpm);
+    cur = raw_bpm(raw);
+    if (!u->tempo_caught) {                                /* pickup: inert until the knob reaches or crosses the tempo */
+        int from = prev == ARPUI_RAW_NONE ? cur : raw_bpm(prev);
+        if ((from <= a->bpm && a->bpm <= cur) || (cur <= a->bpm && a->bpm <= from))
+            u->tempo_caught = 1;
+    }
+    if (u->tempo_caught)
+        arp_set_bpm(a, cur);
+    show_int(u, a->bpm);                                   /* the tempo — the target while the knob is inert */
     return 1;
 }
 
