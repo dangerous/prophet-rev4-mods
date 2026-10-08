@@ -269,7 +269,7 @@ Transport and generators:
 
 - [ ] Back up patches first anyway (Globals → Pgm Dump → ALL → RECORD): the run only reads,
       but this is the first time the engine touches the flash driver at all.
-- [ ] Hold A440, press Sync (Osc A Sync): `FLA` appears and stays up for about 2 s (10 s on a 16 MB
+- [ ] Hold A440, press Sync (Osc A Sync): `FLA` appears and stays up for about 3 s (20 s on a 16 MB
       part), then three results of 1.5 s each — `F 8`/`F16`/`F -`, `1 E`/`1 U`, `2 E`/`2 U` —
       then the patch number. Note all three in `docs/re/flash.md` and the spec marker. If a
       **number** shows instead of `FLA`, Sync's id is not 24: note the number, nothing else

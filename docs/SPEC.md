@@ -734,15 +734,15 @@ blank. **It only reads.**
    `1 U` (used); area 2 `2 E` or `2 U`; then the stock patch display. A message from any other
    source cancels the rest of the sequence.
 5. **Everything else keeps working** during a run: the arp and seq play, keys, MIDI, buttons
-   and pots behave as specified. A run reads in 1 KB pieces, one per 1 ms tick, through
+   and pots behave as specified. A run reads in 512-byte pieces, one per 1 ms tick, through
    stock's flash read routine (which takes stock's flash mutex, so a run never reads while
-   stock is writing); a whole run takes about 1.7 s on 8 MB and 10 s on 16 MB. The kill switch
-   disables it like everything else.
+   stock is writing); a whole run takes about 3.3 s on 8 MB and 20 s on 16 MB. The kill
+   switch disables it like everything else.
 6. **Never writes.** The engine contains no path to a flash write ("Safety invariants" 8).
 7. Realisation: a portable `flash.c` state machine (`flash_start`, `flash_tick`, result
    codes) driven from the UI's button combo and tick, reading through `plat_flash_read(off,
    dst, len)` = stock `0x2003E2F8(off, dst, len)` (`0` ok, `3` range) — the only new entry in
-   `stock_iface[]`. Two 1 KB buffers in the engine state area. The host harness fakes the
+   `stock_iface[]`. Two 512-byte buffers in the engine state area. The host harness fakes the
    flash as a 16 MB window over a chip of configurable size (aliasing above its size),
    with settable contents for the reference blocks and the two areas.
 
