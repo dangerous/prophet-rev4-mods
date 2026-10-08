@@ -17,6 +17,9 @@ switch — and with design decisions of my own wherever I thought the behaviour 
 differ (the spec marks each one), which is why it is published in its own right. You are
 welcome to fork it and make your own.
 
+New here? The [walkthrough](docs/WALKTHROUGH.md) takes you through every feature at the
+instrument in about twenty minutes; the manual below is the reference.
+
 > **Not affiliated with Sequential.** This is a hobby project that modifies the
 > instrument's firmware. Installing a modified OS is at your own risk and may void your
 > warranty. Only the project's own code, tooling and notes are published here; Sequential's
@@ -210,4 +213,4 @@ and the sequence are global and not saved.
 
 How it is built, tested and laid out: [`docs/DEVELOPING.md`](docs/DEVELOPING.md). The
 behavioural spec is [`docs/SPEC.md`](docs/SPEC.md); what changed in each version,
-[`CHANGELOG.md`](CHANGELOG.md).
+[`CHANGELOG.md`](CHANGELOG.md); a hands-on tour, [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md).
