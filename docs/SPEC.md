@@ -263,7 +263,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
   Random → Assign → Up…, Group the other way; display `UP`, `dn`, `Ud`, `rnd`, `ASS` —
   Assign `[HW: verified 2026-10-07, Prophet-10 Rev4]`); Program 1–4 = 1–4 octaves (`o 1`…`o 4`);
   Program 5 = toggle clock source (`int` / `Syn`); Program 6 = clear sequence; Program 7/8 =
-  note value longer/shorter (− / +, + is faster); Velocity = tempo tap (below) `[HW: verified 2026-10-08, Prophet-10 Rev4 — moved from Unison]`; Tune = seq record mode on/off ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; HOLD = stock tuning tone on/off (arp off; above) `[HW: unverified]`; any other button = id readout. Any of these cancels the toggle
+  note value longer/shorter (− / +, + is faster); Velocity = tempo tap (below) `[HW: verified 2026-10-08, Prophet-10 Rev4 — moved from Unison]`; Tune = seq record mode on/off ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; HOLD = stock tuning tone on/off (arp off; above) `[HW: verified 2026-10-08, Prophet-10 Rev4]`; any other button = id readout. Any of these cancels the toggle
   on A440 release. Held-repeat events (value 3) are ignored. A combo button whose release
   arrives after A440 has been released is still consumed **(change: the Arp Mod leaked the orphan
   release to stock)**.
