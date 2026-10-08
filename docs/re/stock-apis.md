@@ -1,6 +1,6 @@
 # Stock Main OS 2.1.0 — internal APIs an arpeggiator hook needs
 
-Source: `orig.asm` (stock), `hack.asm`/`blob.asm` (V5), `orig_ram.bin` (RAM image, base 0x20010000) for
+Source: `orig.asm` (stock), `hack.asm`/`blob.asm` (the Arp Mod), `orig_ram.bin` (RAM image, base 0x20010000) for
 data tables. Addresses are RAM addresses; Thumb call targets are given even (add 1 for `bx`/pointers).
 Reading literals in objdump output: two decoded halfwords `XXXX YYYY` = word `0xYYYYXXXX`
 (e.g. `aa84 2007` = 0x2007AA84); the data-table addresses below were verified by byte search in `orig_ram.bin`.
@@ -43,7 +43,7 @@ Confidence: **H** = read directly from the code and cross-checked, **M** = one i
 `src` values: **1 = local keyboard** (0x2003BEC2 `movs r0,#1`), **2 = MIDI in** (0x2003B074 `movs r0,#2`) and the
 A440 test tone (0x2003A1E4 `movs r0,#2; movs r1,#0x3c; movs r2,#0x7f`), **0 = internal re-trigger**
 (0x2003EF40 `movs r1,#0`). `src` is forwarded to the allocator 0x2003E828; its downstream effect (velocity
-curve / local-vs-MIDI treatment) was not decoded. V5's output path calls note_on/note_off directly with
+curve / local-vs-MIDI treatment) was not decoded. The Arp Mod's output path calls note_on/note_off directly with
 `src = max(1, src)` (blob 0x20089060: `cmp r1,#1; it ls; movls r0,#1 … bx r12` to 0x2003E95D/0x2003EC5D), which
 is hardware-proven. **M**
 
@@ -90,9 +90,9 @@ two `bl`s at **0x2003BEFA** (expect 0x20033F85) and **0x2003BF16** (expect 0x200
   0x2004E218). **H**
 - Stock A440 LED handling (press, main state 0x2003A1D6): toggle `ui+0x16A`, `0x20036824(0x24, 0)`,
   DSP `0x2003D324(flag | 0x80B0000)`, then `0x20036824(0x24, 1)` if the flag is set. **H**
-- **V5 never calls the LED API**: the blob's only stock references are 0x20037F24, 0x20037FF6, 0x2003EBE4,
+- **The Arp Mod never calls the LED API**: the blob's only stock references are 0x20037F24, 0x20037FF6, 0x2003EBE4,
   0x2003D325, 0x20034343 (plus hook continuations 0x20036B51, 0x2003BC6D, 0x2003E95D, 0x2003EC5D). Any A440 LED
-  effect under V5 comes from stock handling the (replayed) A440 press. **H**
+  effect under the Arp Mod comes from stock handling the (replayed) A440 press. **H**
 
 ## 3. Pots / parameters (incl. Glide Rate)
 
@@ -103,12 +103,12 @@ Path (**H** unless noted):
    `0x20036B5C(pot, hi)`; type 6 = pot low 7 bits → `raw = lo | (hi<<7)` (**10-bit, 0..1023**; pot 1 gets a centre
    dead-zone 0x1DD..0x223 via `0x2003C1D0`).
 2. **`0x20036B50(pot, raw)`** stores raw in the pot table **`0x20079D84`** (16 B/pot, 28 pots: `[+0]` raw, `[+4]` hi<<7,
-   `[+8],[+9]` pass-through flags, `[+0xC]` countdown; **V5 hooks this `bl` at 0x2003C292**).
+   `[+8],[+9]` pass-through flags, `[+0xC]` countdown; **The Arp Mod hooks this `bl` at 0x2003C292**).
 3. Mapped value `0x20036C70(pot, raw) = (raw * (max+1)) >> 10`; `max = 0x20036C44(pot)` → param max from the
    **param table `0x2004C478`** (12 B/param: `[+0]` max, `[+2]` default; readers `0x2002F16C(param)`,
    `0x2002F17C(param)`).
 4. If the mapped value changed (or force byte `0x2005754A` is set): **`0x2003BC6C(pot, old_mapped, new_mapped)`**
-   posts POT (sig 6) to the UI AO (**V5 hooks this `bl` at 0x2003C2A6**).
+   posts POT (sig 6) to the UI AO (**The Arp Mod hooks this `bl` at 0x2003C2A6**).
 5. UI main-state POT handler `0x2003AC1A`: pot 0 = volume (`0x20038778(0, val)`; layer volumes 0x58/0x60 while
    button 0x23 is held), pot 1 = master tune → DSP `0x8010000 | val`; otherwise `param = POT2PARAM[pot]`,
    pot mode = `get_global(8)` (0 relative → `0x2003CF7C` with delta, 1 pass-through → `0x20036BB8` crossing check,
@@ -127,7 +127,7 @@ Path (**H** unless noted):
 [25]=0x16, [26]=0x15, [27]=0x1A`.
 
 **Glide Rate = pot id 0x16 (22) → param 0x0D (13), value range 0..127 (max-table entry 13 = 127, default 0);
-NRPN 26 maps to it (NRPN→param table `0x2004C91C`).** Confirmed by V5 itself: its hook at 0x2003C292
+NRPN 26 maps to it (NRPN→param table `0x2004C91C`).** Confirmed by the Arp Mod itself: its hook at 0x2003C292
 (blob 0x20088F90) does `sub.w r3,r5,#0x16; clz r3; lsrs r3,#5` (pot == 0x16) `&& engine.enabled` → enqueues a
 tempo event carrying the raw value and skips the stock store; its hook at 0x2003C2A6 (blob 0x20089010) swallows
 the POT post for pot 0x16 when enabled, else `bx 0x2003bc6d`. **H**
@@ -139,7 +139,7 @@ How a hook consumes Glide while the arp is on and lets it through otherwise:
   runs in the Panel Timer thread (not the UI thread). Because the stock raw/old value keeps tracking the knob,
   when the arp is switched off the next knob move behaves per the pot-mode global as if the knob had always
   been live. (Recommended.)
-- Optionally also hook **0x2003C292** (`bl 0x20036b50`) as V5 did, to see every raw step (finer than 0..127).
+- Optionally also hook **0x2003C292** (`bl 0x20036b50`) as the Arp Mod did, to see every raw step (finer than 0..127).
   Then the stock "previous" value is frozen while the arp is on, and the first move after arp-off yields one POT
   event with a possibly large delta (relative mode) or an immediate jump (jump mode).
 - Show the tempo with `0x20037FF6(bpm)` + `0x20036B14(1)` + `0x2003C940()` (see §7).
@@ -176,7 +176,7 @@ idx 6 → all notes off, idx 9 → hold off), `0x20037B2C()` MIDI channel. Globa
   - else toggle tone flag `ui+0x16A`, LED 0x24 off, `0x2003D324(flag | 0x80B0000)` (DSP reference tone on/off),
     LED 0x24 on if the flag is set. Release/held events → super → ignored. TUNE press (0x2003A170) switches the
     tone off. **H**
-  - To replace it: hook the button poster site 0x2003C244 (as V5 does), swallow id 0x0F presses, and to get stock
+  - To replace it: hook the button poster site 0x2003C244 (as the Arp Mod does), swallow id 0x0F presses, and to get stock
     behaviour replay `(0x0F, 1)`; releases are no-ops in stock.
 - Button state table **`0x20079B20`**, 4 bytes/button: `u16 held, u16 used`. Gate `0x20036114(id, value)`:
   press → held=1, used=0, pass; held(3) → pass while `used==0`; release → pass if `used==0`, then `used=1`
@@ -206,7 +206,7 @@ idx 6 → all notes off, idx 9 → hold off), `0x20037B2C()` MIDI channel. Globa
   "Note Handler Event Timer". Timers expire in the **timer thread** `0x200311F8` → `0x20031178`
   (`ldr r3,[r4,#0x24]; mov r0,r4; blx r3`, re-armed with `[r4+0x18]` = period when `[r4+0x1C] == 1`), which blocks on
   a queue receive with timeout (`0x2002FBC8`). The hardware tick period was not read from peripheral registers;
-  1 tick = 1 ms is inferred from the timer names/periods (1, 4, 6) and from V5 running its engine at 1000 ticks/s
+  1 tick = 1 ms is inferred from the timer names/periods (1, 4, 6) and from the Arp Mod running its engine at 1000 ticks/s
   with hardware-correct BPM. **M-H**
 - Stock millisecond counter: `*(u32*)0x20054050` (`0x20030720`: `ldr r2,[r3]; adds r2,#1; str r2,[r3]`, once per
   tick from the timer thread; read by `0x20030730()`). `0x20030938(ms)` = sleep (0 → `svc #0` yield). **H**
@@ -216,7 +216,7 @@ idx 6 → all notes off, idx 9 → hold off), `0x20037B2C()` MIDI channel. Globa
   port passed as an argument) posts MIDI (`0x2003BD5C`, sig 0xB); the handlers at 0x2003B018.. (note on/off
   0x2003B032 / 0x2003B07A, CC123 0x2003B294, PC 0x2003B2C6, CC64 0x2003B218) therefore run in the UI thread.
   **Local-key note_on (timer thread) and MIDI note_on (UI thread) are concurrent** → a hook needs a critical
-  section around shared state (V5 wraps its queue with `cpsid i`/`cpsie i`, blob 0x20088FA2). **H**
+  section around shared state (the Arp Mod wraps its queue with `cpsid i`/`cpsie i`, blob 0x20088FA2). **H**
 - Panel Timer (6 ms) duties: panel SPI exchange, button/pot decode and posting, LED/display flush, display-timeout
   countdown, GROUP/BANK repeat synthesis. **H**
 
@@ -237,7 +237,7 @@ idx 6 → all notes off, idx 9 → hold off), `0x20037B2C()` MIDI channel. Globa
 
 - **`0x20039688(state, src)`**: `src 0` = HOLD button latch `ui+0x19C`, `src 1` = sustain pedal `ui+0x19D`;
   effective hold = pedal || button (`0x2003968c: ldrb r2,[r3,#0x19d]; cbnz; ldrb r2,[r3,#0x19c]`). On change:
-  **DSP `0x2003D324(new | 0x80D0000)`** (the `bl` at 0x200396CA that V5 hooks; `r4` = new state), if new == 0 →
+  **DSP `0x2003D324(new | 0x80D0000)`** (the `bl` at 0x200396CA that the Arp Mod hooks; `r4` = new state), if new == 0 →
   `0x2003EEE0()`, then LED 0x23 off / on. `0x2003B694()` returns the effective hold state; `0x2003B6B0()` clears
   both sources when global 9 == HLd. **H**
 - Sources: HOLD button id 0x0E (main state 0x20039D90: `get_global(9) == 1` → `hold(!ui+0x19C, 0)`, else toggles

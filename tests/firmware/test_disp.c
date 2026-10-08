@@ -41,10 +41,25 @@ static void test_new_message_restarts_the_timer(void) {
     CHECK(disp_tick(&d) == 1);
 }
 
+static void test_flash_reverts_after_250_ticks(void) {
+    disp_t d; disp_init(&d);
+    disp_flash(&d);
+    CHECK(disp_active(&d));
+    CHECK(run(&d, DISP_FLASH_TICKS - 1) == 0);
+    CHECK(disp_tick(&d) == 1);                       /* exactly at 0.5 s */
+    CHECK(!disp_active(&d) && run(&d, 3000) == 0);
+    CHECK(DISP_FLASH_TICKS == 250);                  /* a quarter second: readable, snappy */
+    disp_touch(&d); run(&d, 100); disp_flash(&d);    /* a flash after a message restarts the timer short */
+    CHECK(run(&d, DISP_FLASH_TICKS - 1) == 0 && disp_tick(&d) == 1);
+    disp_flash(&d); run(&d, 100); disp_touch(&d);    /* a message after a flash: the full 1.5 s */
+    CHECK(run(&d, DISP_TICKS - 1) == 0 && disp_tick(&d) == 1);
+}
+
 int main(void) {
     test_zero_state_is_idle_and_fits();
     test_message_reverts_once_after_1500_ticks();
     test_new_message_restarts_the_timer();
+    test_flash_reverts_after_250_ticks();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;
 }

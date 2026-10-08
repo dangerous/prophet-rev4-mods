@@ -1,7 +1,7 @@
 #include "oct.h"
 #include "platform.h"
 
-enum { OB_MOD = OCT_MOD_ID, OB_BANK = 0x28, OB_GROUP = 0x20, OB_PRESS = 1, OB_RELEASE = 2 };
+enum { OB_MOD = OCT_MOD_ID, OB_BANK = 0x28, OB_GROUP = 0x20, OB_PRESS = 1, OB_RELEASE = 2, OB_REPEAT = 3 };
 #define OCT_MAX 2
 #define KEY_DROPPED 0x7F
 
@@ -30,6 +30,9 @@ int oct_button(oct_t *o, int id, int value)
             o->mod_held = 1;
             o->used = 0;
             o->bank_down = o->group_down = 0;
+        } else if (value == OB_REPEAT && o->mod_held) {
+            o->used = 1;                    /* held, not tapped: no replay on release ... */
+            show(o);                        /* ... and the current shift, changed or not */
         } else if (value == OB_RELEASE) {
             int tap = o->mod_held && !o->used;
             o->mod_held = 0;

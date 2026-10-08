@@ -2,7 +2,7 @@ PYTHON ?= python3
 CC ?= cc
 BUILD := build
 
-.PHONY: test test-tooling test-firmware test-image image image-native clean
+.PHONY: test test-tooling test-firmware test-image image image-native manifest clean
 
 test: test-tooling test-firmware test-image
 
@@ -11,12 +11,13 @@ test-tooling:
 
 # Host-side harnesses for the engine's portable logic.
 test-firmware: $(BUILD)/test_rate $(BUILD)/test_oct $(BUILD)/test_vhold $(BUILD)/test_disp \
-               $(BUILD)/test_arp $(BUILD)/test_arpui
+               $(BUILD)/test_arp $(BUILD)/test_seq $(BUILD)/test_arpui
 	$(BUILD)/test_rate
 	$(BUILD)/test_oct
 	$(BUILD)/test_vhold
 	$(BUILD)/test_disp
 	$(BUILD)/test_arp
+	$(BUILD)/test_seq
 	$(BUILD)/test_arpui
 
 HOSTCC := $(CC) -std=c11 -Wall -Wextra -Werror -Ifirmware
@@ -41,10 +42,14 @@ $(BUILD)/test_arp: tests/firmware/test_arp.c firmware/arp.c firmware/arp.h firmw
 	@mkdir -p $(BUILD)
 	$(HOSTCC) -o $@ tests/firmware/test_arp.c firmware/arp.c
 
-$(BUILD)/test_arpui: tests/firmware/test_arpui.c firmware/arpui.c firmware/arpui.h firmware/arp.c \
+$(BUILD)/test_seq: tests/firmware/test_seq.c firmware/seq.c firmware/seq.h firmware/arp.c firmware/arp.h firmware/platform.h
+	@mkdir -p $(BUILD)
+	$(HOSTCC) -o $@ tests/firmware/test_seq.c firmware/seq.c firmware/arp.c
+
+$(BUILD)/test_arpui: tests/firmware/test_arpui.c firmware/arpui.c firmware/arpui.h firmware/arp.c firmware/seq.c \
                      firmware/rate.c firmware/disp.c firmware/platform.h
 	@mkdir -p $(BUILD)
-	$(HOSTCC) -o $@ tests/firmware/test_arpui.c firmware/arpui.c firmware/arp.c firmware/rate.c firmware/disp.c
+	$(HOSTCC) -o $@ tests/firmware/test_arpui.c firmware/arpui.c firmware/arp.c firmware/seq.c firmware/rate.c firmware/disp.c
 
 # Cross-build the engine and the image, then check every structural invariant.
 test-image:
@@ -57,6 +62,11 @@ image: $(BUILD)/native.bin
 		--hooks firmware/hooks_native.json -o $(BUILD)/prophet10_native.syx
 
 image-native: image
+
+# The browser patcher's manifest (site/manifest.js): the image as byte spans over stock.
+manifest: image
+	$(PYTHON) -m tools manifest --base fixtures/prophet5_main_2.1.0.syx \
+		--image $(BUILD)/prophet10_native.syx -o site/manifest.js
 
 $(BUILD)/native.bin: firmware/*.c firmware/*.h tools/fw.py tools/fwlink.py
 	@mkdir -p $(BUILD)

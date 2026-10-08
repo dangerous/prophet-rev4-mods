@@ -17,9 +17,15 @@ a Python build/packing CLI.
 ## Conventions
 
 - "Stock" = Sequential Main OS 2.1.0. "The engine" = the code this project adds, one
-  record appended to stock. "V5" = Nicolas Maldonado's third-party Arp Mod V5, whose
-  documented behaviour the arp was modelled on; named only where behaviour deliberately
-  differs from it.
+  record appended to stock. "The Arp Mod" = the third-party arpeggiator mod for the Rev4
+  that circulated privately before this project, whose documented behaviour the arp was
+  modelled on; named only where behaviour deliberately differs from it.
+- "HOLD" = the panel button labelled **RELEASE / HOLD** (id 14), which the Release/Hold
+  global makes a hold latch; "the pedal" = the sustain pedal, in `HLd` mode as "HOLD".
+- The engine has two **generators**, one selected at a time: the **Arp** (`ArP`), which
+  plays the keys you hold, and the **Seq** (`SEq`), which plays a recording while the
+  keyboard stays yours. "Generated notes" are the ones a generator sounds; "live notes" are
+  keys and MIDI-in notes sounding directly.
 - Addresses are RAM addresses as loaded by the stock OS loader unless stated otherwise.
 - Each behaviour carries a hardware-verification marker: `[HW: unverified]` or
   `[HW: verified <date>, <unit>]`. Host tests enforce the behaviour; the marker records
@@ -129,8 +135,9 @@ record placement do not require.
 - Why that address: the stock startup's MMU region table maps `0x20020000–0x2008FFFF` as
   one RAM region; stock uses nothing above `0x200874CC`. The region is physically
   contiguous L2 SRAM. `[HW: verified 2026-10-07]`
-- Code occupies `[0x20088000, 0x2008E000)`, state `[0x2008E000, 0x20090000)`. State is zero
-  after every boot. The build fails if code+rodata exceed the code area.
+- Code occupies `[0x20088000, 0x2008C000)`, state `[0x2008C000, 0x20090000)` — 16 KB each
+  **(change 2026-10-08: was 24 KB / 8 KB; the sequencer's 512-step storage needs the room)**.
+  State is zero after every boot. The build fails if code+rodata exceed the code area.
 
 #### Patch kinds
 
@@ -157,42 +164,121 @@ record placement do not require.
   text: `<hex address> <symbol>` per line. Each hook entry has an optional
   `"kind": "bl" | "word"` (default `bl`).
 - `python3 -m tools fwbuild SRC OUT` cross-compiles `SRC/native.c` for thumbv7a, links it
-  at `0x20088000` with the code limit `0x2008E000`, checks the hook symbols are present and
-  writes `native.bin`, `native.map` and `native.layout` into `OUT`.
+  at `0x20088000` with the code limit `0x2008C000`, checks the hook symbols are present and
+  writes `native.bin`, `native.map` and `native.layout` into `OUT`. The compiler is told
+  not to emit jump tables, so the code consists of instructions and literal pools only and
+  the image test's sweep for materialised addresses stays reliable (a `tbb` table once read
+  as a literal load).
 - `python3 -m tools diff A.syx B.syx` — prints every differing byte span of the decoded
   payloads as `image <n> record @0x<offset> ram 0x<lo>..0x<hi>: <n> bytes`, so a reviewer
   can see exactly what a build changed. Record-structure differences are reported as such.
+
+### Patcher (distribution) `[HW: n/a]`
+
+Users install the engine without the toolchain: a static web page applies a published
+**patch manifest** to their own copy of Sequential's Main OS 2.1.0 file, in the browser,
+and hands back the image to install. Nothing is uploaded, the page loads no external
+resources, and it works equally from a local copy of its directory.
+
+#### Patch manifest
+
+- The project has a **release version** — semantic versioning, in the `VERSION` file at the
+  repository root, bumped by hand for each release (`1.0.0` first).
+- `python3 -m tools manifest --base BASE.syx --image IMAGE.syx -o site/manifest.js` writes a
+  JavaScript file that assigns `window.PATCH` one JSON object: `format` (1), `name`
+  (`prophet10_native`), `version` (from `VERSION`), `built` (ISO date), `commit` (the
+  repository's short HEAD hash, or `unknown`), `base` and `result` — each `{name, size,
+  sha256}` of the stock file and of the image, the result being named
+  `prophet5_main_2.1.0_patched_<version>.syx` — and `spans`: the edits that turn the base's
+  **decoded payload** into the image's,
+  each `{offset, data}` with `data` base64 and `offset` a position in the base payload, in
+  ascending order and non-overlapping. A span **replaces** the bytes at its offset
+  (differences less than 16 bytes apart share one span); the engine record is the last span
+  and an **insertion** (`insert: true`) at the end of image A, so the SHARC image that
+  follows it is shifted, not copied. The manifest therefore carries the engine's own bytes
+  and the retargeted words — a few hundred bytes of edits plus the 32 KB record — and
+  nothing else of the OS.
+- **Applying** a manifest: decode the base file under every container rule ("SysEx
+  container"); require SHA-256(base file) = `base.sha256`; apply the spans in order
+  (replacing, or inserting before the base byte at `offset`); encode as a Main OS file;
+  require SHA-256(result) = `result.sha256`. The result is byte-identical to `python3 -m
+  tools build` for the same inputs.
+- Beside the manifest it writes `version.json` — `{version, built, commit, result: {name,
+  sha256}}` — so the README's version badge, and anything else, can read what the page
+  installs without parsing JavaScript.
+- `python3 -m tools apply MANIFEST.js BASE.syx OUT.syx` is the reference applier. It writes
+  nothing and prints one line on stderr (exit status 1) when the base is not the file the
+  manifest was made for (naming the file's hash and the expected one) or when the result's
+  hash does not match the manifest's.
+
+#### The page (`site/index.html`, `site/patcher.js`, `site/manifest.js`)
+
+- Published by GitHub Pages at `https://dangerous.github.io/prophet-rev4-mods/` from the
+  `site/` directory **alone** (a GitHub Actions deployment of that directory; nothing else
+  in the repository is served).
+- Shows what it builds (version, date, commit) and the two hashes it will check. The user picks
+  or drops their stock `.syx`; the page applies the manifest under the rules above, in the
+  browser, and then: a base-hash mismatch names the problem (not Sequential's Main OS
+  2.1.0 — the file's hash and the expected one), nothing is offered; a result-hash mismatch
+  says so and offers no download; success shows the result's SHA-256 marked as matching
+  the release and offers `prophet5_main_2.1.0_patched_<version>.syx` for download, with the install steps
+  (SysEx Librarian or equivalent, Globals → MIDI SysEx = USB) and the warranty/risk notice.
+- The page's applier (`patcher.js`, plain JavaScript, no framework) produces the same bytes
+  as the reference applier; the acceptance test runs it under Node.js against the fixture
+  when Node is available and skips otherwise.
+- The stock file never leaves the browser: no requests other than the page's own files, no
+  analytics.
 
 ### Arp engine `[HW: verified 2026-10-07, Prophet-10 Rev4 — the whole checklist]`
 
 The arp proper. The behaviours specified in their own sections (re-latch, seq, note
 value, keyboard octave shift, HOLD while the arp is on, display messages, button id
-readout) are realised by this engine. V5's documented behaviour was the baseline; where
+readout) are realised by this engine. The Arp Mod's documented behaviour was the baseline; where
 this engine deliberately differs it is marked **(change)** with the reason.
 
 #### Settings and defaults
 
-- On/off, mode, octaves and note value are stored with each program ("Patch memory"); BPM,
-  clock source, keyboard shift and the sequence are global and not saved. Power-up = the
-  recalled program's arp settings (off for a program without arp data), internal clock,
-  120 BPM, keyboard shift 0, no sequence.
+- The Arp's on/off, direction mode, octaves and note value are stored with each program
+  ("Patch memory"). Global and not saved: BPM, clock source, keyboard shift, the generator
+  selection, and the sequence with its own settings (order, style, note value, chord length,
+  transposition — "Seq"). Power-up = the recalled program's arp settings (off for a program
+  without arp data), `ArP` selected, internal clock, 120 BPM, keyboard shift 0, no sequence.
 - Mode, octaves, clock source, BPM and note value survive the arp being switched off and on.
 
 #### Controls
 
-- **A440** is the arp button: a tap (press and release with no arp combo in between)
-  toggles the arp; its LED is lit while the arp is on. The stock tuning-reference tone is not
-  available in play mode. **(change)** It remains available from the Globals menu, where all
-  buttons behave as stock (below).
-- **While A440 is held**: Bank = next mode, Group = previous mode (Up → Down → Up/Down →
-  Random → Assign → Up…, Group the other way; display `UP`, `dn`, `Ud`, `rnd`, `ASS` —
-  Assign `[HW: verified 2026-10-07, Prophet-10 Rev4]`); Program 1–4 = 1–4 octaves (`o 1`…`o 4`);
-  Program 5 = toggle clock source (`int` / `Syn`); Program 6 = clear sequence; Program 7/8 =
-  note value longer/shorter (− / +, + is faster); Unison = tempo tap (below); Record = flash
-  diagnostic ("Flash diagnostic"); any other button = id readout. Any of these cancels the toggle
-  on A440 release. Held-repeat events (value 3) are ignored. A combo button whose release
-  arrives after A440 has been released is still consumed **(change: V5 leaked the orphan
-  release to stock)**.
+- **A440** starts and stops the **selected generator**: a tap (press and release with no
+  combo in between) toggles it; its LED is lit while the selected generator runs. With `ArP`
+  selected that is the arp on/off described in this section; with `SEq` selected it is the
+  sequencer's transport ("Seq"). **(change)** The stock tuning-reference tone lives on
+  **A440 + HOLD**: with the selected generator **stopped**, pressing and releasing the HOLD
+  button while A440 is held toggles stock's reference tone on HOLD's release — the tone and
+  its LED (the A440 LED, as in stock) are then stock's. **While the tone sounds, a tap of
+  A440 only switches it off**; the next tap starts the generator as usual `[HW: verified
+  2026-10-08, Prophet-10 Rev4]`. Should the arp come on by another route while the tone
+  sounds (a program load with the arp saved on), the tone is silenced first, so a lit LED
+  means the generator from then on. With the generator running the combo is consumed and
+  does nothing; in record mode HOLD is rest/tie ("Seq"). It counts as using the A440 hold
+  `[HW: verified 2026-10-08, Prophet-10 Rev4]`. The tone is not reachable any other way —
+  not from the Globals menu either: A440 is passed to stock there, but stock ignores it
+  while its menu is open `[HW: 2026-10-08, Prophet-10 Rev4]`.
+- **While A440 is held** — the combos act on the **selected generator** where a setting
+  exists for both: **Bank / Group** = next / previous **direction** of the Arp (Up → Down →
+  Up/Down → Random → Assign → Up…; display `UP`, `dn`, `Ud`, `rnd`, `ASS`), also while the
+  Seq is selected in its Arpeggiated style (the direction inside each chord), or the **order** of the Seq in its Chords style (`For`, `bAC`, `Pnd` — "Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`;
+  **Program 1–4** = 1–4 octaves (`o 1`…`o 4`; the Arp's, also inside Arpeggiated chords;
+  Chords ignores them); **Program 5** = clock source (`int` / `Syn`); **Program 6** = clear
+  the sequence ("Seq"); **Program 7/8** = the selected generator's **note value** longer /
+  shorter (− / +, + is faster; the Arp's is saved with the program, the Seq's lives with the recording — "Note value") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Velocity** = tempo tap
+  (below) `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Tune** = seq record mode on/off
+  ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **HOLD** = stock tuning tone on/off
+  (above) `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Keyboard** (filter Keyboard Amount, id 8) = generator `ArP` / `SEq` `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Unison** = sequence style
+  `CHd` / `ArP` and **Aftertouch** = chord length ("Seq") `[HW: verified 2026-10-08,
+  Prophet-10 Rev4 as the style and chord-length combos]`; **a keyboard key** (with `SEq` selected, not recording) = sequence transposition ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Sync** (Osc A Sync, id 24 / `0x18`) = flash diagnostic
+  ("Flash diagnostic"); any other
+  button = id readout. Any of these cancels the toggle on A440 release. Held-repeat events
+  (value 3) are ignored. A combo button whose release arrives after A440 has been released
+  is still consumed **(change: the Arp Mod leaked the orphan release to stock)**.
 - **A440 + Glide Rate** sets the tempo `[HW: verified 2026-10-07, Prophet-10 Rev4]`: while
   A440 is held, turning Glide Rate sets the BPM of the internal clock, 40–300 (`BPM = 40 + round(260 · raw / 1023)`, raw
   0–1023), whether the arp is on or off. **Under external clock (`Syn`) it does nothing to
@@ -202,10 +288,10 @@ this engine deliberately differs it is marked **(change)** with the reason.
   hold, so the A440 release does not toggle the arp, also under `Syn`. Both pot hooks (raw store and change
   post) are consumed exactly while A440 is held (and the kill switch is not engaged); the
   patch's glide value is not touched. **Glide Rate alone is always the normal glide control**,
-  also while the arp is running. **(change: V5, and this engine before 2026-10-07, captured
+  also while the arp is running. **(change: the Arp Mod, and this engine before 2026-10-07, captured
   the pot as tempo whenever the arp was on, which made glide unusable with the arp running.)**
-- **A440 + Unison is tap tempo** `[HW: verified 2026-10-07, Prophet-10 Rev4]`: while A440 is held, each press of
-  Unison (button id 25 / `0x19`) is a tempo tap. The first tap of a series shows `tAP` and
+- **A440 + Velocity is tap tempo** `[HW: verified 2026-10-07, Prophet-10 Rev4 on Unison; moved to Velocity 2026-10-08 (one hand: it sits beside A440) and verified there the same day]`: while A440 is held, each press of
+  the Velocity button (id 11 / `0x0B`) is a tempo tap. The first tap of a series shows `tAP` and
   records the time; the BPM is unchanged. The **second tap sets the tempo immediately** from
   that single interval; each later tap uses a rolling mean of the most recent four
   intervals of the series (so it steadies without resisting a deliberate change), `BPM =
@@ -214,8 +300,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
   a new one (shows `tAP` again, BPM unchanged); an interval of exactly 2000 ms still counts
   (30 BPM → 40). Intervals are measured on the UI's 1 ms tick. The series only ends by such a
   gap (releasing A440 in between does not end it). A tap counts as using the A440 hold, so the
-  A440 release does not toggle the arp; Unison's press, held repeats and release are
-  consumed like any combo button, and Unison without A440 held is always stock Unison. Taps
+  A440 release does not toggle the arp; Velocity's press, held repeats and release are
+  consumed like any combo button, and Velocity without A440 held is always stock Velocity. Taps
   work whether the arp is on or off. **Under external clock (`Syn`) a tap does nothing** but
   show `Syn` as a hint (a display message like any other): the BPM is unchanged and no
   series is started or continued (a running series ends, so the next tap under `int` shows
@@ -224,23 +310,26 @@ this engine deliberately differs it is marked **(change)** with the reason.
   BPM is not saved with the program (see above).
 - **Display**: transient messages (mode, octaves, clock, note value, BPM while the pot
   moves or on a tempo tap, `tAP`, `Syn` for a tempo gesture under external clock, step count, shift, readout) show for 1.5 s, then the display returns to the stock
-  program display **(change: V5 left `OFF` / BPM / `Syn` on the display for as long as the
+  program display **(change: the Arp Mod left `OFF` / BPM / `Syn` on the display for as long as the
   arp was on)**. Switching the arp on shows the BPM (`Syn` under external clock) for 1.5 s;
   switching it off shows `OFF` for 1.5 s.
-- **Globals menu**: while the stock Globals menu is open, every button including A440
-  behaves exactly as stock (so the stock tuning tone is reachable from there); the arp keeps
-  running with its current settings. Pressing GLOBALS while A440 is held abandons the hold:
+- **Globals menu**: while the stock Globals menu is open, every button including A440 is
+  passed to stock untouched (stock ignores A440 there); the arp keeps running with its
+  current settings. Pressing GLOBALS while A440 is held abandons the hold:
   nothing toggles on the A440 release, and a recording in progress is kept as recorded.
 
 #### Note pool
 
+- (The pool, the pattern, the clock's step rules and HOLD's latch below are the **Arp
+  generator's**; with `SEq` selected the keys are live and the pool is not involved.)
 - The pool is the set of notes currently "down" for the arp: local keys (after keyboard
   octave shift) and MIDI-in notes, each with its velocity. A note present from both sources
   counts once.
 - Arp off: nothing changes for stock — keys and MIDI notes sound directly. Arp on: keys and
-  MIDI notes do not sound directly; they enter the pool. Switching the arp on releases any
-  directly sounding notes and starts the pattern from the pool; switching it off releases
-  the step note and re-sounds the keys that are physically held (not latched ones).
+  MIDI notes do not sound directly; they enter the pool. (In seq record mode, arp on or
+  off, they are recorded instead — "Seq".) Switching the arp on releases any directly
+  sounding notes and starts the pattern from the pool; switching it off releases the step
+  note and re-sounds the keys that are physically held (not latched ones).
 - Releasing a note removes it from the pool unless HOLD is active. A note that leaves the
   pool while it is the sounding step is released immediately. Removing the last note
   silences the arp.
@@ -276,15 +365,15 @@ this engine deliberately differs it is marked **(change)** with the reason.
 - **Octaves N**: the pattern is played in the base octave, then transposed +12 for each
   further pass, N passes in all (2 octaves: C3 D4 | C4 D5). Down plays the highest pass
   first. Up/Down bounces over the whole N-pass sequence. Random picks over all N passes.
-  **(change: V5 merged the transpositions into one pitch-sorted set, giving C3 C4 D4 D5.)**
+  **(change: the Arp Mod merged the transpositions into one pitch-sorted set, giving C3 C4 D4 D5.)**
   Transposed notes above 127 are skipped.
 - A single pool note repeats every step. Changing the pool mid-pattern keeps the current
   pass and position (position clamped to the new pool size; in Assign removing entries
   never skips one: the entry that followed the note just played is still the next step). Changing mode or octaves
   restarts the pattern at its first step on the next step boundary without disturbing the
-  phase **(change: V5 forced an immediate step)**.
+  phase **(change: the Arp Mod forced an immediate step)**.
 - Each step releases the previous step note and plays the new one with the pool note's own
-  velocity. Gate = 50 % of the step (as V5).
+  velocity. Gate = 50 % of the step (as the Arp Mod).
 
 #### Clock
 
@@ -325,21 +414,21 @@ this engine deliberately differs it is marked **(change)** with the reason.
 - Step notes go to the stock voice allocator exactly as a local key would (`note_on(1, note,
   vel)` / `note_off(1, note)`). The stock keyboard MIDI Out keeps carrying the raw held keys
   (shifted, per "Keyboard octave shift"), not the arp; the arp never sends MIDI itself (as
-  V5 — an "arp to MIDI Out" option is a possible later feature).
+  the Arp Mod — an "arp to MIDI Out" option is a possible later feature).
 - Local Control off: stock does not pass local keys to the OS note path, so the arp is fed
-  by MIDI-in only (as V5).
+  by MIDI-in only (as the Arp Mod).
 - MIDI CC 123–127 (all notes off, omni, mono, poly): stock all-notes-off runs, then the pool
-  is cleared and the arp silenced; the HOLD state is not changed **(change: V5 hooked only
+  is cleared and the arp silenced; the HOLD state is not changed **(change: the Arp Mod hooked only
   CC 123 and dropped its own hold flag)**. CC 64 reaches the arp as hold via the stock merged
   state.
 - Program change / patch load: the arp continues on the new patch with its keys down, mode
   and tempo. Stock switches HOLD off when a program loads, so latched notes drop then (as
-  stock and V5 behave).
+  stock and the Arp Mod behave).
 
 #### Robustness
 
 - Events from the other task are queued to the tick; the queue holds 64 events; if it ever
-  fills, the newest events are dropped and the arp is **not** disabled **(change: V5 cleared
+  fills, the newest events are dropped and the arp is **not** disabled **(change: the Arp Mod cleared
   and disabled the arp on overflow)**.
 - **Kill switch**: A440 **held from before power-on** disables every arp hook for the
   session (all hooks fall straight through to stock), so a misbehaving engine can be
@@ -353,10 +442,21 @@ this engine deliberately differs it is marked **(change)** with the reason.
 - No code runs at boot; all state is zero in the image and initialised lazily by the first
   hook that runs.
 
+- **Tuning tone, realisation**: stock's main state toggles the DSP reference tone on an A440
+  press when HOLD is *not* physically held (held, it plays a voice note instead), keeping
+  the state in a flag at `ui + 0x16A` and the LED. On HOLD's release of the combo the UI has
+  the glue replay a stock A440 press through the button post (`0x2003BC31(0x0F, 1)`) — HOLD
+  is up by then, so stock takes the tone path. A tap of A440 with the flag set replays the
+  press too (tone off) instead of toggling the arp; an enable from a program load with the
+  flag set replays it before enabling. Stock handles a replayed press a few milliseconds
+  later in its own task and switches the LED off then, so 100 ms after a replay the UI
+  asserts the arp LED again if the arp is on by then (otherwise the LED stays stock's,
+  showing the tone).
+
 #### Realisation (facts asserted by the image tests)
 
 - Base image `fixtures/prophet5_main_2.1.0.syx`; everything added lives in one appended
-  record `0x20088000–0x20090000` (code `0x20088000–0x2008E000`, state `0x2008E000–0x20090000`,
+  record `0x20088000–0x20090000` (code `0x20088000–0x2008C000`, state `0x2008C000–0x20090000`,
   zero in the image); nothing else differs except the hook sites below (`python3 -m tools
   diff` lists exactly them). The MMU already maps `0x20020000–0x2008FFFF` as one RAM region.
 - Hook sites (Thumb target expected in stock at each): keyboard FIFO count `0x2003BE9C`
@@ -391,8 +491,10 @@ this engine deliberately differs it is marked **(change)** with the reason.
 
 ### Patch memory `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
-1. Saved with a program: the arp **on/off**, **mode**, **octaves** and **note value**. Not
-   saved: BPM, clock source, keyboard octave shift, the sequence.
+1. Saved with a program: the arp **on/off**, **direction mode**, **octaves** and **note
+   value**. Not saved: BPM, clock source, keyboard octave shift, the generator selection, the
+   sequence and its settings (style, order, note value, chord length, transposition).
+   **(change 2026-10-08: 1.2.0 saved the sequence's style and chord length too.)**
 2. Loading a program — from the panel, a MIDI program change, a SysEx program or edit-buffer
    receive, the PRESET toggle or the power-on recall — applies the program's arp settings and
    switches the arp on or off accordingly (on with keys held starts the pattern as "Arp
@@ -403,12 +505,17 @@ this engine deliberately differs it is marked **(change)** with the reason.
    stock Record flow stores it with the program, SysEx program dumps carry it, and a received
    dump restores it. There is no "edited" indication (stock has none beyond the pot
    pass-through).
-4. Realisation: program parameters **93** (0–127) and **94** (0–4) of layer A, which the stock
-   OS stores, dumps and loads verbatim but never reads: 94 = octaves 1–4 (**0 = no arp
-   data**); **93 = note value × 10 + mode × 2 + on/off**, where note value is the position
-   in the "Note value" list (0 = Half … 9 = 32nd), mode 0–4 = Up, Down, Up/Down, Random,
-   Assign, and on/off 0/1 — so 0–99. A 93 above 99 or a 94 outside 1–4 counts as no arp
-   data. `[HW: verified 2026-10-07, Prophet-10 Rev4]`
+4. Realisation: program parameters **93** (0–127) and **94** of layer A, which the stock OS
+   stores, dumps and loads verbatim but never reads: **94 = octaves (1–4) + 4 × L**, where
+   L = 0 for one of the Prophet-6's ten note values and L = 1 for a long one (so 1–8; **0 =
+   no arp data**); **93 = n × 10 + mode × 2 + on/off**, where n is the Prophet-6 position
+   (0 = Half … 9 = 32nd) when L = 0 or the long value (0 = Whole, 1 = 2 bars, 2 = 4 bars)
+   when L = 1, mode 0–4 = Up, Down, Up/Down, Random, Assign, and on/off 0/1 — so 93 is 0–99,
+   or 0–29 with L = 1. Programs saved by 1.2.0 carry the sequence's style and chord length in
+   94 as 8 × C + 40 × M (C 0–4, M 0–1, so 94 up to 80): those bits are **accepted and
+   ignored** on load, and never written again. Anything else (94 = 0 or above 80, 93 out of
+   range) counts as no arp data. `[HW: verified 2026-10-07/08, Prophet-10 Rev4 for the
+   octaves, L and 93; ignoring C/M unverified]`
    Programs saved under the earlier bitfield layout of 93 (on/off | mode << 1 | note code
    << 3 — only test saves made on 2026-10-07) are not converted: they load with the wrong
    settings (or as no arp data) and must be re-saved. Written
@@ -423,8 +530,14 @@ this engine deliberately differs it is marked **(change)** with the reason.
 
 ### Note value (arp/seq step length) `[HW: verified 2026-10-07, Prophet-10 Rev4 — internal clock and MIDI sync, with the earlier 15-value list; the Prophet-6 list, order and display below: verified 2026-10-07]`
 
-1. The step length is one of the Prophet-6's ten values, in the Prophet-6's order from
-   longest to shortest: **Half** (1/2 note, 2 beats), **Qtr** (1/4, 1 beat), **8th D**
+0. There are **two note values**: the **Arp's**, saved with the program, and the **Seq's**,
+   which lives with the recording (global, not saved, untouched by program loads) and is
+   shared by both of the Seq's styles. A440 + Program 7/8 edit the **selected generator's**;
+   each defaults to 8th `[HW: verified 2026-10-08, Prophet-10 Rev4 — one shared value until that day]`.
+1. The step length is one of thirteen values, from longest to shortest. Three long ones for
+   pad sequences — **4 bars** (16 beats), **2 bars** (8 beats), **Whole** (1 bar, 4 beats)
+   `[HW: verified 2026-10-08, Prophet-10 Rev4]` **(change: added above the Prophet-6's list for pad sequences — a 4-bar step per chord)** — then the Prophet-6's ten values, in the Prophet-6's order:
+   **Half** (1/2 note, 2 beats), **Qtr** (1/4, 1 beat), **8th D**
    (dotted eighth, 3/4 beat), **8th** (1/2 beat), **8th S** (eighth swing), **8th T**
    (eighth triplet, 1/3 beat), **16th** (1/4 beat), **16th S** (sixteenth swing), **16th T**
    (1/6 beat), **32nd** (1/8 beat) `[HW: verified 2026-10-07, Prophet-10 Rev4]`. Power-up default is 8th. Saved with
@@ -435,26 +548,29 @@ this engine deliberately differs it is marked **(change)** with the reason.
    1/3 + 1/6 beat), an 8th S pair two eighths (one beat: 2/3 + 1/3 beat), so the average
    step equals the plain value. The pattern order is unaffected.
 2. A440 + **Program 8** selects the next value in the list (shorter, +), A440 + **Program 7**
-   the previous one (longer, −) — + is faster; the ends do not wrap (Half and 32nd stay).
-   The list order is the Prophet-6's, so a step does not always change the length
-   monotonically: 8th S (average 1/2 beat) sits between 8th and 8th T, 16th S between 16th
-   and 16th T. The display shows the new value, right-aligned in three characters: `2`,
-   `4`, `8d`, `8`, `8S`, `8t`, `16`, `16S`, `16t`, `32` `[HW: verified 2026-10-07, Prophet-10 Rev4]`.
+   the previous one (longer, −) — + is faster; the ends do not wrap (4 bars and 32nd stay).
+   The Prophet-6 part of the list keeps its order, so a step does not always change the
+   length monotonically: 8th S (average 1/2 beat) sits between 8th and 8th T, 16th S between
+   16th and 16th T. The display shows the new value, right-aligned in three characters:
+   `4b`, `2b`, `1` (the long values; `1b` would read like `16`) `[HW: verified 2026-10-08, Prophet-10 Rev4]`, `2`, `4`,
+   `8d`, `8`, `8S`, `8t`, `16`, `16S`, `16t`, `32` `[HW: verified 2026-10-07, Prophet-10 Rev4]`.
 3. Internal clock: the step period is the note value at the current BPM; the note is
    released half-way through the step (each swing step at half of its own length). At
    120 BPM an 8th S pair is 500 ms (steps 334 ms and 166 ms with the remainder carried), a
    16th S pair 250 ms.
-4. MIDI sync: steps follow the incoming clock at the selected value — Half 48, Qtr 24,
+4. MIDI sync: steps follow the incoming clock at the selected value — 4 bars 384, 2 bars
+   192, Whole 96, Half 48, Qtr 24,
    8th D 18, 8th 12, 8th S 24-clock pairs split 16 + 8, 8th T 8, 16th 6, 16th S 12-clock
    pairs split 8 + 4, 16th T 4, 32nd 3 clocks per step — counted from Start (swing pairs
    start at multiples of the pair length), so step boundaries fall exactly on clocks and stay
    on the DAW grid across a change. `[HW: verified 2026-10-07, Prophet-10 Rev4 — incl. the swing values]`
-5. A change takes effect from the next step. Applies to the arp and to seq alike.
-6. Realisation: `rate.c` holds the list in the order above (index 0 = Half … 9 = 32nd;
+5. A change takes effect from the next step (the next event, for the Seq's Chords style).
+6. Realisation: `rate.c` holds the list in the order above (index 0 = 4 bars … 12 = 32nd;
    `rate_step(dir)` moves −1 = longer / Program 7, +1 = shorter / Program 8) and maps each
-   value to beats per step as a fraction (Half → 2 … 32nd → 1/8 beat) plus a swing flag —
-   for a swing value the fraction is the pair length (16th S → 1/2, 8th S → 1); the index
-   is what patch memory stores. The engine's internal period is `60 s / BPM × beats` with the
+   value to beats per step as a fraction (4 bars → 16 … 32nd → 1/8 beat) plus a swing flag —
+   for a swing value the fraction is the pair length (16th S → 1/2, 8th S → 1). Patch memory
+   stores a *code*: the Prophet-6 position (0 = Half … 9 = 32nd) for those ten, and a long
+   flag with 0–2 (Whole, 2 bars, 4 bars) for the others ("Patch memory"). The engine's internal period is `60 s / BPM × beats` with the
    remainder carried (swing: 2/3 and 1/3 of the pair, exact in integers), and the MIDI-clock
    step (pair) is `24 × beats` clocks (always integral, and a multiple of 3 for swing pairs).
 
@@ -465,16 +581,25 @@ this engine deliberately differs it is marked **(change)** with the reason.
    Bank/Group, so the shift is a one-handed move. Versions before 2026-10-07 used the
    filter Keyboard Amount button, id 8.) Pressing Bank and
    Group together (the second while the first is still down) resets the shift to 0. The
-   display shows the shift (`-2`…`2`) for about a second after each press (also at the
-   ends, unchanged). Power-up: 0. Not saved with patches.
+   display shows the shift (`-2`…`2`) for 1.5 s after each press (also at the ends,
+   unchanged), through the stock integer readout — `001`, `-01` — deliberately, as that is
+   how stock shows its own signed values such as the pitch-bend range. **Holding Lo
+   Freq on its own shows the current shift** `[HW: verified 2026-10-08, Prophet-10 Rev4]`: from the moment the
+   panel reports the button held (its first held-repeat event, after the stock repeat
+   delay) the display shows the shift, unchanged or not, and keeps showing it for as long
+   as the button is held (each repeat renews the message); it reverts 1.5 s after the last
+   repeat as any message does. Power-up: 0. Not saved with patches.
 2. The shift applies to keys played on the keyboard: what the synth plays, what the arp/seq
    receive (re-latch, recording, triggers), and what is sent to MIDI Out for those keys.
    MIDI-in notes are not shifted. A key's release always uses the shift that was in force
    when it was pressed, so changing the shift while holding keys never sticks a note.
-3. A tap of Lo Freq (press and release with no Bank/Group press in between) still toggles
-   Osc B low-frequency mode as in stock; the setting and its LED change on the release
-   rather than on the press. While it is held with Bank/Group, the Lo Freq setting does
-   not change. Repeat events (value 3) of any of the three buttons are ignored.
+3. A tap of Lo Freq (press and release with no Bank/Group press in between, and released
+   before the panel reports it held) still toggles Osc B low-frequency mode as in stock;
+   the setting and its LED change on the release rather than on the press. While it is
+   held with Bank/Group, the Lo Freq setting does not change; nor does it change when a
+   hold ends without a shift command — a hold is not a tap `[HW: verified 2026-10-08, Prophet-10 Rev4]` (the
+   stock repeat delay sets how long a tap may last). Repeat events (value 3) of Bank and
+   Group are ignored; Lo Freq's are the hold detection.
 4. Because the shift is applied before the voice engine, a Prophet-10 split point moves
    with the keyboard. A key whose shifted note would fall outside 0–127 is silent (not
    reachable from the 61-key range at ±2).
@@ -488,8 +613,9 @@ this engine deliberately differs it is marked **(change)** with the reason.
    Control is on or off. (`0x2003BED8` is not a MIDI Out call: it posts a message no state
    handles. `[HW: bug found 2026-10-07 by disassembly before that image was installed]`.)
    The button hook swallows id 37 (press, repeats, release), treats Bank/Group presses
-   while it is held as shift commands, and on a release with no shift command replays
-   press+release of id 37 into stock's button post (`0x2003BC31`).
+   while it is held as shift commands, treats a repeat of id 37 as the hold (shows the
+   shift, and marks the hold as used so its release is no tap), and on a release with
+   neither replays press+release of id 37 into stock's button post (`0x2003BC31`).
 
 ### HOLD while the arp is on `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
@@ -500,41 +626,86 @@ this engine deliberately differs it is marked **(change)** with the reason.
    HOLD active the steps accumulated (C, then C+E, then C+E+G) because the stock sustain
    kept every step sounding]`
 2. The HOLD LED and the latch still follow the button/pedal as in "Re-latch under HOLD".
-3. Switching the arp off while HOLD is active restores the synth's hold at once (keys held
-   or latched at that moment sustain as stock hold would). Switching the arp on while HOLD
-   is active suspends it at once (notes sustained only by hold are released; the pattern
-   starts from the keys down and latched notes as before).
-4. With the arp off nothing changes: stock hold behaves exactly as before.
+3. **Two HOLD latches, one per mode** `[HW: verified 2026-10-08, Prophet-10 Rev4]`: the HOLD button latches the arp
+   while the arp is on and the synth's own hold while it is off, and each latch keeps its
+   state while the other is in use. Switching the arp off puts the synth's latch back as it
+   was and keeps the arp's; switching it on restores the arp's latch and keeps the synth's.
+   The HOLD LED always shows the active mode's latch, and a HOLD press only ever changes the
+   active mode's latch. The sustain pedal (`HLd` mode) is momentary and belongs to whichever
+   mode is active — the arp's latch while the arp is on, stock hold while it is off. A
+   program load switches both latches off (stock's own rule, applied to both); power-up:
+   both off. **(change: until 2026-10-08 there was one latch — switching the arp off left it
+   on and stock hold took over whatever was played next.)** Switching the arp on while HOLD
+   is active still suspends the synth's hold at once (notes sustained only by hold are
+   released; the pattern starts from the keys down and latched notes as before).
+4. With the arp off nothing changes: stock hold behaves exactly as before — except in seq
+   record mode, which suspends the synth's hold in the same way while it lasts, arp on or
+   off ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`.
+4a. **With `SEq` selected** HOLD and the pedal never affect the sequencer's transport. While
+    the sequencer **runs** (playing, or armed under MIDI clock), the synth's own hold is
+    suspended as it is while the arp is on — stock's voice engine sustains every released
+    voice while its hold flag is on and cannot tell a generated note from a live one `[HW:
+    2026-10-08, Prophet-10 Rev4 — with the per-note answer of the first 2.0.0 build, the
+    sequence's chords sustained under HOLD]` — and the engine sustains the **live** notes
+    itself: with HOLD active (button, or pedal in `HLd` mode) a live note's release is
+    deferred until HOLD goes off or the key is pressed again, also after the sequencer has
+    stopped in the meantime. **Generated** notes keep their programmed gates `[HW: verified 2026-10-08, Prophet-10 Rev4 —
+    2.0.1: live notes sustain and retrigger, the sequence's chords release at their gates,
+    sustained notes outlive a stop and end at HOLD off, pedal the same]`. With the sequencer
+    stopped, new releases are stock's own hold's. Selecting `SEq` while the arp runs stops
+    it, which hands the HOLD latch over exactly as switching the arp off does (rule 3);
+    selecting `ArP` leaves the arp stopped, so the synth's hold stays in use until the arp is
+    started, which hands over as switching it on.
 5. Realisation: stock `note_off` asks the hold state (`bl 0x2003B694` at `0x2003EACE`) and,
    when it is on, hands the voice to the voice engine's sustain instead of releasing it; the
    voice engine is told about hold by the message `0x080D0000 | state` posted from the hold
-   handler (`0x200396CA`). The engine hooks `0x2003EACE` (expecting `0x2003B695`) to answer
-   "off" while the arp is enabled, skips the hold message in its hold hook while the arp is
-   enabled (still passing the state to the arp's hold event), and on every arp enable/disable
-   transition with HOLD active posts the message itself (`0x2003D325`: off on enable, on on
-   disable).
+   handler (`0x200396CA`). Let *suspended* = the arp is enabled, or seq record mode is active, or `SEq` is selected and
+   the sequencer is running. The engine hooks `0x2003EACE` (expecting `0x2003B695`) to answer "off" while
+   suspended, skips the hold message in its hold hook while suspended (still passing the
+   state to the arp's hold event), and on every transition of *suspended* with HOLD active
+   posts the message itself (`0x2003D325`: off when it begins, on when it ends). The live path (`arp.c` with the arp off) keeps a *sustained* set: while the UI has
+   software sustain on (`SEq` selected, running, not recording) and the merged HOLD state is
+   on, a live release marks the note instead of sending stock's note-off; HOLD off releases
+   the set, a re-pressed key releases its old note first, all-notes-off empties it. The set
+   outlives the sequencer stopping (stock's hold, back on, covers new releases; ours are
+   released at HOLD off). A per-note "off" answer for generated note-offs was tried first
+   and did not work: the voice engine's own hold flag decides `[HW: 2026-10-08]`. Stock's
+   latch byte at `ui + 0x19C` carries the active mode's latch: at each arp on/off transition
+   the UI remembers it for the mode being left and, if the mode being entered remembers a
+   different state, replays a HOLD button press through the button post (`0x2003BC31(0x0E,
+   1)`) — stock toggles the latch, its LED and the hold handler as for a real press, a few
+   milliseconds later in its own task. A program load clears both memories.
 
 ### Display messages `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
 1. Every message the engine puts on the display — mode (`UP dn Ud rnd`), octaves
    (`o N`), clock (`int`/`Syn`), `OFF`, BPM (while Glide Rate turns with A440 held, on a
-   tempo tap, and when the arp is switched on), `tAP`, note value, seq step count, keyboard shift, button id, the flash diagnostic's `FLA`
-   and its results — shows for 1.5 s
-   after the last change and then the display returns to the stock patch display (bank,
-   group and program). Nothing stays on the display permanently. `(change from V5, which
-   kept OFF / BPM / Syn up for as long as the arp was on)`
+   tempo tap, and when a generator is started), `tAP`, note value, `ArP`/`SEq`, `CHd`/`ArP`,
+   `For`/`bAC`/`Pnd`, chord length, the transposition, `---`, keyboard shift, button id, the
+   flash diagnostic's `FLA` and its results —
+   shows for 1.5 s after the last change and then the display returns to the stock
+   patch display (bank, group and program). The record-mode flashes `rSt` and `tiE` are the
+   one shorter message: 0.25 s ("Seq"). Nothing stays on the display permanently, with one
+   exception: while seq record mode lasts the display returns to its readout `r N`
+   instead, and the patch display comes back when record mode ends ("Seq")
+   `[HW: verified 2026-10-08, Prophet-10 Rev4]`. `(change from the Arp Mod, which kept OFF / BPM / Syn up for as long as the
+   arp was on)`
 2. A new message restarts the 1.5 s.
-3. Realisation: the UI keeps one 1.5 s timer, restarted by every message it shows; at
-   expiry the stock patch display is redrawn with `0x2003818D(ui = 0x20057390)`.
+3. Realisation: the UI keeps one timer, restarted by every message it shows (1.5 s, or
+   0.25 s for a flash); at expiry the stock patch display is redrawn with
+   `0x2003818D(ui = 0x20057390)` — or, while record mode lasts, `r N` is shown again.
 
-### Button id readout `[HW: verified 2026-10-07, Prophet-10 Rev4 — Keyboard 36, GLOBALS 13; Unison read 25 before it became tap tempo]`
+### Button id readout `[HW: verified 2026-10-07, Prophet-10 Rev4 — Keyboard 36, GLOBALS 13; Unison read 25 before it became tap tempo, Tune read 12 before it became record mode]`
 
 While A440 is held, pressing a panel button that the arp does not assign — anything other
-than Program 1–8, Bank, Group, Unison (id 25 / `0x19`, tap tempo), Record (id 11 / `0x0B`, flash
-diagnostic), GLOBALS (id 13 / `0x0D`, which must still open its menu) and
-Lo Freq (id 37, consumed by the keyboard octave shift) — shows that button's id on the
-display and is otherwise ignored (its release is consumed too). An aid for mapping panel
-button ids when designing new combinations.
+than Program 1–8, Bank, Group, Keyboard Amount (id 8, generator), Aftertouch (id 10 /
+`0x0A`, chord length), Velocity (id 11 / `0x0B`, tap tempo), Tune (id 12 / `0x0C`, seq record
+mode), HOLD (id 14 / `0x0E`: the tuning tone, or rest/tie in record mode), Unison (id 25 /
+`0x19`, sequence style), Sync (Osc A Sync, id 24 / `0x18`, flash diagnostic), GLOBALS
+(id 13 / `0x0D`, which must still open its menu) and Lo Freq (id 37, consumed by the
+keyboard octave shift) — shows that button's id on the display and is otherwise ignored
+(its release is consumed too). An aid for mapping panel button ids when designing new
+combinations.
 
 ### Flash diagnostic (read-only) `[HW: unverified]`
 
@@ -542,10 +713,10 @@ A developer aid for the "sequence saved per program" work (`docs/re/flash.md`): 
 how big the serial flash is and whether the two areas the stock OS never references are
 blank. **It only reads.**
 
-1. **Trigger**: while A440 is held, pressing **Record** (button id 11 / `0x0B`) starts a run.
-   The press counts as using the A440 hold (no toggle on release) and is consumed with its
-   release, so stock's program-record mode does not start. A press while a run is in
-   progress is consumed and ignored. Record without A440 is stock Record, as always.
+1. **Trigger**: while A440 is held, pressing **Sync** (Osc A Sync, button id 24 / `0x18`)
+   starts a run. The press counts as using the A440 hold (no toggle on release) and is
+   consumed with its release, so stock's Osc A sync does not toggle. A press while a run is
+   in progress is consumed and ignored. Sync without A440 is stock Osc A sync, as always.
 2. **Chip size**: two 4 KB reference blocks, `R1` at flash offset `0x000000` (bootloader)
    and `R2` at `0x606000` (factory programs), are compared with the blocks 8 MB higher
    (`0x800000`, `0xE06000`). A reference block that reads all `0xFF` is unusable. Verdicts:
@@ -597,7 +768,7 @@ Enforced by tests on every built image against stock:
    program) nor `0x20036E28` (verified write), nor any other address of the stock flash
    driver except the read routine `0x2003E2F8`: nothing in the engine can write flash.
 
-### Re-latch under HOLD `[HW: verified 2026-10-06/07, Prophet-10 Rev4]`
+### Re-latch under HOLD (the Arp generator) `[HW: verified 2026-10-06/07, Prophet-10 Rev4]`
 
 Terms: *HOLD active* = the HOLD button is lit, or the sustain pedal is down with Global
 Release/Sustain set to `HLd` (both reach the same stock hold handler). *Keys down* = the
@@ -620,66 +791,178 @@ be non-empty.
 6. Realisation: the engine's note pool (`arp.c`): when HOLD is active, no key is down and
    latched notes exist, a note-on empties the latched set and releases the sounding
    step before adding the key; the pattern restarts at the next step boundary ("Arp
-   engine" — Start rule). `[HW: verified 2026-10-06 (V5-based build) and 2026-10-07 (engine)]`
+   engine" — Start rule). `[HW: verified 2026-10-06 (Arp-Mod-based build) and 2026-10-07 (engine)]`
 
-### Seq (step-recorded sequence) `[HW: verified 2026-10-06/07, Prophet-10 Rev4 — record, transposed playback, clear, octaves (o N, no toggle on A440 release, Program 6); MIDI-in recording not exercised]`
+### Seq — the sequencer `[HW: verified 2026-10-08, Prophet-10 Rev4 — redesigned that day as an independent generator (the Prophet-6 model) and run through on the panel: record mode with Back, generator selection, transport, orders, transposition, the Seq's note value, the Arpeggiated style, clear, program loads, the tone combo; not individually confirmed: MIDI-clock transport (arm / Stop / Continue / clock loss), pedal rest/tie, MIDI-in recording, the 512-step capacity]`
 
-A sequence is up to 32 steps of (pitch, velocity), recorded by holding A440 and playing.
-*Seq mode* is active exactly when a sequence exists. *Keys*, *HOLD active* and
-*keys down* are as in "Re-latch under HOLD" (local keys and MIDI-in notes count alike).
+The sequencer is the second generator: the Arp plays the keys you hold, the Seq plays a
+recording while the keyboard stays yours — "I recorded a sequence, I start it, it plays, I
+play over it." *Keys down* and *HOLD active* are as in "Re-latch under HOLD".
 
-#### Recording
+#### Storage and capacity
 
-1. The first note-on while A440 is held starts a new recording, discarding any existing
-   sequence (and stopping its playback). Each further note-on while A440 stays held
-   appends a step; after 32 steps further note-ons are ignored. Key releases are ignored
-   while recording. The display shows the step count after each recorded step.
-2. Notes played while recording sound directly (they bypass the pool) and their releases
-   are honoured, so nothing sticks.
-3. Releasing A440 ends the recording. If at least one step was recorded, seq mode becomes
-   active and **that A440 release does not toggle the arp**. If nothing was recorded,
-   A440 behaves as usual (a tap toggles the arp; held + buttons = settings).
-4. Buttons keep working while A440 is held during recording (mode, clock source).
+1. A sequence is a list of **events**, each a **chord** of up to 10 notes (pitch and velocity
+   each) or a **rest**, with a **duration** in timing steps: 1, plus one per tie. Capacity is
+   **512 timing steps in total** — every accepted chord, rest or tie takes one; at 512,
+   further chords, rests and ties are refused (the notes still sound; `r N` stays). **(change:
+   64 events until 2026-10-08.)**
+2. The recording and its own settings — **style**, **order**, **note value**, **chord
+   length**, **transposition** — are global and volatile: not saved with programs, untouched
+   by program loads, gone at power-off. Defaults: `CHd`, `For`, 8th, Whole, 0.
 
-#### Playback (seq mode active, arp enabled)
+#### Generator selection
 
-5. The sequence plays while at least one key is down and, with HOLD active, after all
-   keys are released until the next key — the re-latch rule: the first key after all keys
-   were released restarts the sequence from step 1. Each step sounds the recorded pitch
-   transposed by *(trigger key − first recorded pitch)*, at the recorded velocity. The
-   trigger key is the most recently pressed key; a new trigger takes effect from the next
-   step and stays in effect even if that key is released while others remain down.
-6. A step whose transposed pitch falls outside 0–127 is silent.
-7. Direction, tempo, clock source and MIDI sync are the arp's: `UP` plays the steps in
-   recorded order, `dn` reversed, `Ud` forward then back, `rnd` shuffled, `ASS` in recorded
-   order (as `UP`); one step per arp step.
-8. With the arp disabled, keys play normally (no sequence runs). With HOLD inactive,
-   releasing all keys stops the sequence; switching HOLD off with no keys down stops it.
-9. MIDI CC 123 (All Notes Off) stops the sequence; the next key starts it again.
+3. **A440 + Keyboard** (filter Keyboard Amount, id 8) selects the generator, `ArP` ↔ `SEq`
+   (display). Switching stops whatever the previous generator was playing — its generated
+   notes are released, live notes are untouched — and leaves the newly selected one
+   **stopped**; the HOLD latch is handed over as "HOLD while the arp is on" rule 4a says.
+   Selecting `SEq` with no recording shows `---` instead and leaves `ArP` selected (a tap
+   with `SEq` selected and nothing recorded — possible after Back has emptied a recording —
+   also shows `---`). Power-up: `ArP`. Entering record mode selects `SEq`. Not saved.
+4. **A440 tap** starts or stops the selected generator; the A440 LED is lit while it runs.
+   With `ArP` that is the arp on/off of "Arp engine"; with `SEq` it is the transport below.
 
-#### Octaves
+#### Transport (`SEq` selected)
 
-10. The octave setting is shared by the arp and seq (A440 + Program 1–4, `o N`). With
-    `o 2` the sequence plays once as recorded, then once an octave up — per pass, as the
-    arp's own octaves; direction modes apply across the expanded pattern; a change takes
-    effect from the next step. A Program 1–4 press while A440 is held counts as using the
-    hold, so releasing A440 afterwards does not toggle the arp.
-11. Leaving seq mode (Program 6) leaves the octave setting as it is.
+5. **Start** (a tap while stopped): under the internal clock the first event sounds at once
+   and the step phase starts from that moment; under MIDI clock (`Syn`) the sequence is
+   **armed** — the first event falls on the next step-division boundary of the clock grid,
+   and clocks alone drive it from there; a MIDI Start resets an armed sequence to event 1.
+   Playback loops.
+6. **Stop** (a tap while playing): generated notes are released; the next Start begins at
+   event 1. Under MIDI clock a stop also **disarms**: MIDI Start/Continue do not restart the
+   sequence until A440 arms it again. **MIDI Stop** releases the generated notes and pauses —
+   the position, the step phase and the remaining duration of the current event are kept;
+   **MIDI Continue** resumes them. Clock loss (1 s) releases the generated notes; when
+   clocks return an armed sequence restarts from event 1. The port lock and the followed
+   BPM are the arp engine's ("Clock"). Changing the clock source (A440 + Program 5) while
+   the sequencer runs restarts it as a Start under the new clock.
+7. **Live notes.** Keys (after the keyboard octave shift) and MIDI-in notes sound directly,
+   polyphonically and with their velocity, and never start, stop, restart, transpose or
+   otherwise alter playback; releasing them changes nothing; HOLD and the pedal sustain them — the engine's own sustain while the sequencer runs ("HOLD
+   while the arp is on" 4a) — and re-latch does not exist here; starting or stopping the sequence does not cut them. Voices are the stock
+   allocator's to share and steal: a chord step takes up to ten, an arpeggiated step one.
+8. **MIDI CC 123–127** silence everything and stop (and disarm) the sequencer; the
+   recording is kept, also during recording.
+
+#### Chords style (`CHd`)
+
+9. Events play one per **sequence step** — the Seq's note value ("Note value") — in the
+   selected **order**: `For` forward (first to last, round again), `bAC` backward, `Pnd`
+   pendulum (forward then back without repeating the ends). The order is set with A440 +
+   Bank (next) / Group (previous) while `SEq` is selected in this style (display). **(change:
+   the random order and the octave passes of the 1.x sequencer are gone; the Arp's direction
+   mode and octaves do not apply here.)**
+10. A chord sounds once — all its notes together, at their recorded velocities, transposed
+    ("Transposition") — and is released half-way through its **last** timing step: an event
+    of duration L occupies L sequence steps and is not retriggered at the inner boundaries.
+    A rest is silence for its duration. Swing values apply as to the arp. A transposed pitch
+    outside 0–127 is silent; the event keeps its duration.
+11. Changing the Arp's direction or octaves does not disturb Chords playback. A change of
+    order or of the Seq's note value takes effect from the next event. Changing the **style**
+    while playing (A440 + Unison) releases the generated notes and restarts at event 1 on the
+    next step boundary; stopped, it just changes the setting.
+
+#### Arpeggiated style (`ArP`)
+
+12. Events are chords for the arpeggiator: each is held for its duration × the **chord
+    length** — A440 + **Aftertouch** cycles Qtr → Half → Whole → 2 bars → 4 bars (`4`, `2`,
+    `1`, `2b`, `4b`; a bar is four beats) — while the arp plays the chord's notes at the
+    **Seq's note value** (the "note rate"), in the Arp's **direction mode** (A440 +
+    Bank/Group while in this style; Assign = the order recorded) and over the Arp's
+    **octaves**, exactly as it plays held keys; a one-note chord repeats its note; a rest is
+    silence for its duration; events always advance in order. A tie adds one chord length.
+13. Each chord begins its pattern afresh (position and phase; a swing pair begins). Chord
+    boundaries lie on the beat grid counted from the start (internal clock: beats × 60 s /
+    BPM with the remainder carried; MIDI clock: 24 clocks per beat); arp steps are counted
+    from the chord's start. A note value that does not divide the chord length — a dotted
+    eighth into a bar; triplets do divide it — has its arp step in progress cut at the
+    boundary and the next chord starts on time. `[HW: verified 2026-10-08, Prophet-10 Rev4
+    in 1.2.0 with the trigger-key transport]`
+14. The Seq's note value is shared with the Chords style; a long value (`1`, `2b`, `4b`)
+    is allowed here but gives one arp note per that duration.
+
+#### Transposition
+
+15. With `SEq` selected and not recording, **A440 + a key** sets the transposition: the
+    first key pressed during an A440 hold is the command. **Middle C** (the key numbered
+    MIDI 60 before the keyboard octave shift) is zero; any other key is an absolute semitone
+    offset from it (display: the signed offset, as the keyboard shift is shown). The command
+    key does not sound, is not sent to MIDI Out, and its release is consumed (also if A440 is
+    up by then); it counts as using the A440 hold. Keys pressed after another combo or the
+    tempo pot has used the hold are live notes, and MIDI-in notes are never commands.
+    Requires Local Control on: with it off, stock sends keys to MIDI Out only and the gesture
+    is not available.
+16. A changed offset applies from the next event (`CHd`) or chord boundary (`ArP`) without
+    disturbing timing; recorded pitches are unchanged; out-of-range results are silent.
+    The offset survives stop/start, style and generator changes and program loads; it is
+    reset to 0 when a new recording begins (its first accepted entry) and when the sequence
+    is cleared. Power-up: 0.
+
+#### Record mode
+
+17. **Enter**: A440 + Tune (consumed, so stock auto-tune does not run). Selects `SEq`, stops
+    playback (generated notes released; live notes keep sounding until released and are
+    then recorded as played), and shows the readout **`r N`** — the timing steps recorded so
+    far, `r 0` on entry — for as long as record mode lasts; other messages revert to it; the
+    A440 LED blinks (500 ms on / off) `[HW: verified 2026-10-08, Prophet-10 Rev4]`. The
+    existing sequence stands until the first accepted entry, which replaces it.
+18. **Notes** sound as played and are recorded; notes held together are one chord (a pitch
+    already in the open chord is not added twice; beyond ten notes they sound but are not
+    recorded); a note-on after every key of the open chord has been released starts a new
+    event. **Rest**: HOLD (button or pedal in `HLd` mode) with no key of the open chord down
+    appends a rest. **Tie**: HOLD with one down makes the open event one timing step longer.
+    `rSt` / `tiE` flash for 0.25 s, then the count. The HOLD button is consumed (latch and
+    LED unchanged); the pedal keeps driving stock's state and LED. `[HW: verified
+    2026-10-08, Prophet-10 Rev4 — HOLD button; pedal and MIDI-in recording not exercised]`
+    The synth's own hold is suspended while recording. At 512 timing steps, chords, rests
+    and ties are refused; notes still sound.
+19. **Back**: a press of **Group** alone (A440 not held) undoes the last entry: if the last
+    event's duration is above 1, one tie comes off; otherwise the last event — chord or rest
+    — is removed; with nothing recorded, nothing happens. `r N` updates at once; the open
+    chord is closed, so keys still down do not join an earlier event (their releases still
+    silence them); further entries append after the corrected end. No redo. Back at `r 0`
+    before the first entry leaves the preserved old sequence alone; after the first entry,
+    backing to `r 0` leaves an empty new sequence (the old one is gone). Group's held repeats
+    are ignored; Group under A440 is still the order / direction combo; Bank alone remains
+    stock. **Example**: chord, tie, tie, rest → Back removes the rest, then the chord's
+    duration goes 3 → 2 → 1, then the chord is removed `[HW: verified 2026-10-08, Prophet-10 Rev4]`.
+20. **Leave**: a tap of A440, A440 + Tune, or GLOBALS. `SEq` stays selected and **stopped**;
+    the next A440 tap starts the recording from event 1 **(change: 1.2.0 switched the arp
+    on)**. A new recording resets the transposition. Nothing entered → the old sequence
+    stands. The A440 combos keep working while recording (clock source, the Seq's note value,
+    chord length, style, order / direction); A440 + Program 6 clears what has been recorded
+    and stays at `r 0`. A program load while recording keeps the recording.
 
 #### Clear
 
-12. A440 + Program 6 clears the sequence and leaves seq mode: normal arp behaviour
-    (including re-latch) resumes; the A440 release afterwards does not toggle the arp.
-13. Power-up: no sequence.
+21. A440 + Program 6, not recording: the sequencer is stopped (generated notes released),
+    the sequence and the transposition are cleared and `ArP` is selected; display `---`. An
+    Arp already selected and running is left running.
+
+#### Program loads
+
+22. A program load keeps the sequence, its settings and the transposition, applies the
+    saved arp settings, and stops the sequencer if it was playing (outside recording). A
+    saved "arp on" starts the Arp only if `ArP` is selected at that moment; with `SEq`
+    selected the arp stays off, and selecting `ArP` later leaves it stopped as any switch
+    does.
 
 #### Realisation
 
-- Recording and playback live in the engine (`arp.c`): while A440 is held the UI routes
-  every note (local, after octave shift, or MIDI) to the recorder, which sounds it directly
-  through the stock voice allocator and appends it; the first recorded note of a hold
-  discards the previous sequence. Playback uses the recorded steps, transposed onto the
-  trigger key, as the pattern's base order in place of the pitch-sorted pool; the pool
-  still decides whether the pattern runs (keys down / latched) and the trigger is the most
-  recently pressed pool note.
-- The step count is shown through the UI's display path and reverts like every other
-  message ("Display messages").
+- A separate module, `seq.c`: the event list and the recorder (with Back), the transport
+  (internal step clock and chord clock, MIDI arming / Stop / Continue state), and the Chords
+  renderer. The Arpeggiated renderer reuses the arp's pattern walker over the current
+  chord's transposed notes, as 1.2.0 did. The Arp generator (`arp.c`: pool, latch, pattern)
+  is unchanged and is not involved while `SEq` is selected. The UI (`arpui.c`) holds the
+  generator selection and routes notes: record mode → the recorder; `SEq` selected → the
+  live path (the engine's direct table, as with the arp off); `ArP` → `arp_note`. The
+  transpose command is detected in the UI from the local-note hook — the key as the keyboard
+  reports it, before the octave shift — while A440 is held, and dropped there: not sounded,
+  not shifted. With Local Control on, stock's keyboard path does not reach the MIDI-out
+  hooks (`docs/re/stock-hook-sites.md` §7), so nothing is sent. The engine record's state
+  area grows to 16 KB for the 512 events (24 bytes each, 12 KB); the arp's state shrinks to
+  1 KB without the sequence. A chord handed to the arp on a clock or a tick is the arp's
+  step for that clock or tick (the sequencer runs first; the arp then skips it), so chord
+  boundaries fall exactly on the grid. The live path's software sustain is switched by the UI with the sequencer's running
+  state ("HOLD while the arp is on" 4a).

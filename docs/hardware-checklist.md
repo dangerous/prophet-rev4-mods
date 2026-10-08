@@ -28,7 +28,13 @@ Manual verification on the instrument. Record results against the spec markers i
       Power cycle; this time tap A440 about 1 s after power-on: it must **not** kill the arp
       (tap again later: arp on as usual).
 - [ ] Arp off: play, HOLD, sustain pedal, MIDI in, program change — all as stock. A440 does
-      **not** play the tuning tone (it is the arp button); Globals → A440 still does.
+      **not** play the tuning tone (it is the arp button) — nor with the Globals menu open,
+      where stock ignores it (no tone, no LED, arp unchanged).
+- [ ] Arp off: hold A440, press and release HOLD (RELEASE/HOLD): the tuning tone sounds, A440
+      LED lit, HOLD LED unchanged; release A440: the arp stays off. Again: tone off, LED off.
+      Tone on, then tap A440: tone stops, the arp stays off; the next tap: arp on. Arp on:
+      A440 + HOLD does nothing and the A440 release does not toggle. The same with the
+      sequencer selected: stopped → tone, playing → nothing.
 - [ ] Tap A440: LED on, display `120`, patch number back after 1.5 s. Hold C‑E‑G: C E G C…
       at 120 BPM, eighths, one note at a time. Tap A440: `OFF`, keys sound again.
 
@@ -42,12 +48,17 @@ Manual verification on the instrument. Record results against the spec markers i
       patch number back after 1.5 s; releasing A440 does **not** toggle the arp. Also with
       the arp off (hold A440, turn, release: still off; tap on: the new BPM). Under `Syn`:
       hold A440 and turn Glide Rate → `Syn`, the tempo is unchanged, no toggle on release.
-- [ ] Tap tempo (spec "A440 + Unison is tap tempo"): hold A440, tap Unison four times at a
-      steady ~120 BPM → `tAP` on the first tap, then ~120 (the tempo follows); tap at ~90 →
-      ~90. Pause 3 s, tap once → `tAP`. Release A440: the arp does **not** toggle. Also with
-      the arp off (then tap A440 on: the tapped BPM). Unison without A440 is stock Unison.
-      Under `Syn` (A440 + Program 5): A440 + Unison shows `Syn`, the tempo is unchanged, and
-      releasing A440 does not toggle the arp; back at `int` the next tap shows `tAP`.
+- [ ] Tap tempo (spec "A440 + Velocity is tap tempo"): hold A440, tap Velocity four times
+      at a steady ~120 BPM → `tAP` on the first tap, then ~120 (the tempo follows); tap at
+      ~90 → ~90. Pause 3 s, tap once → `tAP`. Release A440: the arp does **not** toggle. Also
+      with the arp off (then tap A440 on: the tapped BPM). Velocity without A440 is stock
+      Velocity; A440 + Unison now just shows `25`.
+      Under `Syn` (A440 + Program 5): A440 + Velocity shows `Syn`, the tempo is unchanged,
+      and releasing A440 does not toggle the arp; back at `int` the next tap shows `tAP`.
+- [ ] Note values: from `2` (Half), A440 + Program 7 three more times → `1`, `2b`, `4b`
+      (stays `4b`); at `4b`, 120 BPM, one step every 8 s (16 beats), the note released at 4 s.
+      Save a program at `4b`, load another, reload: `4b` comes back; a program saved before
+      this build loads with its old note value.
 - [ ] Assign (spec "Pattern" — Assign): A440 + Bank to `ASS`. HOLD off, play G C E D (one
       after another, keep them down): G C E D G C E D … (not sorted). Release E: G C D.
 - [ ] Assign + HOLD: hold G down and play C, E, D (releasing them): G C E D. Still holding G,
@@ -95,6 +106,20 @@ Manual verification on the instrument. Record results against the spec markers i
       down / latched. Tap A440 again: the keys still down sustain again.
 - [ ] Arp on, HOLD on, pattern latched. HOLD off: the released notes drop; the HOLD LED
       follows the button throughout.
+- [ ] Two HOLD latches: arp on, HOLD on (latched notes play). Tap A440 off: HOLD LED goes
+      off, nothing is held. Press HOLD (stock hold on), play and release: notes sustain. Tap
+      A440 on: HOLD LED on again, the arp latches, the synth's hold is suspended. Tap A440
+      off: HOLD LED stays on (stock hold back). HOLD off; tap A440 on: the arp's latch is
+      still on. Pedal (`HLd`): momentary in both modes.
+- [x] **Rule 4a:** sequencer selected and playing chords, HOLD on. Play and release a key:
+      it sustains (the engine's own sustain). The sequence's chords still release at their
+      gates. Press the sustained key again: it retriggers cleanly. Stop the sequence (tap):
+      the sustained note keeps sounding; HOLD off: it stops. HOLD on again, play and release
+      with the sequence stopped: stock's hold sustains as usual. Pedal (`HLd`) the same.
+      `[2026-10-08: the first 2.0.0 build let the chords sustain too — the voice engine's own
+      hold flag decides, so the hold is now suspended while the sequencer runs]`. Then: arp
+      on, HOLD latched, A440 + Keyboard → `SEq`: HOLD LED goes off (stock's latch back), the
+      arp's latch returns when the arp is next started.
 
 ## Re-latch (spec "Re-latch under HOLD")
 
@@ -109,23 +134,85 @@ Manual verification on the instrument. Record results against the spec markers i
       key → **adds** (the MIDI note counts as a key still down). Release the MIDI note,
       play a key → fresh start.
 
-## Seq (spec "Seq")
+## Seq (spec "Seq") — the independent sequencer (2.0.x; panel run-through 2026-10-08, the MIDI-sync items still open)
 
-- [ ] Arp on, HOLD off. Hold A440; play C, E, G, E (one at a time, any timing); display
-      counts `1 2 3 4`; the notes sound as you play them. Release A440 — the arp does
-      **not** toggle.
-- [ ] Press and hold C: C E G E repeating at the arp tempo. Release: stops.
-- [ ] Press D: D F# A F#. While holding D press F: from the next step the pattern is
-      transposed to F. Release F (D still down): stays on F.
-- [ ] HOLD on. Press C, release: keeps playing. Press G after releasing all: restarts from
-      step 1 on G at the next step.
-- [ ] A440 + Bank / Group: `dn` plays E G E C, `rnd` shuffles, `Ud` bounces.
-- [ ] A440 + Program 2: `o 2` → C E G E then an octave up. Release A440: no toggle.
-- [ ] A440 + Program 6: sequence gone; keys play the normal arp again.
-- [ ] Hold A440, play 3 notes, release: a new sequence replaces the old one. A tap of A440
-      with no notes in between keeps the sequence and toggles the arp.
-- [ ] Arp off, sequence exists: keys play normally. Tap A440: the sequence plays.
-- [ ] Record from MIDI-in (DAW notes) while holding A440; trigger from the keyboard.
+Record mode (verified in 1.x; re-check what changed):
+
+- [ ] Arp on, HOLD off. Hold A440, press Tune: display `r 0`, A440 LED blinks, no auto-tune
+      ran, **the arp has stopped** (keys you were holding keep sounding as plain notes until
+      released). Release A440: nothing toggles.
+- [ ] Play C, then E, then G, then E (one at a time): the notes sound as you play them;
+      display `r 1`…`r 4`.
+- [ ] Play a C-E-G chord (fingers landing in any order), release, then a single D: `r 5`,
+      `r 6` — the chord is one step.
+- [ ] With no key down press HOLD: `rSt` flashes, then `r 7` (a rest); HOLD LED unchanged.
+- [ ] Press a key and keep it down: `r 8`. Press HOLD: `tiE` flashes, then `r 9`. Press HOLD
+      again: `tiE`, `r10`. Release the key. (Three timing steps; the count is timing steps.)
+- [ ] **Back**: press Group (A440 up): `r 9`, again `r 8` (the ties), again `r 7` (the key),
+      again `r 6` (the rest). Held Group: no repeat. Bank alone: stock (bank changes).
+      Group with a key still down: the step goes and the key, kept down, does not rejoin;
+      its release still silences it. Back at `r 0` right after entering: the old sequence is
+      kept; after one entry, backing to `r 0` leaves nothing.
+- [ ] Sustain pedal (`HLd` mode): pedal with no key down = rest, pedal with a key down = tie.
+- [ ] A440 + Unison / Aftertouch / Program 7-8 / Bank while recording: the message shows for
+      1.5 s, then `r N` returns. A440 + Program 6: `r 0`, still recording.
+- [ ] Tap A440: the patch number returns, LED dark, **nothing plays** — the sequencer is
+      selected and stopped. A440 + Tune, then tap A440 with nothing played: the old sequence
+      is kept.
+- [ ] Record from MIDI-in (DAW notes) in record mode, including a chord.
+
+Transport and generators:
+
+- [ ] With a recording, tap A440: the sequence plays from step 1 at the tempo (BPM shown,
+      LED lit): single notes, the chord as a chord, the rest silent, the tied step held for
+      three steps and released half-way through its last one. Tap A440: `OFF`, silence.
+- [ ] While it plays: play the keyboard — every key sounds polyphonically with its velocity
+      and nothing changes in the sequence; HOLD / pedal sustain *your* notes only (rule 4a
+      above); starting or stopping the sequence does not cut your notes.
+- [ ] A440 + Keyboard (filter Keyboard Amount, id 8): `ArP`; tap A440: the keys arpeggiate as
+      before, the sequence untouched. A440 + Keyboard: `SEq`; tap: it plays again from step 1.
+      With no recording (after power-up): A440 + Keyboard shows `---` and `ArP` stays.
+- [ ] Switching generators while one plays stops it (its notes released) and leaves the other
+      stopped; keys you hold keep sounding.
+- [ ] Transposition: sequencer selected, hold A440, press D above middle C: display `002`,
+      the key is silent and does not go to MIDI Out; from the next step everything is up a
+      tone. Hold A440, press middle C: `000`, as recorded. A440 + a low key: `-12`. A second
+      key during the same A440 hold plays normally. Releasing A440 after the command does
+      not start/stop. The offset survives stop/start, `CHd`/`ArP`, `ArP`/`SEq` and program
+      loads; a new recording's first entry and A440 + Program 6 reset it.
+- [ ] Orders (chords style): A440 + Bank → `bAC` (backwards), `Pnd` (back and forth, ends not
+      repeated), `For`. A440 + Group goes the other way. The arp's `dn`/`o 2` do nothing to
+      the sequence.
+- [ ] Note values: A440 + Program 7 with `SEq` selected changes the sequencer's value (display
+      as the arp's); the arp's own value is unchanged (check after A440 + Keyboard → `ArP`).
+      The change takes effect from the next step without a stumble.
+- [ ] Arpeggiated: record C major, F major, G major, C major as four chord steps. A440 +
+      Unison → `ArP`. Sequencer note value `16`, chord length `1` (A440 + Aftertouch shows
+      the cycle `2b 4b 4 2 1`). Tap A440: 16 sixteenths over C, then F, G, C — a bar each;
+      `dn` runs each chord downwards, chords still in order; `o 2` arpeggiates each chord over
+      two octaves. Chord length `4`: a chord per beat. A tied step lasts twice as long; a rest
+      is silence. A440 + Unison while playing → `CHd`: the chords as blocks again from step 1
+      at the next step. Dotted 8th (`8d`) into a bar: the last arp note is cut at the chord
+      change, the change on time; `8t` fits.
+- [ ] A440 + Program 6 (not recording): `---`, the sequence is gone, `ArP` selected; a tap
+      arpeggiates the keys.
+- [ ] Program loads: play the sequence, load another program: it stops, the recording and
+      the transposition are kept (tap: plays again). With `SEq` selected, load a program saved
+      with the arp on: the arp stays off; A440 + Keyboard → `ArP` (stopped), load it again:
+      the arp comes on. A program saved by 1.2.0 in `ArP`/`2b`: loads with its octaves and
+      note value, the sequencer's style and chord length untouched.
+- [ ] `Syn` from a DAW, sequencer selected: tap A440 → `Syn`, LED lit, silence until the DAW
+      runs; press Start: step 1 on the first clock, steps on the grid, the tied step spanning
+      three grid steps; Arpeggiated chord changes on the bar lines. DAW Stop: silence; DAW
+      Continue: carries on where it was; DAW Start: step 1. Tap A440: `OFF`; DAW Start/
+      Continue do not restart it. Stop the clock for a second while it plays: silence; clocks
+      again: from step 1.
+- [ ] CC 123 (all notes off) from the DAW while the sequence plays: silence and stopped; the
+      recording is kept.
+- [ ] HOLD lit before entering record mode: recorded notes still release on key-up; HOLD
+      still lit on exit.
+- [ ] Hold A440 (no Tune) with `ArP` selected and play keys: nothing is recorded; the keys
+      arpeggiate (arp on) or play (arp off); releasing A440 toggles the arp as a tap does.
 
 ## Note value (spec "Note value")
 
@@ -155,6 +242,10 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] Shift `1`: hold a chord, change the shift to `-1` while holding, release the chord:
       no stuck notes; the next chord sounds an octave down.
 - [ ] Arp on, shift `1`: arpeggiates an octave up; seq recording and triggering follow.
+- [ ] Hold Lo Freq alone: after the panel's hold delay the display shows the current shift
+      (`000`, `001`, `-01`…) and keeps showing it while held; release: Osc B Lo Freq did
+      **not** toggle.
+- [ ] A quick tap of Lo Freq still toggles Osc B Lo Freq (LED changes on release).
 - [ ] DAW recording MIDI from the Prophet: notes arrive shifted (Local Control on and off).
       MIDI-in notes played from the DAW are **not** shifted.
 - [ ] Prophet-10 split mode: the split point moves with the shift (expected).
@@ -164,7 +255,8 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] Each of these shows for about 1.5 s and then the **patch number** returns: A440 +
       Bank (`UP`…), A440 + Program 2 (`o 2`), A440 + Program 5 (`int`/`Syn`), A440 +
       Program 8 (`8S`), tap A440 on (BPM) and off (`OFF`), Lo Freq + Bank (`1`), A440 +
-      Osc B Keyboard (`36`), A440 + Unison (`tAP`), a seq step count.
+      Osc B Keyboard (`36`), A440 + Velocity (`tAP`). In record mode `rSt` / `tiE` flash for
+      about a quarter of a second and return to `r N` instead of the patch number.
 - [ ] A new message within the 1.5 s restarts the timing (e.g. Bank, Bank, Bank).
 
 ## Button id readout (spec "Button id readout")
@@ -177,15 +269,15 @@ Manual verification on the instrument. Record results against the spec markers i
 
 - [ ] Back up patches first anyway (Globals → Pgm Dump → ALL → RECORD): the run only reads,
       but this is the first time the engine touches the flash driver at all.
-- [ ] Hold A440, press Record: `FLA` appears and stays up for about 2 s (10 s on a 16 MB
+- [ ] Hold A440, press Sync (Osc A Sync): `FLA` appears and stays up for about 2 s (10 s on a 16 MB
       part), then three results of 1.5 s each — `F 8`/`F16`/`F -`, `1 E`/`1 U`, `2 E`/`2 U` —
       then the patch number. Note all three in `docs/re/flash.md` and the spec marker. If a
-      **number** shows instead of `FLA`, Record's id is not 11: note the number, nothing else
-      happens. Releasing A440 does **not** toggle the arp.
+      **number** shows instead of `FLA`, Sync's id is not 24: note the number, nothing else
+      happens. Releasing A440 does **not** toggle the generator.
 - [ ] While `FLA` is up: play keys (with the arp on and off), move a pot, press Bank with
       A440 held — everything behaves as usual; the display message interrupts the sequence.
-- [ ] Record **without** A440: stock program-record as before (LED, destination, save).
-- [ ] Press Record again with A440 held while `FLA` is up: nothing changes; the run completes.
+- [ ] Sync **without** A440: stock Osc A sync toggles as before (LED).
+- [ ] Press Sync again with A440 held while `FLA` is up: nothing changes; the run completes.
 - [ ] Afterwards: load a few programs, save one, power cycle — everything intact (nothing was
       written, this just confirms it).
 

@@ -24,6 +24,7 @@ static void push(int on, int src, int note, int vel) {
 }
 void plat_voice_on(int src, int note, int vel) { push(1, src, note, vel); }
 void plat_voice_off(int src, int note) { push(0, src, note, 0); }
+void plat_live_off(int src, int note) { push(0, src, note, 0); }   /* a direct (live) note's release: the same here */
 
 static int n_on(void) { int n = 0; for (int i = 0; i < nlog; i++) n += log_[i].on; return n; }
 static int n_off(void) { return nlog - n_on(); }
@@ -61,8 +62,8 @@ static void test_defaults(void) {
     reset();
     CHECK(!a.enabled && a.mode == ARP_UP && a.octaves == 1 && a.bpm == 120 && !a.ext && !a.hold);
     CHECK(a.beats_num == 1 && a.beats_den == 2);                      /* 1/8 */
-    CHECK(a.sounding == ARP_NONE && a.seq_len == 0);
-    CHECK(sizeof(arp_t) <= 0x400);
+    CHECK(a.sounding == ARP_NONE);
+    CHECK(sizeof(arp_t) <= 0x400);                                    /* the sequence storage lives in seq.c now */
     ticks(5000);
     CHECK(nlog == 0);
 }
@@ -156,7 +157,7 @@ static void test_random_is_uniform_over_the_pool_and_may_repeat(void) {
         if (k && n == on_note(k - 1)) repeats++;
     }
     CHECK(ok && seen[C3] > 50 && seen[E3] > 50 && seen[G3] > 50);
-    CHECK(repeats > 10);                                               /* no repeat avoidance (V5 behaviour) */
+    CHECK(repeats > 10);                                               /* no repeat avoidance (the Arp Mod behaviour) */
 }
 
 /* ---- octaves per pass ---------------------------------------------------------------- */
@@ -466,76 +467,123 @@ static void test_swing_under_midi_clock(void) {
     CHECK(n_on() == 5 && on_tick(2) == 16 && on_tick(3) == 24 && on_tick(4) == 40);
 }
 
-/* ---- seq ----------------------------------------------------------------------------- */
-static void record_cege(void) {
-    arp_seq_record(&a, 1);
-    on(C4); off(C4); on(E4); off(E4); on(G3 + 12); off(G3 + 12); on(E4); off(E4);
-    arp_seq_record(&a, 0);
-    clear_log();                                                       /* the recording sounded directly */
-}
-
-static void test_seq_records_sounds_directly_and_plays_transposed(void) {
+static void test_four_bar_steps_internal_and_midi_clock(void) {
     reset(); arp_enable(&a, 1);
-    arp_seq_record(&a, 1);
-    CHECK(arp_seq_record_note(&a, LOCAL, C4, 100) == 1);
-    CHECK(n_on() == 1 && on_note(0) == C4);                            /* sounds while recording */
-    arp_seq_record_note(&a, LOCAL, C4, 0);
+    arp_set_beats(&a, 16, 1);                                          /* 4 bars at 120 BPM = 8 s per step */
+    on(C3); on(E3);
+    ticks(3999);
+    CHECK(n_on() == 1 && n_sounding() == 1);
+    ticks(1);
+    CHECK(n_sounding() == 0);                                          /* gate at 4 s */
+    ticks(3999);
+    CHECK(n_on() == 1);
+    ticks(1);
+    CHECK(n_on() == 2 && on_note(1) == E3 && on_tick(1) == 8000);
+    reset(); arp_enable(&a, 1); arp_set_beats(&a, 16, 1); arp_set_ext(&a, 1);
+    on(C3); on(E3);
+    arp_realtime(&a, 0xFA, 0);
+    clocks(1, 0);
+    CHECK(n_on() == 1);
+    clocks(191, 0);
+    CHECK(n_sounding() == 1);
+    clocks(1, 0);                                                      /* clock 192: gate */
     CHECK(n_sounding() == 0);
-    CHECK(arp_seq_record_note(&a, LOCAL, E4, 100) == 2); arp_seq_record_note(&a, LOCAL, E4, 0);
-    CHECK(arp_seq_record_note(&a, LOCAL, 67, 100) == 3); arp_seq_record_note(&a, LOCAL, 67, 0);
-    CHECK(arp_seq_record_note(&a, LOCAL, E4, 100) == 4); arp_seq_record_note(&a, LOCAL, E4, 0);
-    arp_seq_record(&a, 0);
-    CHECK(a.seq_len == 4);
-    clear_log();
-    on(D3);                                                            /* trigger: D3 -> D F# A F# */
-    ticks(1000);
-    CHECK(strcmp(ons(), "50 54 57 54 50 ") == 0);
-    clear_log();
-    on(F4);                                                            /* D still down: transposes from the next step */
-    ticks(500);
-    CHECK(strcmp(ons(), "65 69 ") == 0 || strcmp(ons(), "69 72 ") == 0);  /* continues the pattern on F */
-    off(F4);
-    clear_log();
-    ticks(1000);
-    CHECK(strstr(ons(), "65") || strstr(ons(), "69") || strstr(ons(), "72"));   /* stays on F while D is down */
-    CHECK(strstr(ons(), "50 ") == 0 && strstr(ons(), "54 ") == 0);
+    clocks(191, 0);
+    CHECK(n_on() == 1);
+    clocks(1, 0);                                                      /* clock 384: next step */
+    CHECK(n_on() == 2 && on_note(1) == E3);
 }
 
-static void test_seq_octaves_modes_and_clear(void) {
-    reset(); arp_enable(&a, 1);
-    record_cege();
-    arp_set_octaves(&a, 2);
-    on(C4);
-    ticks(1750);
-    CHECK(strcmp(ons(), "60 64 67 64 72 76 79 76 ") == 0);              /* whole sequence, then an octave up */
-    arp_set_octaves(&a, 1);
-    arp_set_mode(&a, ARP_DOWN);
-    clear_log();
-    ticks(1000);
-    CHECK(strcmp(ons(), "64 67 64 60 ") == 0);                         /* reversed sequence */
-    arp_set_mode(&a, ARP_UP);
-    arp_seq_clear(&a);
-    clear_log();
-    ticks(500);
-    CHECK(strcmp(ons(), "60 60 ") == 0);                               /* back to the pool: C alone */
-}
-
-static void test_seq_restarts_on_fresh_key_and_latches(void) {
-    reset(); arp_enable(&a, 1);
-    record_cege();
-    on(C4);
-    ticks(400);                                                        /* C E */
-    off(C4);
-    clear_log();
-    ticks(500);
-    CHECK(n_on() == 0);
-    on(G3);                                                            /* fresh key: starts now from step 1 */
-    CHECK(n_on() == 1 && on_note(0) == G3);
+/* ---- live sustain (the sequencer runs: the engine sustains live notes under HOLD itself) ---- */
+static void test_live_sustain_defers_releases_until_hold_off(void) {
+    reset();                                                           /* arp off: the live path */
     arp_hold(&a, 1);
-    off(G3);
+    on(C4); off(C4);
+    CHECK(n_off() == 1 && !sounding[C4]);                             /* sustain off: stock's hold would do it */
+    arp_set_sustain(&a, 1);
+    on(D4); off(D4);
+    CHECK(n_off() == 1 && sounding[D4]);                              /* deferred */
+    on(E4); off(E4);
+    CHECK(sounding[E4]);
+    arp_set_sustain(&a, 0);                                            /* the sequencer stopped: still ours until HOLD off */
+    CHECK(sounding[D4] && sounding[E4]);
+    on(F4); off(F4);
+    CHECK(!sounding[F4]);                                              /* a new release is stock's business again */
+    arp_hold(&a, 0);
+    CHECK(!sounding[D4] && !sounding[E4] && n_off() == 4);            /* HOLD off: the set is released */
+    arp_set_sustain(&a, 1); arp_hold(&a, 1);
+    on(C4); off(C4);
+    CHECK(sounding[C4]);
     clear_log();
+    on(C4);                                                            /* pressed again: the old note goes first */
+    CHECK(n_off() == 1 && n_on() == 1 && sounding[C4] && log_[0].on == 0 && log_[1].on == 1);
+    off(C4);
+    CHECK(sounding[C4]);
+    arp_all_notes_off(&a);
+    CHECK(arp_pool_count(&a) == 0);
+    arp_hold(&a, 0);
+    CHECK(n_off() == 1);                                               /* nothing left to release */
+    arp_set_sustain(&a, 1); arp_hold(&a, 1);
+    on(G3); off(G3);
+    CHECK(sounding[G3]);
+    arp_enable(&a, 1);                                                 /* the arp starts: live notes are cut as always */
+    CHECK(!sounding[G3]);
+}
+
+/* ---- the chord source (the sequencer's Arpeggiated style feeds the arp a chord) ------------ */
+static void test_chord_source_runs_the_pattern_over_the_given_notes(void) {
+    static const uint8_t notes[3] = { E4, C4, 67 }, vels[3] = { 90, 100, 80 };
+    reset();                                                           /* arp off: the chord source runs anyway */
+    arp_chord_set(&a, notes, vels, 3);
+    CHECK(n_on() == 1 && on_note(0) == C4 && on_tick(0) == 0 && on_at(0)->vel == 100);   /* sorted: Up from C, at once */
     ticks(1000);
-    CHECK(strcmp(ons(), "59 62 59 55 ") == 0);                         /* keeps playing, latched */
+    CHECK(strcmp(ons(), "60 64 67 60 64 ") == 0 && on_tick(4) == 1000);
+    on(D4);                                                            /* keys do not join a chord source: live, direct */
+    CHECK(on_note(5) == D4 && sounding[D4]);
+    ticks(250);
+    CHECK(on_note(6) == 67 && sounding[D4]);
+    off(D4);
+    arp_set_mode(&a, ARP_ASSIGN);                                      /* the given order */
+    clear_log(); arp_chord_set(&a, notes, vels, 3);
+    ticks(749);
+    CHECK(strcmp(ons(), "64 60 67 ") == 0);
+    arp_set_mode(&a, ARP_UP);
+    arp_chord_set(&a, notes, vels, 0);                                 /* a rest: silence, the clock runs */
+    clear_log(); ticks(1000);
+    CHECK(nlog == 0);
+    arp_chord_clear(&a);
+    ticks(1000);
+    CHECK(nlog == 0);
+    arp_chord_set(&a, notes, vels, 3);
+    ticks(10);
+    arp_chord_clear(&a);
+    CHECK(n_sounding() == 0);                                          /* clear releases */
+}
+
+static void test_chord_source_under_midi_clock_counts_from_the_chord(void) {
+    static const uint8_t notes[3] = { C4, E4, 67 }, vels[3] = { 100, 100, 100 };
+    reset(); arp_set_ext(&a, 1);
+    arp_realtime(&a, 0xFA, 0);
+    clocks(5, 0);                                                      /* mid-grid */
+    arp_rt_accept(&a, 0xF8, 0);                                        /* the chord is set on this clock, as the sequencer does ... */
+    arp_chord_set(&a, notes, vels, 3);
+    arp_rt_apply(&a, 0xF8);                                            /* ... and the clock is the chord's clock 0 */
+    CHECK(n_on() == 1 && on_note(0) == C4);                            /* the chord's first note now, not at the grid */
+    clocks(5, 0);
+    CHECK(n_sounding() == 1);
+    clocks(1, 0);
+    CHECK(n_sounding() == 0);                                          /* gate 6 clocks later */
+    clocks(6, 0);
+    CHECK(n_on() == 2 && on_note(1) == E4);                            /* steps counted from the chord's clock */
+}
+
+static void test_realtime_reports_accepted_clocks(void) {
+    reset(); arp_set_ext(&a, 1);
+    CHECK(arp_realtime(&a, 0xFA, 0) == 1 && arp_realtime(&a, 0xF8, 0) == 1);
+    CHECK(arp_realtime(&a, 0xF8, 1) == 0);                             /* the other port is locked out */
+    CHECK(arp_realtime(&a, 0xF9, 0) == 0);                             /* not a realtime byte we act on */
+    arp_set_ext(&a, 0);
+    CHECK(arp_realtime(&a, 0xF8, 0) == 0);                             /* internal clock: ignored */
 }
 
 /* ---- assign -------------------------------------------------------------------------- */
@@ -626,15 +674,6 @@ static void test_assign_octaves_per_pass_and_all_notes_off(void) {
     on(E3);                                                            /* list was cleared: E alone */
     ticks(500);
     CHECK(strcmp(ons(), "52 64 52 ") == 0);
-}
-
-static void test_assign_with_a_sequence_plays_the_recorded_order(void) {
-    reset(); arp_enable(&a, 1);
-    record_cege();
-    arp_set_mode(&a, ARP_ASSIGN);
-    on(C4);
-    ticks(1000);
-    CHECK(strcmp(ons(), "60 64 67 64 60 ") == 0);
 }
 
 static void test_assign_list_holds_32_entries(void) {
@@ -744,15 +783,16 @@ int main(void) {
     test_swing_under_midi_clock();
     test_bpm_follows_the_midi_clock_over_a_beat();
     test_bpm_window_restarts_on_transport_and_loss();
-    test_seq_records_sounds_directly_and_plays_transposed();
-    test_seq_octaves_modes_and_clear();
-    test_seq_restarts_on_fresh_key_and_latches();
+    test_four_bar_steps_internal_and_midi_clock();
+    test_live_sustain_defers_releases_until_hold_off();
+    test_chord_source_runs_the_pattern_over_the_given_notes();
+    test_chord_source_under_midi_clock_counts_from_the_chord();
+    test_realtime_reports_accepted_clocks();
     test_assign_plays_the_entered_order_with_each_entrys_velocity();
     test_assign_duplicates_via_hold_and_relatch_replaces();
     test_assign_release_without_hold_removes_the_pitch();
     test_assign_hold_off_drops_latched_entries();
     test_assign_octaves_per_pass_and_all_notes_off();
-    test_assign_with_a_sequence_plays_the_recorded_order();
     test_assign_list_holds_32_entries();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;

@@ -15,7 +15,7 @@ STOCK = ROOT / "fixtures" / "prophet5_main_2.1.0.syx"
 HOOKS = ROOT / "firmware" / "hooks_native.json"
 OUT = ROOT / "build" / "test-native"
 
-REC_BASE, STATE_BASE, REC_HI = 0x20088000, 0x2008E000, 0x20090000
+REC_BASE, STATE_BASE, REC_HI = 0x20088000, 0x2008C000, 0x20090000   # code 16 KB, state 16 KB
 
 # every stock BL site the native build retargets, with the stock target it must find there
 BL_SITES = {
@@ -69,6 +69,8 @@ IFACE = [
     0x2003CB69,   # live program parameter read(layer, param)
     0x2003CEF5,   # plain program parameter store(layer, param, value)
     0x2003B6B1,   # hold off (both sources): the original callee at the program-loaded hook
+    0x200574FA,   # ui + 0x16A: stock's A440 reference tone flag (byte)
+    0x2005752C,   # ui + 0x19C: stock's HOLD button latch (byte)
 ]
 
 

@@ -8,26 +8,30 @@ static int failures, checks;
 #define CHECK(cond) do { checks++; if (!(cond)) { failures++; \
     printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
 
-enum { BLANK = 0x25, T = 0x1d, D = 0x0d, S = 0x1c };
+enum { BLANK = 0x25, T = 0x1d, D = 0x0d, S = 0x1c, B = 0x0b };
 
-/* the Prophet-6 list in its order, longest first (index 0 = Half): beats per step (per pair for
- * swing), swing flag, MIDI clocks per step (per pair), and display text */
-static const struct { const char *name; int num, den, swing, clocks; int d0, d1, d2; } TABLE[] = {
-    { "Half",   2, 1, 0,  48,  BLANK, BLANK, 2 },
-    { "Qtr",    1, 1, 0,  24,  BLANK, BLANK, 4 },
-    { "8th D",  3, 4, 0,  18,  BLANK, 8, D },
-    { "8th",    1, 2, 0,  12,  BLANK, BLANK, 8 },
-    { "8th S",  1, 1, 1,  24,  BLANK, 8, S },
-    { "8th T",  1, 3, 0,   8,  BLANK, 8, T },
-    { "16th",   1, 4, 0,   6,  BLANK, 1, 6 },
-    { "16th S", 1, 2, 1,  12,  1, 6, S },
-    { "16th T", 1, 6, 0,   4,  1, 6, T },
-    { "32nd",   1, 8, 0,   3,  BLANK, 3, 2 },
+/* longest first: three long values for pad sequences, then the Prophet-6 list in its order:
+ * beats per step (per pair for swing), swing flag, MIDI clocks per step (per pair), display
+ * text, and the code patch memory stores (0-9 = Prophet-6 position, 10-12 = long) */
+static const struct { const char *name; int num, den, swing, clocks; int d0, d1, d2; int code; } TABLE[] = {
+    { "4 bars", 16, 1, 0, 384,  BLANK, 4, B, 12 },
+    { "2 bars",  8, 1, 0, 192,  BLANK, 2, B, 11 },
+    { "Whole",   4, 1, 0,  96,  BLANK, BLANK, 1, 10 },
+    { "Half",   2, 1, 0,  48,  BLANK, BLANK, 2, 0 },
+    { "Qtr",    1, 1, 0,  24,  BLANK, BLANK, 4, 1 },
+    { "8th D",  3, 4, 0,  18,  BLANK, 8, D, 2 },
+    { "8th",    1, 2, 0,  12,  BLANK, BLANK, 8, 3 },
+    { "8th S",  1, 1, 1,  24,  BLANK, 8, S, 4 },
+    { "8th T",  1, 3, 0,   8,  BLANK, 8, T, 5 },
+    { "16th",   1, 4, 0,   6,  BLANK, 1, 6, 6 },
+    { "16th S", 1, 2, 1,  12,  1, 6, S, 7 },
+    { "16th T", 1, 6, 0,   4,  1, 6, T, 8 },
+    { "32nd",   1, 8, 0,   3,  BLANK, 3, 2, 9 },
 };
 #define NTABLE ((int)(sizeof TABLE / sizeof *TABLE))
 
 /* swing pairs split 2:1 in clocks: 8th S 16 + 8, 16th S 8 + 4 */
-static const int SWING_LONG[NTABLE] = { 0, 0, 0, 0, 16, 0, 0, 8, 0, 0 };
+static const int SWING_LONG[NTABLE] = { 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 8, 0, 0 };
 
 static rate_t r;
 
@@ -35,8 +39,8 @@ static void test_default_is_eighths_and_zero_state(void) {
     rate_t z; memset(&z, 0, sizeof z);
     rate_init(&r);
     CHECK(memcmp(&z, &r, sizeof r) == 0);
-    CHECK(RATE_COUNT == 10 && NTABLE == RATE_COUNT);
-    CHECK(rate_index(&r) == RATE_DEFAULT_INDEX && RATE_DEFAULT_INDEX == 3);
+    CHECK(RATE_COUNT == 13 && NTABLE == RATE_COUNT);
+    CHECK(rate_index(&r) == RATE_DEFAULT_INDEX && RATE_DEFAULT_INDEX == 6);   /* 8th */
     int num, den; rate_beats(&r, &num, &den);
     CHECK(num == 1 && den == 2 && rate_swing(&r) == 0);
     uint8_t d[3]; rate_display(&r, d);
@@ -57,7 +61,8 @@ static void test_table_order_beats_swing_clocks_and_display(void) {
         int ok = num == TABLE[i].num && den == TABLE[i].den && sw == TABLE[i].swing
                  && (24 * num) % den == 0 && 24 * num / den == TABLE[i].clocks
                  && (!sw || ((24 * num / den) % 3 == 0 && (24 * num / den) / 3 * 2 == SWING_LONG[i]))
-                 && d[0] == TABLE[i].d0 && d[1] == TABLE[i].d1 && d[2] == TABLE[i].d2;
+                 && d[0] == TABLE[i].d0 && d[1] == TABLE[i].d1 && d[2] == TABLE[i].d2
+                 && rate_code(&r) == TABLE[i].code;
         checks++;
         if (!ok) { failures++; printf("FAIL table %s: %d/%d swing %d display %02x %02x %02x\n",
                                       TABLE[i].name, num, den, sw, d[0], d[1], d[2]); }
@@ -78,16 +83,28 @@ static void test_steps_clamp_at_both_ends(void) {
 
 static void test_set_index_validates(void) {
     rate_init(&r);
-    CHECK(rate_set_index(&r, 4) == 1 && rate_index(&r) == 4 && rate_swing(&r) == 1);   /* 8th S */
-    CHECK(rate_set_index(&r, 10) == 0 && rate_index(&r) == 4);
-    CHECK(rate_set_index(&r, -1) == 0 && rate_index(&r) == 4);
-    CHECK(rate_set_index(&r, 9) == 1 && rate_index(&r) == 9);
+    CHECK(rate_set_index(&r, 7) == 1 && rate_index(&r) == 7 && rate_swing(&r) == 1);   /* 8th S */
+    CHECK(rate_set_index(&r, 13) == 0 && rate_index(&r) == 7);
+    CHECK(rate_set_index(&r, -1) == 0 && rate_index(&r) == 7);
+    CHECK(rate_set_index(&r, 12) == 1 && rate_index(&r) == 12);
     CHECK(rate_set_index(&r, 0) == 1 && rate_index(&r) == 0);
+}
+
+/* the patch-memory code: the Prophet-6 position for its ten values, 10-12 for the long ones */
+static void test_code_round_trips_and_validates(void) {
+    rate_init(&r);
+    CHECK(rate_code(&r) == 3);                                         /* 8th: Prophet-6 position 3 */
+    for (int c = 0; c < 13; c++) {
+        CHECK(rate_set_code(&r, c) == 1 && rate_code(&r) == c);
+        CHECK(rate_index(&r) == (c < 10 ? c + 3 : 12 - c));           /* 10 = Whole (index 2), 11 = 2 bars, 12 = 4 bars */
+    }
+    CHECK(rate_set_code(&r, 13) == 0 && rate_set_code(&r, -1) == 0 && rate_code(&r) == 12);
 }
 
 int main(void) {
     test_default_is_eighths_and_zero_state();
     test_set_index_validates();
+    test_code_round_trips_and_validates();
     test_table_order_beats_swing_clocks_and_display();
     test_steps_clamp_at_both_ends();
     printf("%d checks, %d failures\n", checks, failures);

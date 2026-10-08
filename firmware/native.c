@@ -11,6 +11,7 @@
 
 #include "platform.h"
 #include "arp.c"
+#include "seq.c"
 #include "arpui.c"
 #include "rate.c"
 #include "disp.c"
@@ -41,6 +42,8 @@ enum {
     NI_PARAM_READ,       /* 0x2003CB69 live program parameter read(layer, param) -> u16 */
     NI_PARAM_STORE,      /* 0x2003CEF5 plain program parameter store(layer, param, value) */
     NI_HOLD_OFF,         /* 0x2003B6B1 hold off (both sources): original callee at the program-loaded hook */
+    NI_TONE_FLAG,        /* 0x200574FA ui + 0x16A: stock's A440 reference tone on (byte != 0) */
+    NI_HOLD_LATCH,       /* 0x2005752C ui + 0x19C: stock's HOLD button latch (byte != 0) */
     NI_COUNT
 };
 
@@ -67,6 +70,8 @@ const volatile uint32_t stock_iface[NI_COUNT] = {
     [NI_PARAM_READ] = 0x2003CB69u,
     [NI_PARAM_STORE] = 0x2003CEF5u,
     [NI_HOLD_OFF] = 0x2003B6B1u,
+    [NI_TONE_FLAG] = 0x200574FAu,
+    [NI_HOLD_LATCH] = 0x2005752Cu,
 };
 
 #define SFN(i, type) ((type)(uintptr_t)stock_iface[i])
@@ -89,7 +94,7 @@ typedef void (*param_store_fn)(int, int, int);
 
 #define DSP_HOLD_MSG 0x080D0000u          /* the hold handler's voice-engine message | state */
 
-/* --- state: 0x2008E000..0x20090000, zero after every boot ------------------------------- */
+/* --- state: 0x2008C000..0x20090000 (16 KB), zero after every boot ------------------------ */
 typedef struct { uint8_t type, a, b, c; } qev_t;
 typedef struct {
     volatile uint8_t wr, rd;              /* single producer (Prophet5 task), single consumer (tick) */
@@ -98,14 +103,16 @@ typedef struct {
 } queue_t;
 enum { Q_NOTE = 1, Q_HOLD = 2, Q_ANO = 3, Q_PROGRAM = 4 };
 
-#define ARP     ((arp_t *)0x2008E000u)
-#define UI      ((arpui_t *)0x2008E400u)
-#define OCT     ((oct_t *)0x2008E440u)
-#define VHOLD   ((vhold_t *)0x2008E4E0u)
-#define QUEUE   ((queue_t *)0x2008E500u)
-#define INITED  ((volatile uint8_t *)0x2008E700u)
+#define SEQ     ((seq_t *)0x2008C000u)         /* 512 events: the bulk of the area */
+#define ARP     ((arp_t *)0x2008F400u)
+#define UI      ((arpui_t *)0x2008F800u)
+#define OCT     ((oct_t *)0x2008F880u)
+#define VHOLD   ((vhold_t *)0x2008F920u)
+#define QUEUE   ((queue_t *)0x2008F940u)
+#define INITED  ((volatile uint8_t *)0x2008FB40u)
+_Static_assert(sizeof(seq_t) <= 0x3400, "seq state too large");
 _Static_assert(sizeof(arp_t) <= 0x400, "arp state too large");
-_Static_assert(sizeof(arpui_t) <= 0x40, "ui state too large");
+_Static_assert(sizeof(arpui_t) <= 0x80, "ui state too large");
 _Static_assert(sizeof(oct_t) <= 0xA0, "oct state too large");
 _Static_assert(sizeof(vhold_t) <= 0x10, "vhold state too large");
 _Static_assert(sizeof(queue_t) <= 0x200, "queue too large");
@@ -123,6 +130,7 @@ static void ensure_init(void)
     __asm__ volatile("mrs %0, cpsr\n\tcpsid i" : "=r"(cpsr) :: "memory");
     if (!*INITED) {
         arp_init(ARP);
+        seq_init(SEQ);
         arpui_init(UI);
         oct_init(OCT);
         vhold_init(VHOLD);
@@ -193,10 +201,10 @@ static void q_drain(void)
         __asm__ volatile("" ::: "memory");
         q->rd = (uint8_t)((q->rd + 1) & 63);
         switch (e.type) {
-        case Q_NOTE: arpui_note(UI, ARP, e.a, e.b, e.c); break;
-        case Q_HOLD: arp_hold(ARP, e.a); break;
-        case Q_ANO:  arp_all_notes_off(ARP); break;
-        case Q_PROGRAM: arpui_program_loaded(UI, ARP); break;
+        case Q_NOTE: arpui_note(UI, ARP, SEQ, e.a, e.b, e.c); break;
+        case Q_HOLD: arpui_hold(UI, ARP, SEQ, e.a); break;
+        case Q_ANO:  arpui_all_notes_off(UI, ARP, SEQ); break;
+        case Q_PROGRAM: arpui_program_loaded(UI, ARP, SEQ); break;
         default: break;
         }
     }
@@ -204,7 +212,8 @@ static void q_drain(void)
 
 /* --- platform ---------------------------------------------------------------------------- */
 void plat_voice_on(int src, int note, int vel) { SFN(NI_NOTE_ON, note3_fn)(src, note, vel); }
-void plat_voice_off(int src, int note) { SFN(NI_NOTE_OFF, note2_fn)(src, note); }
+void plat_voice_off(int src, int note) { SFN(NI_NOTE_OFF, note2_fn)(src, note); }   /* a generated note */
+void plat_live_off(int src, int note) { SFN(NI_NOTE_OFF, note2_fn)(src, note); }    /* a live note (the engine sustains it itself while suspended) */
 void plat_led(int led, int on) { SFN(NI_LED, button_fn)(led, on != 0); }
 void plat_display3(int c0, int c1, int c2) { SFN(NI_DISPLAY3, disp3_fn)(c0, c1, c2); }
 void plat_display_int(int v) { SFN(NI_DISPLAY_INT, int_fn)(v); }
@@ -214,26 +223,32 @@ int  plat_a440_down(void) { return *SPTR(NI_A440_HELD, volatile const uint16_t *
 void plat_display_hold(void) { disp_touch(&UI->disp); }   /* oct.c: the shift readout reverts too */
 int  plat_param_read(int param) { return SFN(NI_PARAM_READ, param_read_fn)(0, param); }          /* layer A */
 void plat_param_store(int param, int value) { SFN(NI_PARAM_STORE, param_store_fn)(0, param, value); }
+int  plat_tone_on(void) { return *SPTR(NI_TONE_FLAG, volatile const uint8_t *) != 0; }
+void plat_stock_a440_press(void) { SFN(NI_BUTTON_POST, button_fn)(ARPUI_A440, 1); }   /* stock: tone toggle (HOLD up) */
+int  plat_hold_latch(void) { return *SPTR(NI_HOLD_LATCH, volatile const uint8_t *) != 0; }
+void plat_stock_hold_press(void) { SFN(NI_BUTTON_POST, button_fn)(ARPUI_HOLD, 1); }    /* stock: latch toggle */
 
 /* --- hooks: Timer Service task ----------------------------------------------------------- */
 /* stock 0x2003BE9C: the 1 ms keyboard poll. Everything the engine does happens here. */
 int hook_kbd_scan(void *fifo)
 {
     ensure_init();
-    arpui_tick(UI, ARP);                                   /* kill switch first: it must get its
+    arpui_tick(UI, ARP, SEQ);                              /* kill switch first: it must get its
                                                               chance before any engine code runs */
     if (!killed()) {
         int post;
         q_drain();
-        post = vhold_tick(VHOLD, ARP->enabled, stock_hold_active());
+        post = vhold_tick(VHOLD, arpui_suspended(UI, ARP, SEQ), stock_hold_active());
         if (post >= 0)
             dsp_post(DSP_HOLD_MSG | (uint32_t)post);       /* "HOLD while the arp is on" */
-        arp_tick(ARP);
+        if (!seq_tick(SEQ, ARP))                           /* a chord handed to the arp is its step for this ms */
+            arp_tick(ARP);
     }
     return SFN(NI_FIFO_COUNT, scan_fn)(fifo);
 }
 
-/* stock 0x2003BECC: keyboard FIFO consumer -> note_on(1, note, vel) */
+/* stock 0x2003BECC: keyboard FIFO consumer -> note_on(1, note, vel). Local Control on only:
+ * with it off the keys take the MIDI-out path below and never reach the engine. */
 void hook_local_note(int src, int note, int vel)
 {
     ensure_init();
@@ -241,10 +256,12 @@ void hook_local_note(int src, int note, int vel)
         SFN(NI_NOTE_ON, note3_fn)(src, note, vel);
         return;
     }
+    if (arpui_key(UI, ARP, SEQ, note, vel))
+        return;                                            /* the sequence transposition command: silent */
     note = oct_map_key(OCT, note, vel > 0);
     if (note < 0)
         return;
-    arpui_note(UI, ARP, src, note, vel);
+    arpui_note(UI, ARP, SEQ, src, note, vel);
 }
 
 /* stock 0x2003BEFA / 0x2003BF16: local key to MIDI Out (cable_mask, channel, note, vel) */
@@ -283,7 +300,7 @@ void hook_button(int id, int value)
         }
         if (act == OCT_CONSUMED)
             return;
-        if (arpui_button(UI, ARP, id, value))
+        if (arpui_button(UI, ARP, SEQ, id, value))
             return;
     }
     SFN(NI_BUTTON_POST, button_fn)(id, value);
@@ -312,7 +329,7 @@ __attribute__((used)) void hook_rt_glue(int byte, int port)
 {
     ensure_init();
     if (!killed())
-        arp_realtime(ARP, byte & 0xFF, port);
+        arpui_realtime(UI, ARP, SEQ, byte & 0xFF, port);
 }
 
 __attribute__((naked)) void hook_rt_trampoline(void)
@@ -371,7 +388,7 @@ __attribute__((used)) void hook_hold_dispatch(uint32_t msg, int new_state)
 {
     int on = new_state & 1;
     ensure_init();
-    if (killed() || vhold_post_on_hold_change(ARP->enabled))
+    if (killed() || vhold_post_on_hold_change(arpui_suspended(UI, ARP, SEQ)))
         dsp_post(msg);
     if (!killed())
         q_push(Q_HOLD, on, 0, 0);
@@ -402,5 +419,5 @@ int hook_hold_query(void)
     int stock;
     ensure_init();
     stock = stock_hold_active();
-    return killed() ? stock : vhold_query(ARP->enabled, stock);
+    return killed() ? stock : vhold_query(arpui_suspended(UI, ARP, SEQ), stock);
 }
