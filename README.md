@@ -31,11 +31,12 @@ instrument, step by step; the manual below is the reference.
   them), 1–4 octaves, HOLD latch with re‑latch, tempo 40–300 BPM by knob or tap, MIDI clock
   sync, thirteen note values from four bars to 32nds including triplets and Prophet‑6‑style
   swing.
-- **Polyphonic step sequencer** — up to 64 steps of chords (up to 10 notes each, each note
-  with the velocity you played it at), rests and ties, recorded from the keyboard or MIDI,
-  played transposed from any key, in any of the arp's directions, octaves and note values,
-  in sync — either as chords, or **arpeggiated**: the sequence becomes a chord progression
-  the arpeggiator plays through, a quarter note to four bars per chord.
+- **Polyphonic step sequencer** — a second generator beside the arp: up to 512 steps of
+  chords (up to 10 notes each, each note with the velocity you played it at), rests and
+  ties, recorded from the keyboard or MIDI with undo. Start it and play over it; transpose
+  it from a key; run it forward, backward or pendulum — or **arpeggiated**: the sequence
+  becomes a chord progression the arpeggiator plays through, a quarter note to four bars
+  per chord.
 - **Keyboard octave shift** — ±2 octaves from the panel, applied to the keys, the arp and
   MIDI Out.
 - **Patch memory** — the arp's on/off, mode, octaves and note value are saved with each
@@ -43,8 +44,9 @@ instrument, step by step; the manual below is the reference.
 - Nothing else changes: with the arp off the synth is stock, and the whole patch can be
   bypassed at power‑on.
 
-Verified on a Prophet‑10 Rev4 (October 2026); the spec marks the few paths not yet tried on
-hardware. Sequential's A440 tuning‑reference tone is still there — on A440 + HOLD, since
+The arpeggiator and the recording side were verified on a Prophet‑10 Rev4 (October 2026);
+the 2.0.0 sequencer transport is new and not yet tried on hardware — the spec marks what
+has been. Sequential's A440 tuning‑reference tone is still there — on A440 + HOLD, since
 A440 itself is now the arp button.
 
 ## Installing
@@ -89,24 +91,26 @@ match the release (`dist/SHA256SUMS`).
 
 ## Manual
 
-The arp lives on the **A440** button. A **tap** toggles it; **holding** it turns the
-buttons around it into the arp's controls. Every message the patch puts on the display
-goes away after 1.5 s and the program number comes back.
+The patch lives on the **A440** button. There are two generators, the **arpeggiator**
+(`ArP`) and the **sequencer** (`SEq`): A440 + **Keyboard** (the filter's Keyboard Amount
+button) selects one, a **tap** of A440 starts or stops the selected one (LED lit while it
+runs), and **holding** A440 turns the buttons around it into controls — most act on the
+selected generator. Every message the patch puts on the display goes away after 1.5 s and
+the program number comes back.
 
 ### Arpeggiator
 
 | Control | Action | Display |
 | --- | --- | --- |
-| Tap **A440** | Arp on / off (LED) | BPM / `OFF` |
+| A440 + **Keyboard** | Select the arp / the sequencer | `ArP` / `SEq` |
+| Tap **A440** (`ArP` selected) | Arp on / off (LED) | BPM / `OFF` |
 | A440 + **Bank** / **Group** | Next / previous mode | `UP` `dn` `Ud` `rnd` `ASS` |
 | A440 + **Program 1–4** | 1–4 octaves | `o 1` … `o 4` |
 | A440 + **Program 5** | Clock: internal / MIDI sync | `int` / `Syn` |
-| A440 + **Program 7** / **8** | Note value longer (−) / shorter (+) | `4b 2b 1 2 4 8d 8 8S 8t 16 16S 16t 32` |
+| A440 + **Program 7** / **8** | The arp's note value longer (−) / shorter (+) | `4b 2b 1 2 4 8d 8 8S 8t 16 16S 16t 32` |
 | A440 + **Glide Rate** knob | Tempo 40–300 BPM | the BPM |
 | A440 + **Velocity** (tap repeatedly) | Tap tempo | `tAP`, then the BPM |
-| A440 + **HOLD** (arp off) | Sequential's A440 tuning tone on / off | A440 LED, as stock |
-| A440 + **Unison** | Sequence playback: chords / arpeggiated | `POL` / `ArP` |
-| A440 + **Aftertouch** | Chord length for `ArP` (quarter → half → whole → 2 bars → 4 bars) | `4 2 1 2b 4b` |
+| A440 + **HOLD** (generator stopped) | Sequential's A440 tuning tone on / off | A440 LED, as stock |
 | **HOLD** (or pedal in `HLd` mode) | Latch | — |
 
 "HOLD" is the button labelled **RELEASE / HOLD**, with the Release/Hold global set to hold.
@@ -133,51 +137,66 @@ goes away after 1.5 s and the program number comes back.
   active.
 - Glide Rate on its own is always the normal glide, even with the arp running. Keys played
   via MIDI In arpeggiate like local keys; MIDI Out carries the keys you play, not the arp.
-- **Tuning tone.** With the arp off, hold A440 and press HOLD: the stock A440 reference tone
-  toggles, lighting the A440 LED as it does in stock. Switching the arp on silences it, so
-  from then on a lit LED means the arp.
+- **Tuning tone.** With the selected generator stopped, hold A440 and press HOLD: the stock
+  A440 reference tone toggles, lighting the A440 LED as it does in stock. Starting a
+  generator silences it, so from then on a lit LED means the generator.
 
 ### Step sequencer
 
-Recording happens in **record mode**:
+The sequencer is the second generator: it plays a recording on its own while the keyboard
+stays yours. Recording happens in **record mode**:
 
 | Control | Action | Display |
 | --- | --- | --- |
-| A440 + **Tune** | Enter record mode | `r 0`, A440 LED blinks |
+| A440 + **Tune** | Enter record mode (selects the sequencer, stops what was playing) | `r 0`, A440 LED blinks |
 | Play a note or a chord | Record a step (notes held together = one chord; velocities kept) | `r 1`, `r 2` … |
 | **HOLD** with no key down | Insert a rest | `rSt`, then the count |
 | **HOLD** while holding the step's keys | Tie: the step lasts one more step (repeatable) | `tiE`, then the count |
+| **Group** (A440 not held) | Back: undo the last tie, else the last chord or rest | the count |
 | A440 + **Program 6** | Start over (stays in record mode) | `r 0` |
-| Tap **A440** (or A440 + Tune) | Finish | program number |
+| Tap **A440** (or A440 + Tune) | Finish — the sequencer is selected and stopped | program number |
 
-The count is the length recorded so far in arp steps — every gesture adds one. The
-sustain pedal (in `HLd` mode) does the same as the HOLD button here; the HOLD latch itself
-is not changed. What you play sounds as you play it. Finishing with something recorded
-switches the arp on if it was off, so you hear it straight away; finishing with nothing
-recorded keeps your previous sequence and leaves the arp as it was.
+The count is the length recorded so far in timing steps — every chord, rest and tie adds
+one; there is room for 512. The sustain pedal (in `HLd` mode) does the same as the HOLD
+button here; the HOLD latch itself is not changed. What you play sounds as you play it, and
+until your first entry the previous sequence is still there, so finishing with nothing
+recorded keeps it.
 
-Playing it back:
+Playing it, with the sequencer selected (A440 + Keyboard shows `SEq`):
 
-- With the arp on and a sequence recorded, pressing a key plays the sequence **transposed**
-  so that the lowest note of its first chord lands on that key. A new key re‑transposes from
-  the next step. Release everything and it stops; with **HOLD** on it keeps running, and the
-  first key after releasing all keys restarts it from step 1.
-- The arp's **direction** modes, **octaves**, **note value** and **clock** apply: `UP` plays
-  the steps in order, `dn` backwards, `Ud` back and forth, `rnd` picks steps at random; each
-  step keeps its chord and its length whatever the order. Ties are held for their length
-  (released half‑way through the last step, like any step's gate) and stay on the grid under
-  MIDI sync.
-- **Arpeggiated** (`ArP`, A440 + Unison): the sequence becomes a chord progression. Each
-  step is held for the **chord length** (A440 + Aftertouch cycles quarter, half, whole, 2
-  bars, 4 bars) while the arpeggiator plays its notes at the note value, in the arp's
-  direction mode and octaves — record four pads as four steps, set a whole note per chord
-  and 16ths, and you have a bar of arpeggio per chord. Chords always come in order; a tied
-  step is held for more chord lengths, a rest is silence. `POL` plays the steps as chords,
-  one per arp step, as before.
-- A440 + **Program 6** outside record mode clears the sequence; you're back to the plain
-  arp.
-- Limits: 64 steps, 10 notes per step, a step can be tied up to 64 steps long. The sequence
-  is global and not saved — it is gone at power‑off.
+| Control | Action | Display |
+| --- | --- | --- |
+| Tap **A440** | Start from the first step / stop (LED) | BPM / `OFF` |
+| A440 + **a key** | Transpose: middle C = as recorded, any other key = that many semitones | the offset |
+| A440 + **Bank** / **Group** | Order (chords style): forward / backward / pendulum | `For` `bAC` `Pnd` |
+| A440 + **Program 7** / **8** | The sequencer's note value longer (−) / shorter (+) | as the arp's |
+| A440 + **Unison** | Style: chords / arpeggiated | `CHd` / `ArP` |
+| A440 + **Aftertouch** | Chord length for `ArP` (quarter → half → whole → 2 bars → 4 bars) | `4 2 1 2b 4b` |
+| A440 + **Program 6** | Clear the sequence (the arp is selected again) | `---` |
+
+- **Chords** (`CHd`): one step per sequencer step at the sequencer's note value — a chord
+  sounds as recorded and is released half‑way through its last step, ties hold it for their
+  length, rests are silence. The arp's direction and octaves don't apply here.
+- **Arpeggiated** (`ArP`): the sequence becomes a chord progression. Each step is held for
+  the **chord length** while the arpeggiator plays its notes at the sequencer's note value,
+  in the arp's direction mode and octaves (A440 + Bank / Group and Program 1–4 while in this
+  style) — record four pads as four steps, set a whole note per chord and 16ths, and you
+  have a bar of arpeggio per chord. Chords always come in order; a tied step is held for
+  more chord lengths, a rest is silence. A note value that doesn't divide the chord length
+  (a dotted 8th into a bar) is cut at the chord change; triplets fit.
+- **Transposition** takes effect from the next step or chord and stays until you record
+  again or clear; the command key itself doesn't sound. It needs Local Control on.
+- **Playing over it**: keys and MIDI‑in notes sound as normal and never affect playback;
+  HOLD and the pedal are the synth's own hold for them. Starting or stopping the sequencer
+  doesn't cut them. Voices are shared with the sequence (a chord step takes up to ten).
+- **MIDI sync** (`Syn`): a tap arms the sequencer and it starts on the next step of the
+  DAW's grid; the DAW's Stop pauses it where it is and Continue resumes; Start takes it back
+  to the first step; a tap of A440 stops it for good. CC 123–127 (all notes off) stop it too.
+- Switching generators (A440 + Keyboard) stops the one that was playing and leaves the new
+  one stopped; what you were holding on the keyboard keeps sounding. The HOLD button's
+  latch is handed over as described under HOLD above.
+- Limits: 512 timing steps, 10 notes per chord. The sequence and its settings (style, order,
+  note value, chord length, transposition) are global and not saved — gone at power‑off.
 
 ### Keyboard octave shift
 
@@ -195,10 +214,12 @@ saved with programs.
 
 ### Patch memory
 
-Arp on/off, mode, octaves, note value, sequence playback mode and chord length are stored with the program when you save it
-(they travel in SysEx program dumps too) and come back when the program is loaded; a
-program saved without arp data loads with the arp off. Tempo, clock source, keyboard shift
-and the sequence are global and not saved.
+Arp on/off, mode, octaves and the arp's note value are stored with the program when you
+save it (they travel in SysEx program dumps too) and come back when the program is loaded;
+a program saved without arp data loads with the arp off. Loading a program stops the
+sequencer and keeps its recording; a saved "arp on" starts the arp only if it is the
+selected generator. Tempo, clock source, keyboard shift, the generator selection and the
+sequence with its settings are global and not saved.
 
 ### Safety net
 

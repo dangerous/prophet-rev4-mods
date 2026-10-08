@@ -1,5 +1,7 @@
-/* Host harness for the arp UI (docs/SPEC.md: "Arp engine" — Controls,
- * Display, Robustness). `make test-firmware`. */
+/* Host harness for the arp UI (docs/SPEC.md: "Arp engine" — Controls, Display, Robustness;
+ * "Seq" — generator selection, transport, record mode, Back, transposition). The sequencer
+ * engine's own timing is tested in test_seq.c; here the UI's routing of buttons, keys and
+ * ticks to the two generators is. `make test-firmware`. */
 #include <stdio.h>
 #include <string.h>
 
@@ -11,13 +13,14 @@ static int failures, checks;
     printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
 
 /* ---- fake platform ------------------------------------------------------------------ */
-enum { EV_VON, EV_VOFF, EV_D3, EV_INT, EV_RESTORE, EV_LED, EV_PARAM, EV_A440_STOCK, EV_HOLD_STOCK };
+enum { EV_VON, EV_VOFF, EV_LOFF, EV_D3, EV_INT, EV_RESTORE, EV_LED, EV_PARAM, EV_A440_STOCK, EV_HOLD_STOCK };
 typedef struct { int type, a, b, c; } ev_t;
 static ev_t log_[4096];
 static int nlog, fake_globals_open, fake_a440_down, fake_tone_on, fake_latch;
 static void push(int t, int a, int b, int c) { if (nlog < 4096) log_[nlog++] = (ev_t){t, a, b, c}; }
 void plat_voice_on(int src, int note, int vel) { push(EV_VON, src, note, vel); }
-void plat_voice_off(int src, int note) { push(EV_VOFF, src, note, 0); }
+void plat_voice_off(int src, int note) { push(EV_VOFF, src, note, 0); }    /* a generated note's release */
+void plat_live_off(int src, int note) { push(EV_LOFF, src, note, 0); }     /* a live note's release */
 void plat_display3(int c0, int c1, int c2) { push(EV_D3, c0, c1, c2); }
 void plat_display_int(int v) { push(EV_INT, v, 0, 0); }
 void plat_display_restore(void) { push(EV_RESTORE, 0, 0, 0); }
@@ -41,31 +44,33 @@ static void clear_log(void) { nlog = 0; }
 
 /* panel character codes */
 enum { CH_U = 0x1E, CH_P = 0x19, CH_D = 0x0D, CH_N = 0x17, CH_R = 0x1B, CH_I = 0x12, CH_T = 0x1D,
-       CH_S = 0x1C, CH_Y = 0x22, CH_O = 0x18, CH_F = 0x0F, CH_E = 0x0E, CH_LO = 0x24, BLANK = 0x25 };
+       CH_S = 0x1C, CH_Y = 0x22, CH_O = 0x18, CH_F = 0x0F, CH_E = 0x0E, CH_C = 0x0C, CH_H = 0x11, CH_Q = 0x1A,
+       CH_LO = 0x24, BLANK = 0x25, DASH = 0x26 };
 enum { A440 = ARPUI_A440, GLOBALS = ARPUI_GLOBALS, GROUP = ARPUI_GROUP, BANK = ARPUI_BANK, VELOCITY = ARPUI_VELOCITY, UNISON = 0x19,
        AFTERTOUCH = ARPUI_AFTERTOUCH, OSCB_KEYB = 36, CH_A = 0x0A, CH_B = 0x0B, CH_L = 0x15,
-       TUNE = ARPUI_TUNE, HOLD = ARPUI_HOLD,
+       TUNE = ARPUI_TUNE, HOLD = ARPUI_HOLD, KEYB = ARPUI_KEYB,
        P1 = 0, P2 = 1, P3 = 2, P4 = 3, P5 = 4, P6 = 5, P7 = 6, P8 = 7,
        PRESS = 1, RELEASE = 2, REPEAT = 3, LOCAL = ARP_SRC_LOCAL, MIDI = ARP_SRC_MIDI };
 
 static arpui_t u;
 static arp_t a;
+static seq_t q;
 
 static void reset(void) {
-    arpui_init(&u); arp_init(&a);
+    arpui_init(&u); arp_init(&a); seq_init(&q);
     clear_log(); fake_globals_open = 0; fake_a440_down = 0; fake_tone_on = 0; fake_latch = 0;
     memset(params, 0, sizeof params);
-    for (int i = 0; i < ARPUI_BOOT_TICKS; i++) arpui_tick(&u, &a);     /* past the kill-switch window */
+    for (int i = 0; i < ARPUI_BOOT_TICKS; i++) arpui_tick(&u, &a, &q);   /* past the kill-switch window */
     clear_log();
 }
-static int btn(int id, int value) { return arpui_button(&u, &a, id, value); }
+static int btn(int id, int value) { return arpui_button(&u, &a, &q, id, value); }
 static void tap_a440(void) { btn(A440, PRESS); btn(A440, RELEASE); }
-static void ticks(int n) { while (n-- > 0) arpui_tick(&u, &a); }
+static void ticks(int n) { while (n-- > 0) { arpui_tick(&u, &a, &q); seq_tick(&q, &a); arp_tick(&a); } }   /* as the glue's tick */
 
 /* ---- A440 ---------------------------------------------------------------------------- */
 static void test_tap_toggles_arp_with_status_and_led(void) {
     reset();
-    CHECK(sizeof(arpui_t) <= 0x40);
+    CHECK(sizeof(arpui_t) <= 0x80);
     CHECK(btn(A440, PRESS) == 1 && !a.enabled);
     CHECK(btn(A440, RELEASE) == 1 && a.enabled);
     CHECK(last_int() == 120);                                          /* on: BPM */
@@ -167,48 +172,64 @@ static void test_program_7_8_step_through_every_value(void) {
 static int last_is_rn(int n) { return last_d3_is(CH_R, n >= 10 ? n / 10 : BLANK, n % 10); }   /* the readout r N */
 static int last_is_rst(void) { return last_d3_is(CH_R, CH_S, CH_T); }
 static int last_is_tie(void) { return last_d3_is(CH_T, CH_I, CH_E); }
-static void note(int n, int vel) { arpui_note(&u, &a, LOCAL, n, vel); }
+static void note(int n, int vel) { arpui_note(&u, &a, &q, LOCAL, n, vel); }
+/* a local key before the octave shift, as the glue sees it: a transposition command is swallowed */
+static int key(int raw, int vel) { int r = arpui_key(&u, &a, &q, raw, vel); if (!r) note(raw, vel); return r; }
 static void enter_rec(void) { btn(A440, PRESS); btn(TUNE, PRESS); btn(TUNE, RELEASE); btn(A440, RELEASE); }
+static void select_gen(void) { btn(A440, PRESS); btn(KEYB, PRESS); btn(KEYB, RELEASE); btn(A440, RELEASE); }
+/* record C, D, E as three events and leave: SEq selected, stopped */
+static void record_cde(void) {
+    enter_rec();
+    note(60, 100); note(60, 0); note(62, 100); note(62, 0); note(64, 100); note(64, 0);
+    tap_a440();
+    clear_log();
+}
+static int von_note(int k) { for (int i = 0; i < nlog; i++) if (log_[i].type == EV_VON && k-- == 0) return log_[i].b; return -1; }
 
-static void test_a440_tune_enters_record_mode_and_a_tap_leaves(void) {
+static void test_a440_tune_enters_record_mode_and_a_tap_leaves_it_stopped(void) {
     reset();
     tap_a440();                                                        /* arp on */
     clear_log();
     btn(A440, PRESS);
     CHECK(btn(TUNE, PRESS) == 1 && u.rec && last_is_rn(0));
+    CHECK(!a.enabled && u.gen == ARPUI_GEN_SEQ);                       /* entering selects SEq and stops the arp */
     CHECK(btn(TUNE, REPEAT) == 1 && btn(TUNE, RELEASE) == 1);
-    CHECK(btn(A440, RELEASE) == 1 && a.enabled && u.rec);              /* used the hold: no toggle */
+    CHECK(btn(A440, RELEASE) == 1 && u.rec);                           /* used the hold: no toggle */
     note(60, 100);
     CHECK(count_type(EV_VON) == 1 && last_is_rn(1));                   /* sounds, count shown */
     note(60, 0);
-    arpui_note(&u, &a, MIDI, 64, 90); arpui_note(&u, &a, MIDI, 64, 0);
+    arpui_note(&u, &a, &q, MIDI, 64, 90); arpui_note(&u, &a, &q, MIDI, 64, 0);
     note(67, 100); note(67, 0);
-    CHECK(last_is_rn(3) && count_type(EV_VOFF) == 3);
+    CHECK(last_is_rn(3) && count_type(EV_LOFF) == 3);                  /* live releases */
     clear_log();
     tap_a440();                                                        /* leave */
-    CHECK(!u.rec && a.enabled && a.seq_len == 3 && a.seq_note[1][0] == 64);
+    CHECK(!u.rec && !a.enabled && !q.playing && q.len == 3 && q.ev[1].note[0] == 64);   /* SEq selected, stopped */
+    CHECK(count_type(EV_INT) == 0 && count_type(EV_D3) == 0);          /* no message */
     ticks(1);
     CHECK(count_type(EV_RESTORE) == 1);                                /* the patch display is back */
     tap_a440();
-    CHECK(!a.enabled);                                                 /* taps toggle again */
+    CHECK(q.playing && von_note(0) == 60);                             /* the next tap plays it from event 1 */
+    tap_a440();
+    CHECK(!q.playing);
 }
 
-static void test_record_mode_without_steps_keeps_the_sequence(void) {
+static void test_record_mode_without_entries_keeps_the_sequence(void) {
     reset();
     enter_rec();
     note(60, 100); note(60, 0); note(64, 100); note(64, 0);
     tap_a440();
-    CHECK(!u.rec && a.seq_len == 2 && a.enabled && last_int() == 120);   /* recorded something: the arp comes on, BPM shown */
+    CHECK(!u.rec && q.len == 2 && !q.playing && u.gen == ARPUI_GEN_SEQ);
     enter_rec();
-    CHECK(u.rec && last_is_rn(0) && a.seq_len == 2);                  /* the old one stays until a step is recorded */
+    CHECK(u.rec && last_is_rn(0) && q.len == 2);                       /* the old one stays until an entry */
     enter_rec();                                                       /* A440 + Tune again leaves */
-    CHECK(!u.rec && a.seq_len == 2 && a.enabled);                      /* nothing recorded: the arp as it was */
+    CHECK(!u.rec && q.len == 2 && !q.playing);
     tap_a440();
-    CHECK(!a.enabled);
-    enter_rec();
+    CHECK(q.playing && von_note(0) == 60);                             /* the kept recording plays */
+    enter_rec();                                                       /* entering stops playback */
+    CHECK(!q.playing && u.rec);
     btn(HOLD, PRESS); btn(HOLD, RELEASE);                              /* a rest alone is a recording too */
     tap_a440();
-    CHECK(!u.rec && a.seq_len == 1 && a.enabled);
+    CHECK(!u.rec && q.len == 1 && q.ev[0].n == 0);
 }
 
 static void test_tune_without_a440_is_stock(void) {
@@ -219,11 +240,10 @@ static void test_tune_without_a440_is_stock(void) {
 static void test_hold_button_is_rest_or_tie_in_record_mode(void) {
     reset();
     CHECK(btn(HOLD, PRESS) == 0 && btn(HOLD, RELEASE) == 0);           /* not recording: stock HOLD */
-    tap_a440();                                                        /* arp on, so leaving shows no BPM */
     enter_rec();
     clear_log();
-    CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 1 && a.seq_n[0] == 0 && last_is_rst());   /* no key down: a rest, rSt flashes */
-    CHECK(btn(HOLD, REPEAT) == 1 && btn(HOLD, RELEASE) == 1 && a.seq_len == 1);
+    CHECK(btn(HOLD, PRESS) == 1 && q.len == 1 && q.ev[0].n == 0 && last_is_rst());   /* no key down: a rest, rSt flashes */
+    CHECK(btn(HOLD, REPEAT) == 1 && btn(HOLD, RELEASE) == 1 && q.len == 1);
     CHECK(!a.hold);                                                    /* the latch did not change */
     ticks(DISP_FLASH_TICKS - 1);
     CHECK(last_is_rst());
@@ -231,17 +251,17 @@ static void test_hold_button_is_rest_or_tie_in_record_mode(void) {
     CHECK(last_is_rn(1));                                              /* ... then the count */
     note(60, 100);
     CHECK(last_is_rn(2));
-    CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 2 && a.seq_dur[1] == 2 && last_is_tie());   /* key down: a tie, tiE flashes */
+    CHECK(btn(HOLD, PRESS) == 1 && q.len == 2 && q.ev[1].dur == 2 && last_is_tie());   /* key down: a tie, tiE flashes */
     btn(HOLD, RELEASE);
     ticks(DISP_FLASH_TICKS);
     CHECK(last_is_rn(3));                                              /* the tie counts one */
-    CHECK(btn(HOLD, PRESS) == 1 && a.seq_dur[1] == 3 && last_is_tie());   /* and again */
+    CHECK(btn(HOLD, PRESS) == 1 && q.ev[1].dur == 3 && last_is_tie());   /* and again */
     btn(HOLD, RELEASE);
     ticks(DISP_FLASH_TICKS);
     CHECK(last_is_rn(4));
     note(60, 0);
     btn(A440, PRESS);
-    CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 3 && last_is_rst());  /* with A440 held too: not the id readout */
+    CHECK(btn(HOLD, PRESS) == 1 && q.len == 3 && last_is_rst());  /* with A440 held too: not the id readout */
     btn(HOLD, RELEASE); btn(A440, RELEASE);
     CHECK(count_type(EV_INT) == 0 && count_type(EV_A440_STOCK) == 0); /* and not the tuning tone */
 }
@@ -292,7 +312,7 @@ static void test_program_load_with_the_tone_on_silences_it_and_reasserts_the_led
     reset();
     fake_tone_on = 1;
     params[94] = 1; params[93] = 31;                                   /* a program with the arp on (8th, Up) */
-    arpui_program_loaded(&u, &a);
+    arpui_program_loaded(&u, &a, &q);
     CHECK(a.enabled && count_type(EV_A440_STOCK) == 1 && !fake_tone_on);   /* tone off first */
     ticks(1);
     CHECK(count_type(EV_LED) == 1 && last_led() == 1);
@@ -302,11 +322,11 @@ static void test_program_load_with_the_tone_on_silences_it_and_reasserts_the_led
     CHECK(count_type(EV_LED) == 2 && last_led() == 1);                /* 100 ms after the replay: on again (stock's late LED-off) */
     ticks(1000);
     CHECK(count_type(EV_LED) == 2);
-    arpui_program_loaded(&u, &a);                                      /* already on, tone off: nothing more */
+    arpui_program_loaded(&u, &a, &q);                                      /* already on, tone off: nothing more */
     CHECK(count_type(EV_A440_STOCK) == 1);
 }
 
-static void test_record_readout_counts_length_in_arp_steps(void) {
+static void test_record_readout_counts_timing_steps(void) {
     reset();
     enter_rec();
     note(60, 100); note(64, 100); note(67, 100);
@@ -316,37 +336,50 @@ static void test_record_readout_counts_length_in_arp_steps(void) {
     note(60, 0); note(64, 0); note(67, 0);
     note(62, 100); note(62, 0);
     CHECK(last_is_rn(3));
-    note(62, 100);                                                     /* a step tied up to the 64 cap */
+    note(62, 100);                                                     /* a long tied chord */
     for (int i = 0; i < 70; i++) { btn(HOLD, PRESS); btn(HOLD, RELEASE); }
     note(62, 0);
     ticks(DISP_FLASH_TICKS);
-    CHECK(a.seq_len == 3 && a.seq_dur[2] == 64 && last_is_rn(67));     /* 2 + 1 + 64 */
+    CHECK(q.len == 3 && q.ev[2].dur == 71 && last_is_rn(74));          /* 2 + 1 + 71 */
     note(64, 100);                                                     /* past 99: the plain number */
     for (int i = 0; i < 40; i++) { btn(HOLD, PRESS); btn(HOLD, RELEASE); }
     note(64, 0);
     ticks(DISP_FLASH_TICKS);
-    CHECK(a.seq_dur[3] == 41 && last_int() == 108 && count_type(EV_INT) == 1);   /* 67 + 41 */
+    CHECK(q.ev[3].dur == 41 && last_int() == 115 && count_type(EV_INT) == 1);   /* 74 + 41 */
+    tap_a440();
+    enter_rec();
+    note(60, 100);
+    for (int i = 0; i < 600; i++) { btn(HOLD, PRESS); btn(HOLD, RELEASE); }   /* to the 512 cap */
+    note(60, 0);
+    ticks(DISP_FLASH_TICKS);
+    CHECK(q.total == 512 && q.ev[0].dur == 512 && last_int() == 512);
+    clear_log();
+    note(62, 100);                                                     /* refused: sounds, the count stays */
+    CHECK(count_type(EV_VON) == 1 && q.len == 1 && last_int() == 512);
+    btn(HOLD, PRESS); btn(HOLD, RELEASE);
+    CHECK(q.total == 512 && count_type(EV_D3) == 0);                   /* no rSt flash either */
+    note(62, 0);
 }
 
 static void test_pedal_on_transition_is_rest_or_tie_in_record_mode(void) {
     reset();
-    arpui_hold(&u, &a, 1);
+    arpui_hold(&u, &a, &q, 1);
     CHECK(a.hold == 1);                                                /* not recording: the arp's hold */
-    arpui_hold(&u, &a, 0);
+    arpui_hold(&u, &a, &q, 0);
     CHECK(a.hold == 0);
     enter_rec();
-    arpui_hold(&u, &a, 1);
-    CHECK(a.seq_len == 1 && a.seq_n[0] == 0 && last_is_rst());        /* pedal down, no key: a rest */
-    arpui_hold(&u, &a, 0);
-    CHECK(a.seq_len == 1);                                             /* pedal up: nothing */
+    arpui_hold(&u, &a, &q, 1);
+    CHECK(q.len == 1 && q.ev[0].n == 0 && last_is_rst());        /* pedal down, no key: a rest */
+    arpui_hold(&u, &a, &q, 0);
+    CHECK(q.len == 1);                                             /* pedal up: nothing */
     ticks(DISP_FLASH_TICKS);
     CHECK(last_is_rn(1));
     note(60, 100);
-    arpui_hold(&u, &a, 1);
-    CHECK(a.seq_len == 2 && a.seq_dur[1] == 2 && last_is_tie());      /* pedal down, key down: a tie */
+    arpui_hold(&u, &a, &q, 1);
+    CHECK(q.len == 2 && q.ev[1].dur == 2 && last_is_tie());      /* pedal down, key down: a tie */
     ticks(DISP_FLASH_TICKS);
     CHECK(last_is_rn(3));
-    arpui_hold(&u, &a, 0);
+    arpui_hold(&u, &a, &q, 0);
     note(60, 0);
     tap_a440();
     CHECK(!u.rec && a.hold == 0);
@@ -354,11 +387,10 @@ static void test_pedal_on_transition_is_rest_or_tie_in_record_mode(void) {
 
 static void test_record_readout_persists_and_patch_display_returns_on_leaving(void) {
     reset();
-    tap_a440();                                                        /* arp on, so leaving shows no BPM */
     enter_rec();
     clear_log();
-    btn(A440, PRESS); btn(BANK, PRESS); btn(BANK, RELEASE); btn(A440, RELEASE);
-    CHECK(last_d3_is(CH_D, CH_N, BLANK) && u.rec);                    /* dn shown, still recording */
+    btn(A440, PRESS); btn(UNISON, PRESS); btn(UNISON, RELEASE); btn(A440, RELEASE);
+    CHECK(last_d3_is(CH_A, CH_R, CH_P) && u.rec);                     /* ArP (style) shown, still recording */
     ticks(DISP_TICKS);
     CHECK(last_is_rn(0) && count_type(EV_RESTORE) == 0);              /* back to r 0, not to the patch display */
     ticks(5000);
@@ -374,7 +406,7 @@ static void test_record_readout_persists_and_patch_display_returns_on_leaving(vo
 }
 
 static void test_a440_led_blinks_in_record_mode(void) {
-    reset();                                                           /* arp off: LED off */
+    reset();
     enter_rec();
     ticks(1);
     CHECK(last_led() == 1);
@@ -384,14 +416,19 @@ static void test_a440_led_blinks_in_record_mode(void) {
     CHECK(last_led() == 0);                                            /* 500 ms on */
     ticks(500);
     CHECK(last_led() == 1);                                            /* 500 ms off */
-    tap_a440();
+    tap_a440();                                                        /* leave: SEq selected, stopped */
     ticks(1);
-    CHECK(last_led() == 0);                                            /* back to the arp state: off */
-    tap_a440(); ticks(1);
-    CHECK(last_led() == 1);
+    CHECK(last_led() == 0);
+    clear_log();
+    tap_a440();                                                        /* nothing recorded: --- and no start */
+    CHECK(!q.playing && last_d3_is(DASH, DASH, DASH));
+    ticks(1);
+    CHECK(count_type(EV_LED) == 0);
+    select_gen(); tap_a440(); ticks(1);                                /* ArP on: lit */
+    CHECK(a.enabled && last_led() == 1);
     enter_rec(); ticks(2000);
     tap_a440(); ticks(1);
-    CHECK(last_led() == 1);                                            /* arp on: lit again */
+    CHECK(last_led() == 0 && !a.enabled);                              /* SEq, stopped: dark */
 }
 
 static void test_program6_in_record_mode_clears_and_stays(void) {
@@ -400,30 +437,30 @@ static void test_program6_in_record_mode_clears_and_stays(void) {
     enter_rec();
     note(60, 100); note(60, 0); note(64, 100); note(64, 0);
     btn(A440, PRESS); btn(P6, PRESS); btn(P6, RELEASE); btn(A440, RELEASE);
-    CHECK(u.rec && a.seq_len == 0 && last_is_rn(0) && a.enabled);
+    CHECK(u.rec && q.len == 0 && last_is_rn(0) && u.gen == ARPUI_GEN_SEQ);
     note(67, 100); note(67, 0);
-    CHECK(a.seq_len == 1 && last_is_rn(1));
+    CHECK(q.len == 1 && last_is_rn(1));
     tap_a440();
-    CHECK(!u.rec && a.seq_len == 1 && a.seq_note[0][0] == 67);
+    CHECK(!u.rec && q.len == 1 && q.ev[0].note[0] == 67);
 }
 
 static void test_globals_leaves_record_mode(void) {
     reset();
     enter_rec();
     note(60, 100); note(60, 0);
-    CHECK(btn(GLOBALS, PRESS) == 0 && !u.rec && a.seq_len == 1);      /* the menu opens as stock */
+    CHECK(btn(GLOBALS, PRESS) == 0 && !u.rec && q.len == 1);          /* the menu opens as stock */
     fake_globals_open = 1;
     CHECK(btn(GLOBALS, RELEASE) == 0);
 }
 
-static void test_notes_while_a440_is_held_are_ordinary(void) {
+static void test_notes_while_a440_is_held_are_ordinary_with_arp_selected(void) {
     reset();
     tap_a440();                                                        /* arp on */
     clear_log();
     btn(A440, PRESS);
-    note(60, 100);
-    CHECK(count_type(EV_VON) == 1 && a.seq_len == 0 && arp_pool_count(&a) == 1);   /* arpeggiated, not recorded */
-    note(60, 0);
+    CHECK(key(60, 100) == 0);                                          /* not a command: ArP is selected */
+    CHECK(count_type(EV_VON) == 1 && q.len == 0 && arp_pool_count(&a) == 1);   /* arpeggiated, not recorded */
+    key(60, 0);
     CHECK(btn(A440, RELEASE) == 1 && !a.enabled && !u.rec);            /* a tap: the note did not use the hold */
 }
 
@@ -438,6 +475,8 @@ static void test_suspended_is_arp_on_or_record_mode(void) {
     CHECK(arpui_suspended(&u, &a));
     tap_a440();
     CHECK(!arpui_suspended(&u, &a));
+    record_cde(); tap_a440();
+    CHECK(q.playing && !arpui_suspended(&u, &a));                      /* the sequencer: live notes under stock hold */
 }
 
 static void test_orphan_release_is_consumed_and_other_buttons_pass(void) {
@@ -457,8 +496,8 @@ static void test_readout_of_unassigned_buttons(void) {
     btn(A440, PRESS);
     CHECK(btn(OSCB_KEYB, PRESS) == 1 && last_int() == OSCB_KEYB);
     CHECK(btn(OSCB_KEYB, RELEASE) == 1);
-    CHECK(btn(8, PRESS) == 1 && last_int() == 8);                      /* filter Keyboard Amount: unassigned */
-    CHECK(btn(8, RELEASE) == 1);
+    CHECK(btn(9, PRESS) == 1 && last_int() == 9);                      /* an unassigned filter button */
+    CHECK(btn(9, RELEASE) == 1);
     btn(A440, RELEASE);
     CHECK(!a.enabled);
 }
@@ -655,7 +694,7 @@ static void test_tap_tempo_consumption_and_scope(void) {
     CHECK(btn(VELOCITY, PRESS) == 0 && btn(VELOCITY, RELEASE) == 0);
     btn(A440, RELEASE);
     fake_globals_open = 0;
-    arpui_init(&u); arp_init(&a); clear_log();                         /* kill switch: stock */
+    arpui_init(&u); arp_init(&a); seq_init(&q); clear_log();                         /* kill switch: stock */
     fake_a440_down = 1; ticks(10); fake_a440_down = 0; ticks(ARPUI_BOOT_TICKS);
     CHECK(u.kill);
     btn(A440, PRESS);
@@ -696,7 +735,7 @@ static void test_led_follows_enabled_only_when_it_changes(void) {
 
 /* ---- kill switch --------------------------------------------------------------------- */
 static void test_a440_held_at_power_on_disables_everything(void) {
-    arpui_init(&u); arp_init(&a); clear_log();
+    arpui_init(&u); arp_init(&a); seq_init(&q); clear_log();
     fake_a440_down = 1;
     ticks(10);
     fake_a440_down = 0;
@@ -705,7 +744,7 @@ static void test_a440_held_at_power_on_disables_everything(void) {
     CHECK(btn(A440, PRESS) == 0 && btn(A440, RELEASE) == 0 && !a.enabled);
     CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 1023) == 0);
     CHECK(count_type(EV_LED) == 0 && count_type(EV_D3) == 0 && count_type(EV_INT) == 0);
-    arpui_init(&u); arp_init(&a); clear_log();
+    arpui_init(&u); arp_init(&a); seq_init(&q); clear_log();
     ticks(ARPUI_BOOT_TICKS + 1);
     fake_a440_down = 1;                                                /* after the window: just a button */
     ticks(10);
@@ -715,7 +754,7 @@ static void test_a440_held_at_power_on_disables_everything(void) {
 }
 
 static void test_a440_pressed_after_power_on_is_just_a_press(void) {
-    arpui_init(&u); arp_init(&a); clear_log();
+    arpui_init(&u); arp_init(&a); seq_init(&q); clear_log();
     ticks(500);
     CHECK(btn(A440, PRESS) == 1 && !u.kill);                           /* an ordinary press */
     fake_a440_down = 1;                                                /* the table reflects it */
@@ -792,7 +831,7 @@ static void test_patch_round_trip_for_every_setting(void) {
                     if (params[ARPUI_PARAM_PACK] != pack(note, mode, on) || params[ARPUI_PARAM_OCT] != pack94(note, oct)) bad++;
                     arp_set_mode(&a, (mode + 2) % ARP_MODES); arp_set_octaves(&a, oct % 4 + 1);   /* disturb */
                     arp_enable(&a, !on); rate_set_index(&u.rate, (note + 3) % RATE_COUNT);
-                    arpui_program_loaded(&u, &a);
+                    arpui_program_loaded(&u, &a, &q);
                     rate_beats(&u.rate, &num, &den);
                     if (a.mode != mode || rate_index(&u.rate) != note || a.enabled != on || a.octaves != oct
                         || a.beats_num != num || a.beats_den != den || a.swing != rate_swing(&u.rate)) bad++;
@@ -802,61 +841,11 @@ static void test_patch_round_trip_for_every_setting(void) {
     CHECK(pack94c(N_4B, 4, 4, 1) == 80);
 }
 
-/* ---- arpeggiated playback: the combos, the display, the slots ----------------------- */
-static void test_unison_toggles_playback_mode_and_aftertouch_cycles_chord_length(void) {
-    reset();
-    CHECK(a.seq_arp == 0 && a.chord_beats == 4);                       /* defaults: POL, Whole */
-    btn(A440, PRESS);
-    CHECK(btn(UNISON, PRESS) == 1 && a.seq_arp == 1 && last_d3_is(CH_A, CH_R, CH_P));   /* ArP */
-    CHECK(btn(UNISON, RELEASE) == 1);
-    CHECK(params[ARPUI_PARAM_OCT] == pack94c(N_8, 1, 0, 1));           /* saved: M */
-    btn(UNISON, PRESS); btn(UNISON, RELEASE);
-    CHECK(a.seq_arp == 0 && last_d3_is(CH_P, CH_O, CH_L));             /* POL */
-    CHECK(params[ARPUI_PARAM_OCT] == pack94c(N_8, 1, 0, 0));
-    static const int CYCLE[][4] = {   /* beats, code, display */
-        { 8, 3, 2, CH_B }, { 16, 4, 4, CH_B }, { 1, 1, BLANK, 4 }, { 2, 2, BLANK, 2 }, { 4, 0, BLANK, 1 } };
-    for (int i = 0; i < 5; i++) {                                      /* from Whole: 2b 4b 4 2 1 */
-        CHECK(btn(AFTERTOUCH, PRESS) == 1 && btn(AFTERTOUCH, RELEASE) == 1);
-        CHECK(a.chord_beats == CYCLE[i][0] && last_d3_is(BLANK, CYCLE[i][2], CYCLE[i][3]));
-        CHECK(params[ARPUI_PARAM_OCT] == pack94c(N_8, 1, CYCLE[i][1], 0));
-    }
-    CHECK(btn(A440, RELEASE) == 1 && !a.enabled);                      /* combos: no toggle */
-    CHECK(btn(UNISON, PRESS) == 0 && btn(AFTERTOUCH, PRESS) == 0);     /* without A440: stock */
-}
-
-static void test_playback_mode_and_chord_length_round_trip_and_old_programs_load(void) {
-    int bad = 0;
-    reset();
-    for (int c = 0; c < 5; c++)
-        for (int m = 0; m < 2; m++) {
-            static const int BEATS[5] = { 4, 1, 2, 8, 16 };          /* by code */
-            arp_set_seq_arp(&a, m); arp_set_chord_beats(&a, BEATS[c]);
-            btn(A440, PRESS); btn(P2, PRESS); btn(P2, RELEASE); btn(A440, RELEASE);   /* a store */
-            if (params[ARPUI_PARAM_OCT] != pack94c(N_8, 2, c, m)) bad++;
-            arp_set_seq_arp(&a, !m); arp_set_chord_beats(&a, BEATS[(c + 1) % 5]); arp_set_octaves(&a, 4);   /* disturb */
-            arpui_program_loaded(&u, &a);
-            if (a.seq_arp != m || a.chord_beats != BEATS[c] || a.octaves != 2) bad++;
-        }
-    CHECK(bad == 0);
-    arp_set_seq_arp(&a, 1); arp_set_chord_beats(&a, 16);
-    params[ARPUI_PARAM_OCT] = 3; params[ARPUI_PARAM_PACK] = pack(N_8S, ARP_UP, 1);   /* saved before: POL, Whole */
-    arpui_program_loaded(&u, &a);
-    CHECK(a.seq_arp == 0 && a.chord_beats == 4 && a.octaves == 3 && rate_index(&u.rate) == N_8S);
-    params[ARPUI_PARAM_OCT] = 7; params[ARPUI_PARAM_PACK] = pack(N_4B, ARP_UP, 1);   /* 1.1.0 long value: still POL, Whole */
-    arpui_program_loaded(&u, &a);
-    CHECK(a.seq_arp == 0 && a.chord_beats == 4 && a.octaves == 3 && rate_index(&u.rate) == N_4B);
-    params[ARPUI_PARAM_OCT] = 81; params[ARPUI_PARAM_PACK] = 1;        /* out of range: no arp data */
-    if (!a.enabled) tap_a440();
-    CHECK(a.enabled);
-    arpui_program_loaded(&u, &a);
-    CHECK(!a.enabled && a.seq_arp == 0 && a.chord_beats == 4);
-}
-
 /* ---- two HOLD latches ----------------------------------------------------------------- */
 static void hold_press_to_stock(void) {                                /* a HOLD press the UI passes to stock */
     CHECK(btn(HOLD, PRESS) == 0 && btn(HOLD, RELEASE) == 0);
     fake_latch = !fake_latch;
-    arpui_hold(&u, &a, fake_latch);                                    /* stock's handler reports the merged state */
+    arpui_hold(&u, &a, &q, fake_latch);                                    /* stock's handler reports the merged state */
 }
 
 static void test_arp_latch_and_stock_latch_are_remembered_separately(void) {
@@ -867,11 +856,11 @@ static void test_arp_latch_and_stock_latch_are_remembered_separately(void) {
     clear_log();
     tap_a440();                                                        /* arp off: stock's latch was off -> replayed off */
     CHECK(!a.enabled && count_type(EV_HOLD_STOCK) == 1 && !fake_latch);
-    arpui_hold(&u, &a, 0);
+    arpui_hold(&u, &a, &q, 0);
     CHECK(!a.hold);
     tap_a440();                                                        /* arp on: its latch was on -> replayed on */
     CHECK(a.enabled && count_type(EV_HOLD_STOCK) == 2 && fake_latch);
-    arpui_hold(&u, &a, 1);
+    arpui_hold(&u, &a, &q, 1);
     CHECK(a.hold);
     hold_press_to_stock();                                             /* arp's latch off again */
     CHECK(!fake_latch);
@@ -881,7 +870,7 @@ static void test_arp_latch_and_stock_latch_are_remembered_separately(void) {
     CHECK(fake_latch);
     tap_a440();                                                        /* arp on: its latch off -> replayed off; stock's remembered on */
     CHECK(count_type(EV_HOLD_STOCK) == 3 && !fake_latch);
-    arpui_hold(&u, &a, 0);
+    arpui_hold(&u, &a, &q, 0);
     tap_a440();                                                        /* arp off: stock's latch back on */
     CHECK(count_type(EV_HOLD_STOCK) == 4 && fake_latch);
 }
@@ -889,16 +878,16 @@ static void test_arp_latch_and_stock_latch_are_remembered_separately(void) {
 static void test_pedal_is_momentary_and_program_load_clears_both_latches(void) {
     reset();
     tap_a440();
-    arpui_hold(&u, &a, 1);                                             /* pedal down (latch byte stays 0) */
+    arpui_hold(&u, &a, &q, 1);                                             /* pedal down (latch byte stays 0) */
     CHECK(a.hold && !fake_latch);
     tap_a440();                                                        /* arp off: no latch to remember or restore */
     CHECK(count_type(EV_HOLD_STOCK) == 0);
-    arpui_hold(&u, &a, 0);
+    arpui_hold(&u, &a, &q, 0);
     tap_a440();
     hold_press_to_stock();                                             /* arp's latch on */
     params[94] = 1; params[93] = 31;                                   /* a program load: stock drops the latch ... */
-    fake_latch = 0; arpui_hold(&u, &a, 0);
-    arpui_program_loaded(&u, &a);
+    fake_latch = 0; arpui_hold(&u, &a, &q, 0);
+    arpui_program_loaded(&u, &a, &q);
     tap_a440();                                                        /* ... and the arp's memory of it is gone too */
     CHECK(!a.enabled && count_type(EV_HOLD_STOCK) == 0);
     tap_a440();
@@ -908,18 +897,18 @@ static void test_pedal_is_momentary_and_program_load_clears_both_latches(void) {
 static void test_long_note_values_load_and_old_programs_still_do(void) {
     reset();
     params[ARPUI_PARAM_OCT] = 2 + 4; params[ARPUI_PARAM_PACK] = pack(N_4B, ARP_UP, 1);   /* 4 bars, 2 octaves */
-    arpui_program_loaded(&u, &a);
+    arpui_program_loaded(&u, &a, &q);
     CHECK(a.enabled && a.octaves == 2 && rate_index(&u.rate) == N_4B && a.beats_num == 16 && a.beats_den == 1);
     params[ARPUI_PARAM_OCT] = 1 + 4; params[ARPUI_PARAM_PACK] = pack(N_1, ARP_DOWN, 0);   /* Whole */
-    arpui_program_loaded(&u, &a);
+    arpui_program_loaded(&u, &a, &q);
     CHECK(!a.enabled && a.octaves == 1 && rate_index(&u.rate) == N_1 && a.beats_num == 4 && a.mode == ARP_DOWN);
     params[ARPUI_PARAM_OCT] = 3; params[ARPUI_PARAM_PACK] = 7 * 10 + ARP_ASSIGN * 2 + 1;   /* saved before the long values: 16th S */
-    arpui_program_loaded(&u, &a);
+    arpui_program_loaded(&u, &a, &q);
     CHECK(a.enabled && a.octaves == 3 && rate_index(&u.rate) == N_16S && a.swing);
     static const int BAD[][2] = { { 5, 30 }, { 8, 99 }, { 81, 1 }, { 127, 1 } };   /* (94, 93): n > 2 with the flag, 94 out of range */
     for (int i = 0; i < 4; i++) {
         params[ARPUI_PARAM_OCT] = BAD[i][0]; params[ARPUI_PARAM_PACK] = BAD[i][1];
-        arpui_program_loaded(&u, &a);
+        arpui_program_loaded(&u, &a, &q);
         CHECK(!a.enabled && a.octaves == 3 && rate_index(&u.rate) == N_16S);   /* no arp data: off, untouched */
         tap_a440();
     }
@@ -930,7 +919,7 @@ static void test_program_load_applies_saved_state(void) {
     params[ARPUI_PARAM_OCT] = 2;
     params[ARPUI_PARAM_PACK] = pack(N_QTR, ARP_UPDOWN, 1);
     int n = stores();
-    arpui_program_loaded(&u, &a);
+    arpui_program_loaded(&u, &a, &q);
     CHECK(a.enabled && a.mode == ARP_UPDOWN && a.octaves == 2 && rate_index(&u.rate) == N_QTR);
     CHECK(a.beats_num == 1 && a.beats_den == 1 && a.swing == 0);
     CHECK(stores() == n);                                              /* loading does not write back */
@@ -938,16 +927,16 @@ static void test_program_load_applies_saved_state(void) {
     CHECK(last_led() == 1);
     params[ARPUI_PARAM_PACK] = pack(N_8T, ARP_ASSIGN, 0);              /* saved off, Assign, 8th T */
     params[ARPUI_PARAM_OCT] = 4;
-    arpui_program_loaded(&u, &a);
+    arpui_program_loaded(&u, &a, &q);
     CHECK(!a.enabled && a.mode == ARP_ASSIGN && a.octaves == 4 && rate_index(&u.rate) == N_8T);
     params[ARPUI_PARAM_PACK] = pack(N_8S, ARP_UP, 1);
-    arpui_program_loaded(&u, &a);
+    arpui_program_loaded(&u, &a, &q);
     CHECK(a.enabled && a.mode == ARP_UP && rate_index(&u.rate) == N_8S && a.beats_num == 1 && a.beats_den == 1 && a.swing == 1);
     params[ARPUI_PARAM_PACK] = pack(N_16S, ARP_UP, 1);
-    arpui_program_loaded(&u, &a);
+    arpui_program_loaded(&u, &a, &q);
     CHECK(rate_index(&u.rate) == N_16S && a.beats_num == 1 && a.beats_den == 2 && a.swing == 1);
     params[ARPUI_PARAM_PACK] = pack(N_8, ARP_UP, 1);                   /* swing off again */
-    arpui_program_loaded(&u, &a);
+    arpui_program_loaded(&u, &a, &q);
     CHECK(rate_index(&u.rate) == RATE_DEFAULT_INDEX && a.beats_num == 1 && a.beats_den == 2 && a.swing == 0);
 }
 
@@ -958,16 +947,354 @@ static void test_program_without_arp_data_switches_off_and_leaves_settings(void)
     btn(P8, PRESS); btn(P8, RELEASE); btn(A440, RELEASE);
     CHECK(a.enabled && a.mode == ARP_ASSIGN && a.octaves == 2 && rate_index(&u.rate) == N_8S);
     params[ARPUI_PARAM_OCT] = 0; params[ARPUI_PARAM_PACK] = 0;         /* a factory program */
-    arpui_program_loaded(&u, &a);
+    arpui_program_loaded(&u, &a, &q);
     CHECK(!a.enabled && a.mode == ARP_ASSIGN && a.octaves == 2 && rate_index(&u.rate) == N_8S);   /* off, untouched */
     static const int BAD[][2] = { { 0, 99 }, { 81, 1 }, { -1, 1 }, { 1, 100 }, { 1, 127 }, { 1, -1 } };   /* (94, 93) */
     for (int i = 0; i < 6; i++) {
         tap_a440();
         CHECK(a.enabled);
         params[ARPUI_PARAM_OCT] = BAD[i][0]; params[ARPUI_PARAM_PACK] = BAD[i][1];
-        arpui_program_loaded(&u, &a);
+        arpui_program_loaded(&u, &a, &q);
         CHECK(!a.enabled && a.mode == ARP_ASSIGN && a.octaves == 2 && rate_index(&u.rate) == N_8S);
     }
+}
+
+/* ---- the two generators (spec "Seq") -------------------------------------------------- */
+static void test_keyboard_selects_the_generator(void) {
+    reset();
+    CHECK(u.gen == ARPUI_GEN_ARP);
+    btn(A440, PRESS);
+    CHECK(btn(KEYB, PRESS) == 1 && u.gen == ARPUI_GEN_ARP && last_d3_is(DASH, DASH, DASH));   /* nothing recorded: ---, ArP stays */
+    CHECK(btn(KEYB, REPEAT) == 1 && btn(KEYB, RELEASE) == 1);
+    CHECK(btn(A440, RELEASE) == 1 && !a.enabled);                      /* used the hold */
+    record_cde();
+    CHECK(u.gen == ARPUI_GEN_SEQ && !q.playing && !a.enabled);         /* recording selected SEq, left it stopped */
+    select_gen();
+    CHECK(u.gen == ARPUI_GEN_ARP && last_d3_is(CH_A, CH_R, CH_P));
+    select_gen();
+    CHECK(u.gen == ARPUI_GEN_SEQ && last_d3_is(CH_S, CH_E, CH_Q));
+    CHECK(btn(KEYB, PRESS) == 0 && btn(KEYB, RELEASE) == 0);           /* without A440: stock */
+}
+
+static void test_tap_starts_and_stops_the_sequencer(void) {
+    reset(); record_cde();
+    tap_a440();
+    CHECK(q.playing && last_int() == 120 && count_type(EV_VON) == 1 && von_note(0) == 60);   /* event 1 at once, BPM shown */
+    ticks(1);
+    CHECK(last_led() == 1);
+    ticks(249);
+    CHECK(count_type(EV_VON) == 2 && von_note(1) == 62);               /* 8th steps */
+    tap_a440();
+    CHECK(!q.playing && last_d3_is(CH_O, CH_F, CH_F) && !a.enabled);   /* OFF; the arp was never involved */
+    ticks(1);
+    CHECK(last_led() == 0);
+    ticks(1000);
+    CHECK(count_type(EV_VON) == 2);
+    arp_set_ext(&a, 1);
+    clear_log();
+    tap_a440();
+    CHECK(q.armed && !q.playing && last_d3_is(CH_S, CH_Y, CH_N));     /* armed under Syn */
+    ticks(1);
+    CHECK(last_led() == 1 && count_type(EV_VON) == 0);
+    arpui_realtime(&u, &a, &q, 0xFA, 0);
+    arpui_realtime(&u, &a, &q, 0xF8, 0);
+    CHECK(q.playing && count_type(EV_VON) == 1 && von_note(0) == 60);  /* the first clock after Start */
+    arpui_realtime(&u, &a, &q, 0xF8, 1);                               /* the other port: locked out */
+    for (int i = 0; i < 11; i++) arpui_realtime(&u, &a, &q, 0xF8, 0);
+    CHECK(count_type(EV_VON) == 1);
+    arpui_realtime(&u, &a, &q, 0xF8, 0);
+    CHECK(count_type(EV_VON) == 2 && von_note(1) == 62);               /* 12 clocks later */
+    tap_a440();
+    CHECK(!q.armed && !q.playing && last_d3_is(CH_O, CH_F, CH_F));
+}
+
+static void test_switching_generators_stops_the_running_one(void) {
+    reset(); record_cde();
+    select_gen();                                                      /* ArP */
+    tap_a440();                                                        /* arp on */
+    note(48, 100);
+    CHECK(a.enabled && count_type(EV_VON) == 1);                       /* the arp sounds the key */
+    clear_log();
+    select_gen();                                                      /* SEq: the arp is stopped, the key goes live */
+    CHECK(!a.enabled && u.gen == ARPUI_GEN_SEQ && !q.playing);
+    CHECK(count_type(EV_VOFF) == 1 && count_type(EV_VON) == 1 && von_note(0) == 48);   /* arp off: the held key sounds directly */
+    note(48, 0);
+    CHECK(count_type(EV_LOFF) == 1);                                   /* a live release */
+    tap_a440(); ticks(1);
+    CHECK(q.playing && last_led() == 1);
+    clear_log();
+    select_gen();                                                      /* ArP: the sequencer stops, the arp stays off */
+    CHECK(u.gen == ARPUI_GEN_ARP && !q.playing && !a.enabled && count_type(EV_VOFF) == 1);
+    ticks(1);
+    CHECK(last_led() == 0);
+    tap_a440();
+    CHECK(a.enabled);
+}
+
+static void test_tone_combo_follows_the_selected_generators_state(void) {
+    reset(); record_cde();
+    btn(A440, PRESS); btn(HOLD, PRESS); btn(HOLD, RELEASE); btn(A440, RELEASE);   /* SEq stopped: the tone */
+    CHECK(fake_tone_on && count_type(EV_A440_STOCK) == 1 && !q.playing);
+    tap_a440();
+    CHECK(!fake_tone_on && !q.playing && count_type(EV_A440_STOCK) == 2);   /* a tap only stops the tone */
+    tap_a440();
+    CHECK(q.playing);
+    btn(A440, PRESS); btn(HOLD, PRESS); btn(HOLD, RELEASE); btn(A440, RELEASE);   /* running: consumed, inert */
+    CHECK(!fake_tone_on && count_type(EV_A440_STOCK) == 2 && q.playing);
+}
+
+static void test_live_releases_are_unflagged_and_generated_ones_flagged(void) {
+    reset(); record_cde();
+    tap_a440();                                                        /* SEq playing */
+    note(50, 100);
+    CHECK(count_type(EV_VON) == 2 && !arpui_suspended(&u, &a));        /* live: sounds at once, stock hold applies */
+    note(50, 0);
+    CHECK(count_type(EV_LOFF) == 1 && count_type(EV_VOFF) == 0);
+    ticks(125);
+    CHECK(count_type(EV_VOFF) == 1 && count_type(EV_LOFF) == 1);       /* the step's gate: a generated release */
+    tap_a440();
+    select_gen(); tap_a440();                                          /* the arp on */
+    note(50, 100); ticks(125);
+    CHECK(count_type(EV_VOFF) == 2);                                   /* an arp step release is generated too */
+    note(50, 0);
+    CHECK(count_type(EV_LOFF) == 1);                                   /* the key's release is the pool's business */
+}
+
+static void test_group_alone_is_back_in_record_mode(void) {
+    reset();
+    CHECK(btn(GROUP, PRESS) == 0 && btn(GROUP, RELEASE) == 0);         /* not recording: stock */
+    enter_rec();
+    note(60, 100); note(64, 100);
+    btn(HOLD, PRESS); btn(HOLD, RELEASE); btn(HOLD, PRESS); btn(HOLD, RELEASE);   /* chord, two ties */
+    note(60, 0); note(64, 0);
+    btn(HOLD, PRESS); btn(HOLD, RELEASE);                              /* a rest */
+    ticks(DISP_FLASH_TICKS);
+    CHECK(q.len == 2 && q.total == 4 && last_is_rn(4));
+    CHECK(btn(GROUP, PRESS) == 1 && q.len == 1 && q.total == 3 && last_is_rn(3));   /* the rest goes, the count at once */
+    CHECK(btn(GROUP, REPEAT) == 1 && q.total == 3);                    /* repeats ignored */
+    CHECK(btn(GROUP, RELEASE) == 1);
+    btn(GROUP, PRESS); btn(GROUP, RELEASE);
+    CHECK(q.ev[0].dur == 2 && last_is_rn(2));                          /* a tie comes off */
+    btn(GROUP, PRESS); btn(GROUP, RELEASE);
+    CHECK(q.ev[0].dur == 1 && last_is_rn(1));
+    btn(GROUP, PRESS); btn(GROUP, RELEASE);
+    CHECK(q.len == 0 && last_is_rn(0));                                /* the chord goes */
+    CHECK(btn(GROUP, PRESS) == 1 && btn(GROUP, RELEASE) == 1 && q.len == 0 && last_is_rn(0));   /* nothing left: nothing */
+    CHECK(btn(BANK, PRESS) == 0 && btn(BANK, RELEASE) == 0);           /* Bank alone stays stock */
+    note(67, 100);                                                     /* an open chord ... */
+    CHECK(q.len == 1 && last_is_rn(1));
+    btn(GROUP, PRESS); btn(GROUP, RELEASE);                            /* ... removed and closed */
+    CHECK(q.len == 0 && last_is_rn(0));
+    note(69, 100);
+    CHECK(q.len == 1 && q.ev[0].n == 1 && q.ev[0].note[0] == 69);     /* G does not join */
+    note(67, 0); note(69, 0);
+    CHECK(count_type(EV_LOFF) == 4);                                   /* 60 64 67 69: every key still frees its voice */
+    btn(A440, PRESS); btn(GROUP, PRESS); btn(GROUP, RELEASE); btn(A440, RELEASE);   /* under A440: the order combo */
+    CHECK(q.order == SEQ_PEND && last_d3_is(CH_P, CH_N, CH_D) && q.len == 1 && u.rec);
+    tap_a440();
+    CHECK(!u.rec && q.len == 1);
+}
+
+static void test_a440_key_sets_the_transposition_with_seq_selected(void) {
+    reset();
+    btn(A440, PRESS);
+    CHECK(key(62, 100) == 0 && count_type(EV_VON) == 1);               /* ArP selected: an ordinary key */
+    key(62, 0);
+    btn(A440, RELEASE);
+    CHECK(a.enabled);                                                  /* a tap still: the key did not use the hold */
+    record_cde();                                                      /* SEq selected, stopped, the arp off */
+    btn(A440, PRESS);
+    CHECK(key(62, 100) == 1 && q.transpose == 2 && last_int() == 2 && count_type(EV_VON) == 0);   /* the command: silent */
+    CHECK(key(64, 100) == 0 && count_type(EV_VON) == 1 && q.transpose == 2);   /* a second key: live */
+    key(64, 0);
+    CHECK(btn(A440, RELEASE) == 1 && !q.playing);                      /* used the hold: no start */
+    CHECK(key(62, 0) == 1 && count_type(EV_LOFF) == 1);                /* its release is consumed, A440 up or not */
+    CHECK(key(62, 100) == 0 && count_type(EV_VON) == 2);               /* A440 up: an ordinary key again */
+    key(62, 0);
+    btn(A440, PRESS);
+    CHECK(key(60, 100) == 1 && q.transpose == 0 && last_int() == 0);   /* middle C: zero */
+    key(60, 0); btn(A440, RELEASE);
+    btn(A440, PRESS);
+    CHECK(key(48, 100) == 1 && q.transpose == -12 && last_int() == -12);
+    key(48, 0); btn(A440, RELEASE);
+    btn(A440, PRESS); btn(AFTERTOUCH, PRESS); btn(AFTERTOUCH, RELEASE);   /* after another combo: keys are live */
+    CHECK(key(67, 100) == 0 && q.transpose == -12);
+    key(67, 0); btn(A440, RELEASE);
+    btn(A440, PRESS);
+    arpui_note(&u, &a, &q, MIDI, 67, 100);                             /* MIDI-in: never a command, not a use of the hold */
+    arpui_note(&u, &a, &q, MIDI, 67, 0);
+    CHECK(q.transpose == -12);
+    clear_log();
+    btn(A440, RELEASE);                                                /* a tap: starts the sequence, transposed */
+    CHECK(q.playing && von_note(0) == 48);
+    btn(A440, PRESS);
+    CHECK(key(62, 100) == 1 && q.transpose == 2 && q.playing);         /* while playing too; from the next event */
+    key(62, 0); btn(A440, RELEASE);
+    tap_a440();
+    enter_rec();
+    btn(A440, PRESS);
+    CHECK(key(62, 100) == 0 && q.len == 1 && q.transpose == 0 && u.rec);   /* recording: a note, not a command; a new recording resets the offset */
+    key(62, 0); btn(A440, RELEASE);
+    CHECK(!u.rec && !q.playing);                                       /* the note did not use the hold: a tap, which leaves */
+}
+
+static void test_program_7_8_edit_the_selected_generators_note_value(void) {
+    reset(); record_cde();                                             /* SEq selected */
+    int n = stores();
+    btn(A440, PRESS);
+    btn(P7, PRESS); btn(P7, RELEASE);                                  /* longer: 8th D */
+    CHECK(rate_index(&u.seq_rate) == RATE_DEFAULT_INDEX - 1 && q.beats_num == 3 && q.beats_den == 4 && !q.swing);
+    CHECK(last_d3_is(BLANK, 8, CH_D) && rate_index(&u.rate) == RATE_DEFAULT_INDEX && a.beats_num == 1 && a.beats_den == 2);
+    CHECK(stores() == n);                                              /* the Seq's value is not saved */
+    btn(P8, PRESS); btn(P8, RELEASE); btn(P8, PRESS); btn(P8, RELEASE);   /* 8th, 8th S */
+    CHECK(q.beats_num == 1 && q.beats_den == 1 && q.swing && last_d3_is(BLANK, 8, CH_S));
+    btn(KEYB, PRESS); btn(KEYB, RELEASE);                              /* ArP */
+    btn(P8, PRESS); btn(P8, RELEASE);                                  /* the Arp's: 8th S */
+    CHECK(rate_index(&u.rate) == RATE_DEFAULT_INDEX + 1 && a.swing && stores() > n);
+    CHECK(q.beats_num == 1 && q.beats_den == 1 && rate_index(&u.seq_rate) == RATE_DEFAULT_INDEX + 1);   /* the Seq's untouched */
+    btn(A440, RELEASE);
+    params[ARPUI_PARAM_OCT] = 1; params[ARPUI_PARAM_PACK] = pack(N_QTR, ARP_UP, 0);   /* a program load: the Arp's only */
+    arpui_program_loaded(&u, &a, &q);
+    CHECK(rate_index(&u.rate) == N_QTR && rate_index(&u.seq_rate) == RATE_DEFAULT_INDEX + 1 && q.swing);
+}
+
+static void test_bank_group_are_the_order_in_chords_style_and_the_direction_otherwise(void) {
+    reset(); record_cde();
+    int n = stores();
+    btn(A440, PRESS);
+    btn(BANK, PRESS); btn(BANK, RELEASE);
+    CHECK(q.order == SEQ_BACK && last_d3_is(CH_B, CH_A, CH_C) && a.mode == ARP_UP);
+    btn(BANK, PRESS); btn(BANK, RELEASE);
+    CHECK(q.order == SEQ_PEND && last_d3_is(CH_P, CH_N, CH_D));
+    btn(BANK, PRESS); btn(BANK, RELEASE);
+    CHECK(q.order == SEQ_FOR && last_d3_is(CH_F, CH_LO, CH_R));
+    btn(GROUP, PRESS); btn(GROUP, RELEASE);
+    CHECK(q.order == SEQ_PEND && stores() == n);                       /* not saved */
+    btn(UNISON, PRESS); btn(UNISON, RELEASE);                          /* Arpeggiated: the direction inside the chord */
+    CHECK(q.style == SEQ_ARPEGGIATED);
+    btn(BANK, PRESS); btn(BANK, RELEASE);
+    CHECK(a.mode == ARP_DOWN && last_d3_is(CH_D, CH_N, BLANK) && q.order == SEQ_PEND && stores() > n);
+    btn(KEYB, PRESS); btn(KEYB, RELEASE);                              /* ArP selected: the direction */
+    btn(UNISON, PRESS); btn(UNISON, RELEASE);                          /* back to Chords: still the direction */
+    btn(GROUP, PRESS); btn(GROUP, RELEASE);
+    CHECK(a.mode == ARP_UP && q.order == SEQ_PEND);
+    btn(A440, RELEASE);
+    CHECK(!a.enabled && !q.playing);
+}
+
+static void test_unison_and_aftertouch_set_style_and_chord_length_without_saving(void) {
+    static const int CYCLE[][3] = { { 8, 2, CH_B }, { 16, 4, CH_B }, { 1, BLANK, 4 }, { 2, BLANK, 2 }, { 4, BLANK, 1 } };
+    reset();
+    CHECK(q.style == SEQ_CHORDS && q.chord_beats == 4);                /* defaults: CHd, Whole */
+    btn(A440, PRESS);
+    CHECK(btn(UNISON, PRESS) == 1 && q.style == SEQ_ARPEGGIATED && last_d3_is(CH_A, CH_R, CH_P));   /* ArP */
+    CHECK(btn(UNISON, RELEASE) == 1 && stores() == 0);
+    btn(UNISON, PRESS); btn(UNISON, RELEASE);
+    CHECK(q.style == SEQ_CHORDS && last_d3_is(CH_C, CH_H, CH_D));      /* CHd */
+    for (int i = 0; i < 5; i++) {                                      /* from Whole: 2b 4b 4 2 1 */
+        CHECK(btn(AFTERTOUCH, PRESS) == 1 && btn(AFTERTOUCH, RELEASE) == 1);
+        CHECK(q.chord_beats == CYCLE[i][0] && last_d3_is(BLANK, CYCLE[i][1], CYCLE[i][2]));
+    }
+    CHECK(stores() == 0);                                              /* session settings: nothing written */
+    CHECK(btn(A440, RELEASE) == 1 && !a.enabled);                      /* combos: no toggle */
+    CHECK(btn(UNISON, PRESS) == 0 && btn(AFTERTOUCH, PRESS) == 0);     /* without A440: stock */
+}
+
+static void test_programs_saved_by_1_2_0_load_with_their_style_bits_ignored(void) {
+    reset();
+    btn(A440, PRESS); btn(UNISON, PRESS); btn(UNISON, RELEASE); btn(AFTERTOUCH, PRESS); btn(AFTERTOUCH, RELEASE); btn(A440, RELEASE);
+    CHECK(q.style == SEQ_ARPEGGIATED && q.chord_beats == 8);
+    params[ARPUI_PARAM_OCT] = pack94c(N_8, 2, 1, 0); params[ARPUI_PARAM_PACK] = pack(N_8, ARP_UP, 1);   /* 1.2.0: POL, Qtr */
+    arpui_program_loaded(&u, &a, &q);
+    CHECK(a.enabled && a.octaves == 2 && q.style == SEQ_ARPEGGIATED && q.chord_beats == 8);   /* C ignored */
+    params[ARPUI_PARAM_OCT] = pack94c(N_4B, 4, 4, 1); params[ARPUI_PARAM_PACK] = pack(N_4B, ARP_DOWN, 0);   /* ArP, 4 bars, 4 octaves: 80 */
+    CHECK(params[ARPUI_PARAM_OCT] == 80);
+    arpui_program_loaded(&u, &a, &q);
+    CHECK(!a.enabled && a.octaves == 4 && rate_index(&u.rate) == N_4B && a.mode == ARP_DOWN && q.chord_beats == 8);
+    btn(A440, PRESS); btn(P2, PRESS); btn(P2, RELEASE); btn(A440, RELEASE);   /* a store: the bits are gone */
+    CHECK(params[ARPUI_PARAM_OCT] == pack94(N_4B, 2));
+    tap_a440();
+    CHECK(a.enabled);
+    params[ARPUI_PARAM_OCT] = 81; params[ARPUI_PARAM_PACK] = 1;        /* above 80: no arp data */
+    arpui_program_loaded(&u, &a, &q);
+    CHECK(!a.enabled && a.octaves == 2);
+}
+
+static void test_program_load_keeps_the_sequence_stops_it_and_starts_the_arp_only_if_selected(void) {
+    reset(); record_cde();
+    btn(A440, PRESS); key(62, 100); key(62, 0); btn(A440, RELEASE);  /* transposed +2 */
+    tap_a440(); ticks(1);
+    CHECK(q.playing && q.transpose == 2 && last_led() == 1);
+    params[ARPUI_PARAM_OCT] = 1; params[ARPUI_PARAM_PACK] = pack(N_8, ARP_UP, 1);   /* saved: arp on */
+    arpui_program_loaded(&u, &a, &q);
+    CHECK(!q.playing && q.len == 3 && q.transpose == 2 && !a.enabled && u.gen == ARPUI_GEN_SEQ);   /* stopped, kept; the arp stays off */
+    ticks(1);
+    CHECK(last_led() == 0);
+    select_gen();                                                      /* ArP: stopped, as any switch leaves it */
+    CHECK(!a.enabled);
+    arpui_program_loaded(&u, &a, &q);
+    CHECK(a.enabled && q.len == 3);                                    /* now the saved "on" acts */
+    enter_rec();
+    note(60, 100); note(60, 0);
+    arpui_program_loaded(&u, &a, &q);
+    CHECK(u.rec && q.len == 1 && !a.enabled);                          /* recording kept, the arp off while recording */
+    note(62, 100); note(62, 0);
+    CHECK(q.len == 2);
+}
+
+static void test_program6_outside_record_mode_clears_and_selects_arp(void) {
+    reset(); record_cde();
+    btn(A440, PRESS); key(62, 100); key(62, 0); btn(A440, RELEASE);
+    tap_a440();
+    CHECK(q.playing);
+    clear_log();
+    btn(A440, PRESS); btn(P6, PRESS); btn(P6, RELEASE);
+    CHECK(q.len == 0 && q.total == 0 && q.transpose == 0 && !q.playing && u.gen == ARPUI_GEN_ARP && !a.enabled);
+    CHECK(count_type(EV_VOFF) == 1 && last_d3_is(DASH, DASH, DASH));  /* the generated note released */
+    CHECK(btn(A440, RELEASE) == 1 && !a.enabled);                      /* a combo: no toggle */
+    tap_a440();
+    CHECK(a.enabled);                                                  /* ArP: the tap is the arp's */
+    btn(A440, PRESS); btn(P6, PRESS); btn(P6, RELEASE); btn(A440, RELEASE);   /* ArP running: the arp is left alone */
+    CHECK(a.enabled && u.gen == ARPUI_GEN_ARP);
+}
+
+static void test_all_notes_off_stops_the_sequencer_and_empties_the_pool(void) {
+    reset(); record_cde();
+    tap_a440();
+    arpui_all_notes_off(&u, &a, &q);
+    CHECK(!q.playing && !q.armed && q.len == 3);
+    ticks(1000);
+    CHECK(count_type(EV_VON) == 1);                                    /* nothing more */
+    select_gen(); tap_a440();                                          /* the arp with a key */
+    note(48, 100);
+    arpui_all_notes_off(&u, &a, &q);
+    CHECK(arp_pool_count(&a) == 0 && a.enabled);
+    enter_rec(); note(60, 100);
+    arpui_all_notes_off(&u, &a, &q);
+    CHECK(u.rec && q.len == 1);                                        /* recording kept */
+}
+
+static void test_generator_switch_hands_the_latch_over_with_the_arp(void) {
+    reset(); record_cde();
+    select_gen();                                                      /* ArP */
+    tap_a440();                                                        /* arp on */
+    hold_press_to_stock();                                             /* the arp's latch on */
+    CHECK(fake_latch && a.hold);
+    clear_log();
+    select_gen();                                                      /* SEq: the arp stops; stock's latch (off) is put back */
+    CHECK(!a.enabled && count_type(EV_HOLD_STOCK) == 1 && !fake_latch);
+    arpui_hold(&u, &a, &q, 0);
+    hold_press_to_stock();                                             /* stock's latch on for the live notes */
+    CHECK(fake_latch && !arpui_suspended(&u, &a));
+    select_gen();                                                      /* ArP, stopped: stock's hold stays in use */
+    CHECK(count_type(EV_HOLD_STOCK) == 1 && fake_latch);
+    tap_a440();                                                        /* arp on: its latch (on) wanted, stock's remembered */
+    CHECK(a.enabled && count_type(EV_HOLD_STOCK) == 1 && fake_latch); /* both on: nothing to replay */
+    arpui_hold(&u, &a, &q, 1);
+    hold_press_to_stock();                                             /* the arp's latch off */
+    CHECK(!fake_latch);
+    tap_a440();                                                        /* arp off: stock's latch (on) back */
+    CHECK(count_type(EV_HOLD_STOCK) == 2 && fake_latch);
 }
 
 int main(void) {
@@ -976,21 +1303,21 @@ int main(void) {
     test_bank_group_cycle_modes_with_names();
     test_program_buttons_set_octaves_clock_and_note_value();
     test_program_7_8_step_through_every_value();
-    test_a440_tune_enters_record_mode_and_a_tap_leaves();
-    test_record_mode_without_steps_keeps_the_sequence();
+    test_a440_tune_enters_record_mode_and_a_tap_leaves_it_stopped();
+    test_record_mode_without_entries_keeps_the_sequence();
     test_tune_without_a440_is_stock();
     test_hold_button_is_rest_or_tie_in_record_mode();
     test_a440_hold_toggles_the_stock_tone_with_the_arp_off();
     test_a440_hold_with_the_arp_on_is_consumed_and_inert();
     test_tap_while_the_tone_sounds_only_stops_it();
     test_program_load_with_the_tone_on_silences_it_and_reasserts_the_led();
-    test_record_readout_counts_length_in_arp_steps();
+    test_record_readout_counts_timing_steps();
     test_pedal_on_transition_is_rest_or_tie_in_record_mode();
     test_record_readout_persists_and_patch_display_returns_on_leaving();
     test_a440_led_blinks_in_record_mode();
     test_program6_in_record_mode_clears_and_stays();
     test_globals_leaves_record_mode();
-    test_notes_while_a440_is_held_are_ordinary();
+    test_notes_while_a440_is_held_are_ordinary_with_arp_selected();
     test_suspended_is_arp_on_or_record_mode();
     test_orphan_release_is_consumed_and_other_buttons_pass();
     test_readout_of_unassigned_buttons();
@@ -1009,11 +1336,24 @@ int main(void) {
     test_program_load_applies_saved_state();
     test_patch_round_trip_for_every_setting();
     test_long_note_values_load_and_old_programs_still_do();
-    test_unison_toggles_playback_mode_and_aftertouch_cycles_chord_length();
-    test_playback_mode_and_chord_length_round_trip_and_old_programs_load();
     test_arp_latch_and_stock_latch_are_remembered_separately();
     test_pedal_is_momentary_and_program_load_clears_both_latches();
     test_program_without_arp_data_switches_off_and_leaves_settings();
+    test_keyboard_selects_the_generator();
+    test_tap_starts_and_stops_the_sequencer();
+    test_switching_generators_stops_the_running_one();
+    test_tone_combo_follows_the_selected_generators_state();
+    test_live_releases_are_unflagged_and_generated_ones_flagged();
+    test_group_alone_is_back_in_record_mode();
+    test_a440_key_sets_the_transposition_with_seq_selected();
+    test_program_7_8_edit_the_selected_generators_note_value();
+    test_bank_group_are_the_order_in_chords_style_and_the_direction_otherwise();
+    test_unison_and_aftertouch_set_style_and_chord_length_without_saving();
+    test_programs_saved_by_1_2_0_load_with_their_style_bits_ignored();
+    test_program_load_keeps_the_sequence_stops_it_and_starts_the_arp_only_if_selected();
+    test_program6_outside_record_mode_clears_and_selects_arp();
+    test_all_notes_off_stops_the_sequencer_and_empties_the_pool();
+    test_generator_switch_hands_the_latch_over_with_the_arp();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;
 }

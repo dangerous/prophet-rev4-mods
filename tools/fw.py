@@ -11,7 +11,7 @@ from typing import Dict, Tuple
 from . import fwlink
 
 ENGINE_BASE = 0x20088000         # the appended engine record (tools/build.py)
-CODE_LIMIT = 0x2008E000          # code+rodata must end at or below this; state above
+CODE_LIMIT = 0x2008C000          # code+rodata must end at or below this; state above (16 KB each)
 SOURCE = "native.c"
 NAME = "native"
 REQUIRED_SYMBOLS = ("hook_kbd_scan", "hook_local_note", "hook_midi_note_on", "hook_midi_note_off",

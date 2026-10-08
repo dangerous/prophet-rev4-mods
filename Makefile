@@ -11,12 +11,13 @@ test-tooling:
 
 # Host-side harnesses for the engine's portable logic.
 test-firmware: $(BUILD)/test_rate $(BUILD)/test_oct $(BUILD)/test_vhold $(BUILD)/test_disp \
-               $(BUILD)/test_arp $(BUILD)/test_arpui
+               $(BUILD)/test_arp $(BUILD)/test_seq $(BUILD)/test_arpui
 	$(BUILD)/test_rate
 	$(BUILD)/test_oct
 	$(BUILD)/test_vhold
 	$(BUILD)/test_disp
 	$(BUILD)/test_arp
+	$(BUILD)/test_seq
 	$(BUILD)/test_arpui
 
 HOSTCC := $(CC) -std=c11 -Wall -Wextra -Werror -Ifirmware
@@ -41,10 +42,14 @@ $(BUILD)/test_arp: tests/firmware/test_arp.c firmware/arp.c firmware/arp.h firmw
 	@mkdir -p $(BUILD)
 	$(HOSTCC) -o $@ tests/firmware/test_arp.c firmware/arp.c
 
-$(BUILD)/test_arpui: tests/firmware/test_arpui.c firmware/arpui.c firmware/arpui.h firmware/arp.c \
+$(BUILD)/test_seq: tests/firmware/test_seq.c firmware/seq.c firmware/seq.h firmware/arp.c firmware/arp.h firmware/platform.h
+	@mkdir -p $(BUILD)
+	$(HOSTCC) -o $@ tests/firmware/test_seq.c firmware/seq.c firmware/arp.c
+
+$(BUILD)/test_arpui: tests/firmware/test_arpui.c firmware/arpui.c firmware/arpui.h firmware/arp.c firmware/seq.c \
                      firmware/rate.c firmware/disp.c firmware/platform.h
 	@mkdir -p $(BUILD)
-	$(HOSTCC) -o $@ tests/firmware/test_arpui.c firmware/arpui.c firmware/arp.c firmware/rate.c firmware/disp.c
+	$(HOSTCC) -o $@ tests/firmware/test_arpui.c firmware/arpui.c firmware/arp.c firmware/seq.c firmware/rate.c firmware/disp.c
 
 # Cross-build the engine and the image, then check every structural invariant.
 test-image:

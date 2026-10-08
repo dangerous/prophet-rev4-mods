@@ -7,8 +7,9 @@ behavioural source of truth; this file is the engineering context around it.
 
 - Repo `github.com/dangerous/prophet-rev4-mods` (local folder `~/git/prophet-arp-mods`).
   Work happens in a worktree per feature under `.claude/worktrees/` (`relatch-seq` for the
-  2026-10-06/07 work, `poly-seq` for the polyphonic sequencer); `main` is merged from the
-  root checkout with a plain `git merge`.
+  2026-10-06/07 work, `poly-seq` for the polyphonic sequencer, `seq2` for the 2.0.0
+  independent sequencer; `accompany` is a parked, unmerged experiment); `main` is merged
+  from the root checkout with a plain `git merge`.
 - The release version is the `VERSION` file (semantic versioning, bumped by hand); `make
   manifest` writes it into `site/manifest.js` and `site/version.json` (the README badge reads
   the latter) and names the download `prophet5_main_2.1.0_patched_<version>.syx`. Release
@@ -90,16 +91,24 @@ behavioural source of truth; this file is the engineering context around it.
 - Rule we hold ourselves to: no engine code at boot; only proven entry points; everything in
   the engine's own record; the kill switch bypasses every hook.
 
+- 2026-10-08, **2.0.0** (`seq2`, image `8d8f99ed`): the sequencer redesigned as an independent
+  generator (Prophet-6 model) — built, all host tests green (tooling 55, image 11,
+  harnesses 1011 checks), handed to the root `dist/`, **not flashed, not pushed**. Every
+  2.0.0 behaviour is `[HW: unverified]`; the checklist's "Seq" section is the test plan.
+
 ## Build/test
 
 - `make test` = tooling (`unittest`), host harnesses (`test_rate`, `test_oct`, `test_vhold`,
-  `test_disp`, `test_arp`, `test_arpui`), image invariants (cross-build with Apple clang
-  `-Oz`, Python ELF linker, `tests/firmware/test_image.py`). No third-party packages; pytest
-  is not installed — use `unittest`.
-- `make image` → `build/prophet10_native.syx`. Record `0x20088000–0x20090000`: code limit
-  `0x2008E000`, state above it (ARP `0x2008E000` ≤ 0xA00 — the 64-step chord storage —, UI
-  `0x2008EA00`, OCT `0x2008EA40`, VHOLD `0x2008EAE0`, queue `0x2008EB00`, init flag
-  `0x2008ED00`), all zero at boot.
+  `test_disp`, `test_arp`, `test_seq`, `test_arpui`), image invariants (cross-build with
+  Apple clang `-Oz -fno-jump-tables`, Python ELF linker, `tests/firmware/test_image.py`). No
+  third-party packages; pytest is not installed — use `unittest`. The tooling and image
+  tests skip (with a warning) when `fixtures/` is empty — a fresh worktree needs the stock
+  files copied in from the root checkout or the suite silently tests nothing there.
+- `make image` → `build/prophet10_native.syx`. Record `0x20088000–0x20090000`, 16 KB code +
+  16 KB state since 2.0.0: code limit `0x2008C000` (10.8 KB used), state above it (SEQ
+  `0x2008C000` ≤ 0x3400 — 512 events of 24 bytes —, ARP `0x2008F400` ≤ 0x400, UI
+  `0x2008F800` ≤ 0x80, OCT `0x2008F880`, VHOLD `0x2008F920`, queue `0x2008F940`, init flag
+  `0x2008FB40`, generated-note-off flag `0x2008FB44`), all zero at boot.
 - Sandbox quirk: compound Bash with heredocs in the worktree is sometimes refused as "too
   complex"; write files with the Write tool (or via the scratchpad + `cp`) and keep Bash
   lines simple. zsh aborts a whole command line on an unmatched glob (`--include=*.py`).
@@ -155,6 +164,18 @@ behavioural source of truth; this file is the engineering context around it.
   (progress 0→100), then **always** one tail-group MS byte, `tail` data bytes and two
   trailer bytes; verifies the trailer before writing.
 
+## Display font (stock, catalogued 2026-10-08)
+
+Per-digit routine `0x20036A40`, glyph table at `0x2004E218` (8 segments per code); stock's
+Globals value-name strings live from `0x2004E290` and use the same codes. Codes: digits
+`0`–`9` = 0x00–0x09; letters A–Z = 0x0A–0x23 in order (A 0x0A, B 0x0B, C 0x0C, D 0x0D,
+E 0x0E, F 0x0F, G 0x10, H 0x11, I 0x12, J 0x13, K 0x14, L 0x15, M 0x16, N 0x17, O 0x18,
+P 0x19, Q 0x1A, R 0x1B, S 0x1C, T 0x1D, U 0x1E, V 0x1F, W 0x20, X 0x21, Y 0x22, Z 0x23 —
+M, V, W and X are approximations on seven segments, Z is blank); `o` (lower) 0x24, blank 0x25,
+`-` 0x26, `_` 0x27, `]` 0x28. Several letters render lower-case by shape (b d n r t q),
+which is why the names read `dn`, `rnd`, `CHd`, `SEq`, `bAC`, `Pnd`. `plat_display_int`
+goes through stock's three-digit integer display (zero-padded, `-01` for negatives).
+
 ## Engine design notes
 
 - Hooks: 14 `BL` sites + 4 parser-table words (`firmware/hooks_native.json`); every stock
@@ -166,25 +187,41 @@ behavioural source of truth; this file is the engineering context around it.
 - HOLD while the arp is on: hook the hold query in `note_off`; withhold the voice-engine
   hold message while *suspended* (arp enabled or seq record mode, `arpui_suspended`);
   re-post it on transitions of that state (`vhold.c`).
-- Tap tempo (A440 + Unison, id 25): `arpui_t.ms` is a free-running 1 ms counter bumped in
-  `arpui_tick`; the UI keeps the last tap time and up to 4 intervals (uint16, ≤ 2000 ms);
-  BPM = round(60000·n / Σ). A gap > 2000 ms starts a new series. Unison is no longer a
-  readout button (readout examples now use Osc B Keyboard 36). `arpui_t` stays ≤ 0x40.
+- Tap tempo (A440 + Velocity, id 11; Unison until 2026-10-08): `arpui_t.ms` is a
+  free-running 1 ms counter bumped in `arpui_tick`; the UI keeps the last tap time and up to
+  4 intervals (uint16, ≤ 2000 ms); BPM = round(60000·n / Σ). A gap > 2000 ms starts a new
+  series. Readout examples use Osc B Keyboard 36 (Keyboard Amount 8 is the generator switch
+  since 2.0.0). `arpui_t` is 56 bytes (area 0x80).
 - Display: one timer (`disp.c`) restarted by every message — 1.5 s, or 0.25 s for the
   record-mode flashes (`disp_flash`); stock restore at expiry, `r N` while recording.
-- Seq: record mode is a UI state (`arpui_t.rec`, A440 + Tune; a tap of A440, A440 + Tune
-  or GLOBALS leaves). While it lasts the UI routes notes to `arp_seq_record_note`, consumes
-  the HOLD button (id 0x0E) and turns its presses — and the pedal's on-transitions, which
-  reach the UI through `arpui_hold` — into `arp_seq_rest_tie`; the display timer restores
-  `r N` instead of the patch display; the A440 LED blinks (500/500 ms). Engine storage: a
-  step is `seq_n` notes (`seq_note`/`seq_vel`, up to 10) and a length `seq_dur`; the open
-  step is "a recorded key is still down" (`rec_down` bitmap). Playback substitutes the step
-  list for the pitch-sorted pool as the base order (the walker runs over step indices;
-  `seq_hold` counts the arp steps a step still has to run, the gate fires only in its last
-  one); the reference pitch is the lowest note of the first sounding step. Entering/leaving
-  releases everything the engine has sounding and empties the pool, so keys down at the
-  transition are ignored until pressed again; `arp_enable` while recording only sets the
-  flag. Pitch-anchored stepping for the pool, index-anchored for the sequence.
+- Seq (2.0.0, `seq.c`): a generator of its own. `seq_t` = 512 `seq_ev_t` events (n, 10
+  notes, 10 velocities, u16 duration) + recorder + transport. The UI holds the selection
+  (`arpui_t.gen`) and routes: record mode → `seq_rec_note` (which sounds through
+  `arp_note` with the arp off, so every live note lives in the arp's direct table and
+  releases work whoever saw the press); `SEq` → `arp_note` (arp off = live path); `ArP` →
+  `arp_note`. Record mode is a UI state (A440 + Tune; a tap, A440 + Tune or GLOBALS leaves,
+  leaving `SEq` selected and stopped); HOLD/pedal on-transitions → `seq_rec_rest_tie`; Group
+  alone → `seq_rec_back`; `r N` = `seq_rec_count` (0 while `fresh`, i.e. until the first
+  entry replaces the old sequence). Chords style: the seq's own step clock (same
+  accumulator scheme as the arp's, pending note-value changes applied at the next event);
+  an event's `remain` counts its timing steps, the gate fires only when `remain == 1`.
+  Arpeggiated style: the seq's chord clock (`60000 × beats × dur` per tick-bpm, or `24 ×
+  beats × dur` clocks) hands each chord to the arp's **chord source** (`arp_chord_set`:
+  pattern afresh, first note now, steps counted from there; the arp runs its clock whenever
+  a chord source is set, arp off or on, and `base_order` takes the chord instead of the
+  pool). **Ordering matters**: the sequencer runs before the arp on every tick and every
+  accepted clock (`seq_tick` → `arp_tick`, `seq_realtime` → `arp_rt_apply`), and a chord
+  set *on* a tick/clock is the arp's step for it (`seq_tick` returns 1 → the glue skips
+  `arp_tick`; `arp_rt_apply` skips the step when `chord_clk == 0`), otherwise the old chord
+  stepped once more at every boundary (one extra note per chord) or the first step came a
+  tick early. Under `Syn`: `armed` (A440 start, waiting for `clk % sc == 0`), `paused`
+  (FC; FB resumes, FA → event 1), own `loss` counter; the arp owns the port lock
+  (`arp_rt_accept`). The UI re-applies the arp's own note value in `ui_enable(on)` because
+  the Arpeggiated style sets the arp's beats to the seq's.
+- Generated vs live releases: `plat_voice_off` (generated: arp steps, seq chords) sets a
+  flag around stock `note_off` so the hold-query hook answers "off"; `plat_live_off` (direct
+  notes) leaves stock's answer. Whether stock honours the per-note answer is the 2.0.0
+  hardware question (spec "HOLD while the arp is on" 4a).
 - Keyboard octave shift (`oct.c`): Lo Freq's held-repeat (panel value 3) is the hold
   detection — it shows the shift and marks the hold used, so only a press released before
   the panel's repeat delay is a tap (replayed to stock). Bank/Group repeats are ignored.
@@ -194,19 +231,21 @@ behavioural source of truth; this file is the engineering context around it.
   off remove entries of pitches that left the pool; re-latch and all-notes-off clear it.
   Stepped by index like the sequence; removing an entry before the position moves the
   position back with it, removing the current one sets `asg_stay` so the next step does not
-  advance past its successor. A sequence, when present, still wins as the base order.
+  advance past its successor. A chord source, when set, wins as the base order.
 - Timing: internal `acc += bpm*den` per tick, step at `60000*num`, gate at half; MIDI clock
   `24*num/den` per step counted from Start; 1 s loss releases and resets the count.
 - Under `Syn` the BPM follows the clock: each accepted F8 samples `loss` (ticks since the
   previous clock) into a 24-entry ring; with a full ring BPM = round(60000 / sum). Start /
   Continue / Stop / loss / clock-source toggle empty the ring. Both tempo gestures (A440 +
-  Glide Rate, A440 + Unison) are consumed but inert under `Syn` (show `Syn`), decided
+  Glide Rate, A440 + Velocity) are consumed but inert under `Syn` (show `Syn`), decided
   2026-10-07 with the clock-follow so the DAW tempo carries over to `int`.
 - Note value (`rate.c`): the Prophet-6's ten values in its panel order, index 0 = Half …
   9 = 32nd, so `rate_step(+1)` = shorter = Program 8. The order is not monotonic in average
   length (8S between 8 and 8t, 16S between 16 and 16t) — by design, as on the P6.
-- Patch memory: 93 = note index × 10 + mode × 2 + on (0–99), 94 = octaves (0 = no data).
-  Parameter 93's earlier bitfield (2-bit mode, fixed note codes with a legacy table) had no
+- Patch memory: 93 = note code × 10 + mode × 2 + on (0–99; code = Prophet-6 position, or
+  0–2 for Whole / 2 bars / 4 bars with the long flag), 94 = octaves + 4 × long (0 = no
+  data; 1.2.0 also wrote 8 × chord-length code + 40 × ArP style — read and ignored since
+  2.0.0, never written again). Parameter 93's earlier bitfield (2-bit mode, fixed note codes with a legacy table) had no
   room for a fifth mode; David chose (2026-10-07) to re-pack without compatibility, as only
   test programs had been saved. Using program-name character 84 as a flag was considered
   and dropped.
@@ -222,6 +261,19 @@ behavioural source of truth; this file is the engineering context around it.
   had one.
 - The panel reports a pre-held button in the held table (no synthetic press event), but its
   link comes up later than our first second.
+- The Cortex-A5 build has only the unsigned EABI divide helpers (`__aeabi_uidiv/uidivmod` in
+  `native.c`): any signed `/` or `%` by a non-constant (or a divide before a range check that
+  lets a negative through) fails to link with `__aeabi_idivmod`. Use unsigned arithmetic
+  and compares (`pos + 1 < len ? pos + 1 : 0`).
+- `-Oz` emitted a `tbb` jump table whose byte offsets the image test's address sweep read as
+  a literal; `-fno-jump-tables` keeps `.text` free of data.
+- Chained shell commands with `| grep` / `| tail` after `make test` ran the dist hand-over
+  on a failed build: test the exit status (`if make test > log; then …; else exit 1; fi`).
+- Harness timing: `on_tick()` values are absolute — reset `now = 0` at every start you time
+  (a `play()` helper), or compute relative to the start; three rounds of 2.0.0 failures were
+  this.
+- Record-mode arithmetic in tests: a chord tied N times is N + 1 timing steps; count from the
+  recording, not from memory.
 
 ## Open items
 
@@ -231,6 +283,19 @@ behavioural source of truth; this file is the engineering context around it.
   serialiser/deserialiser — a 4 KB sector holds 32 programs, so backup first).
 - The pedal as rest/tie, seq recording from MIDI-in and a tied step under `Syn` have not
   been exercised on hardware.
+- **2.0.0 is entirely unverified on hardware** (independent sequencer: generator select,
+  transport incl. MIDI arm/Stop/Continue, orders, transposition, Back, 512 steps, two note
+  values, per-note hold answer for generated notes). Checklist: `docs/hardware-checklist.md`
+  "Seq". Open stock question: does the voice engine honour a per-note "hold off" answer at
+  `0x2003EACE` (generated notes release under HOLD while live notes sustain), or is hold
+  decided per voice elsewhere? If generated notes sustain, options are: suspend the synth's
+  hold while the sequencer plays (as the arp does — then live notes don't sustain either), or
+  accept it.
+- Decisions made while implementing 2.0.0, folded into the spec: selecting `SEq` with
+  nothing recorded is refused (`---`, `ArP` stays) rather than selecting an empty generator;
+  A440 + Program 6 with the arp running leaves the arp running; a clock-source change
+  restarts a running sequence; MIDI Continue in the Arpeggiated style re-sets the current
+  chord at the Continue (its first note sounds then, the chord clock continues).
 - Per-program sequence storage (as the Prophet-6): the 29 spare flash bytes above would
   hold a pitch-only mono sequence, not 64 chord steps with velocity; a SysEx dump/restore of
   the sequence is the realistic alternative.

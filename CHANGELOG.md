@@ -4,6 +4,46 @@ Versions of the patch as published through the patcher — the `VERSION` file, t
 name (`prophet5_main_2.1.0_patched_<version>.syx`) and `site/version.json`. Each entry names
 the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
 
+## 2.0.0 — 2026-10-08
+
+The step sequencer becomes a generator of its own, the Prophet‑6 way: it plays on its own
+transport while the keyboard stays yours. A major version because the sequencer's controls
+and behaviour change; the arpeggiator is unchanged and programs saved by 1.x load.
+
+### Added
+- **Two generators**, `ArP` and `SEq`, selected with A440 + **Keyboard** (the filter's
+  Keyboard Amount button). A440 starts and stops the selected one and its LED shows it
+  running; entering record mode selects `SEq`.
+- **Independent transport**: a tap plays the recording from event 1 — at once under the
+  internal clock, armed to the next grid step under MIDI sync, where MIDI Stop pauses and
+  Continue resumes — and a tap stops it. **Play over it**: keys and MIDI‑in sound as normal,
+  polyphonic, under the synth's own hold, and never disturb playback.
+- **Orders** for the Chords style: `For`, `bAC`, `Pnd` (A440 + Bank / Group with `SEq`
+  selected).
+- **Transposition** by key: A440 + a key, middle C = 0, applied from the next event or chord;
+  survives stop/start, style and generator changes and program loads; a new recording resets
+  it.
+- **Back** in record mode: Group alone undoes the last tie, else the last chord or rest.
+- **Capacity 512 timing steps** — chords, rests and ties counted together (was 64 events).
+- **Two note values**: the arp's (saved with the program) and the sequencer's (kept with the
+  recording); A440 + Program 7 / 8 edit the selected generator's.
+
+### Changed
+- The sequence's **style** (A440 + Unison, now `CHd` / `ArP` — `POL` is `CHd`) and **chord
+  length** (A440 + Aftertouch) are session settings and no longer saved with programs;
+  programs saved by 1.2.0 load with those bits ignored.
+- **Leaving record mode** leaves the sequencer selected and stopped; the next tap plays it
+  (1.2.0 switched the arp on).
+- A440 + Program 6 outside record mode clears the sequence and selects `ArP`.
+- The tuning tone (A440 + HOLD) is available whenever the selected generator is stopped.
+- The engine's state area grows to 16 KB (and the code limit shrinks to 16 KB) for the 512
+  events.
+
+### Removed
+- **Trigger‑key playback**: the sequence no longer plays from a held key transposed to it,
+  nor in the arp's direction modes, octaves or random order, and HOLD no longer latches it.
+- Finishing a recording no longer switches the arp on.
+
 ## 1.2.0 — 2026-10-08
 
 ### Added

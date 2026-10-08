@@ -15,7 +15,7 @@ STOCK = ROOT / "fixtures" / "prophet5_main_2.1.0.syx"
 HOOKS = ROOT / "firmware" / "hooks_native.json"
 OUT = ROOT / "build" / "test-native"
 
-REC_BASE, STATE_BASE, REC_HI = 0x20088000, 0x2008E000, 0x20090000
+REC_BASE, STATE_BASE, REC_HI = 0x20088000, 0x2008C000, 0x20090000   # code 16 KB, state 16 KB
 
 # every stock BL site the native build retargets, with the stock target it must find there
 BL_SITES = {
