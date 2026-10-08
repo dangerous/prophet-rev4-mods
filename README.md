@@ -18,7 +18,7 @@ differ (the spec marks each one), which is why it is published in its own right.
 welcome to fork it and make your own.
 
 New here? The [walkthrough](docs/WALKTHROUGH.md) takes you through every feature at the
-instrument in about twenty minutes; the manual below is the reference.
+instrument, step by step; the manual below is the reference.
 
 > **Not affiliated with Sequential.** This is a hobby project that modifies the
 > instrument's firmware. Installing a modified OS is at your own risk and may void your

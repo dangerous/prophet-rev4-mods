@@ -1,9 +1,8 @@
 # Walkthrough
 
 A guided tour of the patch, from a fresh install to the arpeggiated sequencer. Each step
-says what to press and what you will hear or see. It takes about twenty minutes at the
-instrument; the [README](../README.md) has the reference tables if you want to look
-something up afterwards.
+says what to press and what you will hear or see; the [README](../README.md) has the
+reference tables if you want to look something up afterwards.
 
 **Before you start.** Install the patched OS ([README — Installing](../README.md#installing))
 and power up. Pick a bright, short patch so you can hear single notes clearly. The button
