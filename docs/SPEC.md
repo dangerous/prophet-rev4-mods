@@ -646,10 +646,12 @@ this engine deliberately differs it is marked **(change)** with the reason.
    record mode, which suspends the synth's hold in the same way while it lasts, arp on or
    off ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`.
 4a. **With `SEq` selected** HOLD and the pedal are the synth's own hold for the **live**
-   notes; they never affect the sequencer's transport. The sequencer's **generated** notes
-   keep their programmed gates regardless of HOLD `[HW: unverified — see the realisation: if
-   stock's voice path cannot tell the two apart, generated notes sustain under HOLD too, as
-   the arp's did before "HOLD while the arp is on"]`. Selecting `SEq` while the arp runs stops
+   notes; they never affect the sequencer's transport. The sequencer's **generated** notes **sustain under HOLD as well** `[HW: 2026-10-08,
+    Prophet-10 Rev4 — the per-note "off" answer of the realisation below changes nothing:
+    the voice engine's own hold flag decides]`. Whether that is wanted is **undecided**
+    (2026-10-08): it is left as it is for now; the alternative — suspend the synth's hold
+    while the sequencer runs, as for the arp, and have the engine sustain the live notes
+    itself — is implemented and tested on branch `seq-hold-sustain`. Selecting `SEq` while the arp runs stops
     it, which hands the HOLD latch over exactly as switching the arp off does (rule 3);
     selecting `ArP` leaves the arp stopped, so the synth's hold stays in use until the arp is
     started, which hands over as switching it on.
@@ -662,9 +664,9 @@ this engine deliberately differs it is marked **(change)** with the reason.
    state to the arp's hold event), and on every transition of *suspended* with HOLD active
    posts the message itself (`0x2003D325`: off when it begins, on when it ends). For the
    Seq's generated notes the hook answers "off" to note-offs the engine itself issues (it
-   flags its own `plat_voice_off` calls) and stock's state to every other note-off, so live
-   notes sustain and generated notes do not; whether stock's voice engine honours the
-   per-note answer is what hardware must confirm. Stock's
+   flags its own `plat_voice_off` calls) and stock's state to every other note-off, intended to let live notes sustain and generated notes not; **hardware showed the voice
+   engine does not honour the per-note answer** (its own hold flag sustains every released
+   voice), so the flag is inert and generated notes sustain too (rule 4a). Stock's
    latch byte at `ui + 0x19C` carries the active mode's latch: at each arp on/off transition
    the UI remembers it for the mode being left and, if the mode being entered remembers a
    different state, replays a HOLD button press through the button post (`0x2003BC31(0x0E,

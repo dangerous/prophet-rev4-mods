@@ -111,10 +111,10 @@ Manual verification on the instrument. Record results against the spec markers i
       A440 on: HOLD LED on again, the arp latches, the synth's hold is suspended. Tap A440
       off: HOLD LED stays on (stock hold back). HOLD off; tap A440 on: the arp's latch is
       still on. Pedal (`HLd`): momentary in both modes.
-- [ ] **Rule 4a (the open question):** sequencer selected and playing chords, HOLD on. Play
-      and release a key: it sustains (stock hold). The sequence's chords must still release
-      at their gates — if they sustain under HOLD too, stock's voice path ignores the
-      per-note answer: record that in the spec's 4a marker and the realisation. Then: arp on,
+- [x] **Rule 4a:** sequencer selected and playing chords, HOLD on. Play and release a key: it
+      sustains (stock hold). **Result 2026-10-08: the sequence's chords sustain too** — the
+      voice engine's hold flag decides, the per-note answer is inert. Left as is for now
+      (undecided whether it is a bug); the fix is on branch `seq-hold-sustain`. Then: arp on,
       HOLD latched, A440 + Keyboard → `SEq`: HOLD LED goes off (stock's latch back), the
       arp's latch returns when the arp is next started.
 

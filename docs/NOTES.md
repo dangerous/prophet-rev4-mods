@@ -91,10 +91,17 @@ behavioural source of truth; this file is the engineering context around it.
 - Rule we hold ourselves to: no engine code at boot; only proven entry points; everything in
   the engine's own record; the kill switch bypasses every hook.
 
-- 2026-10-08, **2.0.0** (`seq2`, image `8d8f99ed`): the sequencer redesigned as an independent
-  generator (Prophet-6 model) — built, all host tests green (tooling 55, image 11,
-  harnesses 1011 checks), handed to the root `dist/`, **not flashed, not pushed**. Every
-  2.0.0 behaviour is `[HW: unverified]`; the checklist's "Seq" section is the test plan.
+- 2026-10-08, **2.0.0** (`seq2`, image `8d8f99ed`, published): the sequencer redesigned as an
+  independent generator (Prophet-6 model). Flashed and run through the 16-step panel test:
+  Program 7 from 8th goes to `8d` before `4` (correct — the run-through text was wrong), and
+  **HOLD sustains the sequence's chords**: the voice engine's own hold flag decides, the
+  per-note "off" answer at the hold query is inert. David: good enough to publish as is;
+  whether that is a bug is undecided. The fix (suspend the synth's hold while the sequencer
+  runs — *suspended* += "SEq running" — and sustain live notes in the engine,
+  `arp_set_sustain`, spec 4a rewritten, 28 more harness checks) is complete on branch
+  `seq-hold-sustain` (`36f4d60`, image `5c262af7`, unflashed), reverted off `main`. The other
+  run-through steps passed by exception; the 2.0.0 markers stay `[HW: unverified]` until the
+  checklist's "Seq" section is confirmed step by step.
 
 ## Build/test
 
