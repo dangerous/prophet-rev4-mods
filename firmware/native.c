@@ -42,6 +42,7 @@ enum {
     NI_PARAM_STORE,      /* 0x2003CEF5 plain program parameter store(layer, param, value) */
     NI_HOLD_OFF,         /* 0x2003B6B1 hold off (both sources): original callee at the program-loaded hook */
     NI_TONE_FLAG,        /* 0x200574FA ui + 0x16A: stock's A440 reference tone on (byte != 0) */
+    NI_HOLD_LATCH,       /* 0x2005752C ui + 0x19C: stock's HOLD button latch (byte != 0) */
     NI_COUNT
 };
 
@@ -69,6 +70,7 @@ const volatile uint32_t stock_iface[NI_COUNT] = {
     [NI_PARAM_STORE] = 0x2003CEF5u,
     [NI_HOLD_OFF] = 0x2003B6B1u,
     [NI_TONE_FLAG] = 0x200574FAu,
+    [NI_HOLD_LATCH] = 0x2005752Cu,
 };
 
 #define SFN(i, type) ((type)(uintptr_t)stock_iface[i])
@@ -218,6 +220,8 @@ int  plat_param_read(int param) { return SFN(NI_PARAM_READ, param_read_fn)(0, pa
 void plat_param_store(int param, int value) { SFN(NI_PARAM_STORE, param_store_fn)(0, param, value); }
 int  plat_tone_on(void) { return *SPTR(NI_TONE_FLAG, volatile const uint8_t *) != 0; }
 void plat_stock_a440_press(void) { SFN(NI_BUTTON_POST, button_fn)(ARPUI_A440, 1); }   /* stock: tone toggle (HOLD up) */
+int  plat_hold_latch(void) { return *SPTR(NI_HOLD_LATCH, volatile const uint8_t *) != 0; }
+void plat_stock_hold_press(void) { SFN(NI_BUTTON_POST, button_fn)(ARPUI_HOLD, 1); }    /* stock: latch toggle */
 
 /* --- hooks: Timer Service task ----------------------------------------------------------- */
 /* stock 0x2003BE9C: the 1 ms keyboard poll. Everything the engine does happens here. */

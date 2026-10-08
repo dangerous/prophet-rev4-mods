@@ -805,6 +805,141 @@ static void test_seq_all_notes_off_enable_and_clear_during_record_mode(void) {
     CHECK(n_on() == 1 && on_note(0) == C4);                            /* the one-step sequence, on C */
 }
 
+/* ---- seq: arpeggiated playback (spec "Seq — Arpeggiated playback") -------------------- */
+/* C major (recorded E, C, G), then F major: two chord steps */
+static void record_two_chords(void) {
+    arp_seq_record(&a, 1);
+    rec_on(E4); rec_on(C4); rec_on(67); rec_off(E4); rec_off(C4); rec_off(67);
+    rec_on(F4); rec_on(A4); rec_on(72); rec_off(F4); rec_off(A4); rec_off(72);
+    arp_seq_record(&a, 0);
+    clear_log();
+}
+static void arp_mode_on(int chord_beats) {
+    reset(); arp_enable(&a, 1);
+    record_two_chords();
+    arp_set_seq_arp(&a, 1);
+    arp_set_chord_beats(&a, chord_beats);
+}
+
+static void test_arp_mode_plays_each_chord_for_the_chord_length(void) {
+    arp_mode_on(4);                                                    /* Whole: 4 beats = 2000 ms = 8 eighths */
+    CHECK(a.seq_arp == 1 && a.chord_beats == 4);
+    on(C4);                                                            /* trigger = reference: no transposition */
+    ticks(3999);
+    CHECK(strcmp(ons(), "60 64 67 60 64 67 60 64 65 69 72 65 69 72 65 69 ") == 0);   /* Up over C, then over F */
+    CHECK(on_tick(7) == 1750 && on_tick(8) == 2000 && on_tick(15) == 3750);
+    ticks(1);
+    CHECK(n_on() == 17 && on_note(16) == C4 && on_tick(16) == 4000);  /* round again */
+    CHECK(n_sounding() == 1);                                          /* one note at a time, as the arp */
+    off(C4);
+    CHECK(n_sounding() == 0);
+}
+
+static void test_arp_mode_direction_octaves_and_assign_apply_inside_the_chord(void) {
+    int t0;
+    arp_mode_on(2);                                                    /* Half: 4 eighths per chord */
+    arp_set_mode(&a, ARP_DOWN);
+    on(C4);
+    ticks(1999);                                                       /* two chords, the ninth note lands at 2000 */
+    CHECK(strcmp(ons(), "67 64 60 67 72 69 65 72 ") == 0);             /* Down inside, chords forward */
+    off(C4);
+    arp_set_mode(&a, ARP_UPDOWN);
+    clear_log(); on(C4); ticks(1999);
+    CHECK(strcmp(ons(), "60 64 67 64 65 69 72 69 ") == 0);
+    off(C4);
+    arp_set_mode(&a, ARP_ASSIGN);                                      /* the order the notes were recorded: E C G */
+    clear_log(); on(C4); ticks(1999);
+    CHECK(strcmp(ons(), "64 60 67 64 65 69 72 65 ") == 0);
+    off(C4);
+    arp_set_mode(&a, ARP_UP); arp_set_octaves(&a, 2);                  /* passes within the chord */
+    clear_log(); on(C4); ticks(1999);
+    CHECK(strcmp(ons(), "60 64 67 72 65 69 72 77 ") == 0);
+    off(C4);
+    arp_set_octaves(&a, 1);
+    arp_set_mode(&a, ARP_RANDOM);
+    clear_log(); t0 = now; on(C4); ticks(999);
+    for (int i = 0; i < nlog; i++) CHECK(log_[i].note == C4 || log_[i].note == E4 || log_[i].note == 67);   /* first chord only */
+    ticks(1000);
+    for (int i = 0; i < nlog; i++) if (log_[i].on && log_[i].t >= t0 + 1000) CHECK(log_[i].note == F4 || log_[i].note == A4 || log_[i].note == 72);
+}
+
+static void test_arp_mode_ties_rests_and_velocity(void) {
+    reset(); arp_enable(&a, 1);
+    arp_seq_record(&a, 1);
+    arp_seq_record_note(&a, LOCAL, C4, 90); arp_seq_record_note(&a, LOCAL, E4, 50);
+    arp_seq_rest_tie(&a);                                              /* tied: two chord lengths */
+    rec_off(C4); rec_off(E4);
+    arp_seq_rest_tie(&a);                                              /* a rest */
+    rec_on(67); rec_off(67);                                           /* a one-note chord */
+    arp_seq_record(&a, 0);
+    arp_set_seq_arp(&a, 1); arp_set_chord_beats(&a, 1);                /* Qtr: 2 eighths */
+    clear_log();
+    on(C4);
+    ticks(2200);                                                       /* C E C E (0..750) | rest (1000..1250) | G G (1500, 1750) | C ... */
+    CHECK(strcmp(ons(), "60 64 60 64 67 67 60 ") == 0);
+    CHECK(on_tick(3) == 750 && on_tick(4) == 1500 && on_tick(5) == 1750 && on_tick(6) == 2000);
+    CHECK(on_at(0)->vel == 90 && on_at(1)->vel == 50);
+}
+
+static void test_arp_mode_under_midi_clock(void) {
+    arp_mode_on(4);                                                    /* Whole = 96 clocks; eighths = 12 */
+    arp_set_ext(&a, 1);
+    on(C4);
+    arp_realtime(&a, 0xFA, 0);
+    clocks(1, 0);
+    CHECK(n_on() == 1 && on_note(0) == C4);
+    clocks(95, 0);                                                     /* through clock 95: 8 notes of C */
+    CHECK(n_on() == 8 && on_note(7) == E4);
+    clocks(1, 0);                                                      /* clock 96: F chord */
+    CHECK(n_on() == 9 && on_note(8) == F4);
+    clocks(96, 0);
+    CHECK(n_on() == 17 && on_note(16) == C4);                          /* round again on the grid */
+}
+
+static void test_arp_mode_uneven_note_value_is_cut_at_the_chord_boundary(void) {
+    arp_mode_on(1);                                                    /* Qtr: 500 ms */
+    arp_set_beats(&a, 3, 4);                                           /* 8th D: 375 ms steps, not dividing it */
+    on(C4);
+    ticks(499);
+    CHECK(n_on() == 2 && on_tick(1) == 375 && n_sounding() == 1);     /* E sounding, its gate would be at 562 */
+    ticks(1);
+    CHECK(n_sounding() == 1 && n_on() == 3 && on_note(2) == F4 && on_tick(2) == 500);   /* cut: F starts on time */
+    CHECK(off_at(E4, 500));
+}
+
+static void test_arp_mode_new_trigger_from_the_next_step_and_fresh_key_restarts(void) {
+    arp_mode_on(4);
+    on(C4);
+    ticks(300);
+    on(D4);                                                            /* new trigger, C still down */
+    ticks(200);
+    CHECK(n_on() == 3 && on_note(2) == 69);                            /* step at 500: G + 2 */
+    ticks(1500);
+    CHECK(on_note(8) == 67 && on_tick(8) == 2000);                     /* chord boundary unchanged: F + 2 at 2000 */
+    arp_hold(&a, 1);
+    off(C4); off(D4);                                                  /* latched: keeps playing */
+    clear_log();
+    on(E4); off(E4);                                                   /* re-latch: the first chord from its first note, on E, at the next step */
+    ticks(250);
+    CHECK(n_on() == 1 && on_note(0) == E4 && on_tick(0) == 2250);
+    ticks(2000);
+    CHECK(on_note(8) == 69 && on_tick(8) == 4250);                     /* the second chord, a chord length later */
+}
+
+static void test_arp_mode_change_takes_effect_and_without_a_sequence_changes_nothing(void) {
+    arp_mode_on(4);
+    on(C4);
+    ticks(600);                                                        /* C E G */
+    arp_set_seq_arp(&a, 0);                                            /* back to POL: from the next step, from the first step */
+    ticks(400);
+    CHECK(n_on() == 9 && on_tick(3) == 750 && on_tick(5) == 750 && on_tick(6) == 1000);   /* C chord as a block at 750, F at 1000 */
+    off(C4);
+    reset(); arp_enable(&a, 1); arp_set_seq_arp(&a, 1);                /* no sequence: the plain arp */
+    chord_ceg();
+    ticks(600);
+    CHECK(strcmp(ons(), "48 52 55 ") == 0);
+}
+
 /* ---- assign -------------------------------------------------------------------------- */
 static void assign_on(void) { reset(); arp_enable(&a, 1); arp_set_mode(&a, ARP_ASSIGN); }
 
@@ -1024,6 +1159,13 @@ int main(void) {
     test_seq_record_mode_entry_and_exit();
     test_seq_capacity_64_steps_10_notes_64_ties();
     test_seq_all_notes_off_enable_and_clear_during_record_mode();
+    test_arp_mode_plays_each_chord_for_the_chord_length();
+    test_arp_mode_direction_octaves_and_assign_apply_inside_the_chord();
+    test_arp_mode_ties_rests_and_velocity();
+    test_arp_mode_under_midi_clock();
+    test_arp_mode_uneven_note_value_is_cut_at_the_chord_boundary();
+    test_arp_mode_new_trigger_from_the_next_step_and_fresh_key_restarts();
+    test_arp_mode_change_takes_effect_and_without_a_sequence_changes_nothing();
     test_assign_plays_the_entered_order_with_each_entrys_velocity();
     test_assign_duplicates_via_hold_and_relatch_replaces();
     test_assign_release_without_hold_removes_the_pitch();

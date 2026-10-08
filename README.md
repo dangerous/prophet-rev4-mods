@@ -31,7 +31,8 @@ welcome to fork it and make your own.
 - **Polyphonic step sequencer** — up to 64 steps of chords (up to 10 notes each, each note
   with the velocity you played it at), rests and ties, recorded from the keyboard or MIDI,
   played transposed from any key, in any of the arp's directions, octaves and note values,
-  in sync.
+  in sync — either as chords, or **arpeggiated**: the sequence becomes a chord progression
+  the arpeggiator plays through, a quarter note to four bars per chord.
 - **Keyboard octave shift** — ±2 octaves from the panel, applied to the keys, the arp and
   MIDI Out.
 - **Patch memory** — the arp's on/off, mode, octaves and note value are saved with each
@@ -101,6 +102,8 @@ goes away after 1.5 s and the program number comes back.
 | A440 + **Glide Rate** knob | Tempo 40–300 BPM | the BPM |
 | A440 + **Velocity** (tap repeatedly) | Tap tempo | `tAP`, then the BPM |
 | A440 + **HOLD** (arp off) | Sequential's A440 tuning tone on / off | A440 LED, as stock |
+| A440 + **Unison** | Sequence playback: chords / arpeggiated | `POL` / `ArP` |
+| A440 + **Aftertouch** | Chord length for `ArP` (quarter → half → whole → 2 bars → 4 bars) | `4 2 1 2b 4b` |
 | **HOLD** (or pedal in `HLd` mode) | Latch | — |
 
 "HOLD" is the button labelled **RELEASE / HOLD**, with the Release/Hold global set to hold.
@@ -120,7 +123,11 @@ goes away after 1.5 s and the program number comes back.
   back to `int`, and the two tempo gestures just show `Syn`.
 - **HOLD** latches whatever you hold. With HOLD on, the first key you press after releasing
   all keys starts a fresh chord instead of adding to the old one (re‑latch). One note sounds
-  per step, HOLD or not — the synth's own sustain is suspended while the arp is on.
+  per step, HOLD or not — the synth's own sustain is suspended while the arp is on. The arp
+  has its own HOLD latch, separate from the synth's: switching the arp off puts the synth's
+  hold back as you left it, switching it on brings the arp's latch back, and the HOLD LED
+  always shows the one in use. The sustain pedal is momentary and belongs to whichever is
+  active.
 - Glide Rate on its own is always the normal glide, even with the arp running. Keys played
   via MIDI In arpeggiate like local keys; MIDI Out carries the keys you play, not the arp.
 - **Tuning tone.** With the arp off, hold A440 and press HOLD: the stock A440 reference tone
@@ -142,8 +149,9 @@ Recording happens in **record mode**:
 
 The count is the length recorded so far in arp steps — every gesture adds one. The
 sustain pedal (in `HLd` mode) does the same as the HOLD button here; the HOLD latch itself
-is not changed. What you play sounds as you play it. Finishing with nothing recorded keeps
-your previous sequence; finishing never changes whether the arp is on.
+is not changed. What you play sounds as you play it. Finishing with something recorded
+switches the arp on if it was off, so you hear it straight away; finishing with nothing
+recorded keeps your previous sequence and leaves the arp as it was.
 
 Playing it back:
 
@@ -156,6 +164,13 @@ Playing it back:
   step keeps its chord and its length whatever the order. Ties are held for their length
   (released half‑way through the last step, like any step's gate) and stay on the grid under
   MIDI sync.
+- **Arpeggiated** (`ArP`, A440 + Unison): the sequence becomes a chord progression. Each
+  step is held for the **chord length** (A440 + Aftertouch cycles quarter, half, whole, 2
+  bars, 4 bars) while the arpeggiator plays its notes at the note value, in the arp's
+  direction mode and octaves — record four pads as four steps, set a whole note per chord
+  and 16ths, and you have a bar of arpeggio per chord. Chords always come in order; a tied
+  step is held for more chord lengths, a rest is silence. `POL` plays the steps as chords,
+  one per arp step, as before.
 - A440 + **Program 6** outside record mode clears the sequence; you're back to the plain
   arp.
 - Limits: 64 steps, 10 notes per step, a step can be tied up to 64 steps long. The sequence
@@ -177,7 +192,7 @@ saved with programs.
 
 ### Patch memory
 
-Arp on/off, mode, octaves and note value are stored with the program when you save it
+Arp on/off, mode, octaves, note value, sequence playback mode and chord length are stored with the program when you save it
 (they travel in SysEx program dumps too) and come back when the program is loaded; a
 program saved without arp data loads with the arp off. Tempo, clock source, keyboard shift
 and the sequence are global and not saved.

@@ -75,6 +75,14 @@ behavioural source of truth; this file is the engineering context around it.
   chord/arpeggiate switch; Unison under A440 is a readout again. The bigger `combo()` switch
   made clang emit a `tbb` jump table in .text, which the image test's address sweep misread
   as a literal load; the engine is now built with `-fno-jump-tables`.
+- 2026-10-08, **1.2.0** (image `f2872ab7`, verified the same day): arpeggiated playback of the sequence (`ArP`,
+  A440 + Unison; chord length on A440 + Aftertouch id 10: Qtr/Half/Whole/2b/4b in beats
+  1/2/4/8/16, the chord clock `chord_acc += bpm` per tick with a boundary at 60000 × beats ×
+  dur, or 24 × beats × dur MIDI clocks; each chord restarts the pattern and step clock, a
+  step in progress is cut at the boundary), both saved in 94 = oct + 4L + 8C + 40M; two HOLD
+  latches (stock's latch byte `ui + 0x19C` holds the active mode's, the UI remembers the other
+  and replays a HOLD press at arp on/off transitions when they differ; program load clears
+  both memories); leaving record mode with steps switches the arp on.
 - First native flash attempt stalled the loader at `100` with the eight Program LEDs lit:
   the payload was an exact multiple of 7 and our encoder omitted the empty tail group's MS
   byte, which the loader always reads. Nothing was written; power cycle recovered. Fixed in

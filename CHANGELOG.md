@@ -4,6 +4,23 @@ Versions of the patch as published through the patcher — the `VERSION` file, t
 name (`prophet5_main_2.1.0_patched_<version>.syx`) and `site/version.json`. Each entry names
 the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
 
+## 1.2.0 — 2026-10-08
+
+### Added
+- **Arpeggiated playback** of the step sequencer: A440 + **Unison** switches the sequence
+  between `POL` (each step sounds as the chord it is, as before) and `ArP`, where the
+  sequence is a chord progression for the arpeggiator — each chord is held for the **chord
+  length** (A440 + **Aftertouch**: quarter, half, whole, 2 bars, 4 bars, shown as `4 2 1 2b
+  4b`) while the arp runs over its notes at the note value, in the arp's direction mode and
+  octaves. Chords always advance in order; ties make a chord last longer; rests are silence.
+  Both settings are saved with the program.
+- Finishing a recording switches the arp on if it was off — a recording is made to be heard.
+
+### Changed
+- **Two HOLD latches**: the HOLD button latches the arp while the arp is on and the synth's
+  own hold while it is off, each remembering its state while the other is in use; the HOLD
+  LED shows the active one. Switching the arp off no longer leaves the synth in hold.
+
 ## 1.1.0 — 2026-10-08
 
 ### Added

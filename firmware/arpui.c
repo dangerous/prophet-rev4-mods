@@ -3,7 +3,26 @@
 
 enum { UI_PRESS = 1, UI_RELEASE = 2 };
 enum { UC_A = 0x0A, UC_U = 0x1E, UC_P = 0x19, UC_D = 0x0D, UC_N = 0x17, UC_R = 0x1B, UC_I = 0x12, UC_T = 0x1D,
-       UC_S = 0x1C, UC_Y = 0x22, UC_O = 0x18, UC_F = 0x0F, UC_E = 0x0E, UC_LO = 0x24, UC_BLANK = 0x25 };
+       UC_S = 0x1C, UC_Y = 0x22, UC_O = 0x18, UC_F = 0x0F, UC_E = 0x0E, UC_L = 0x15, UC_B = 0x0B, UC_LO = 0x24,
+       UC_BLANK = 0x25 };
+
+/* ArP chord lengths in cycle order: beats, the code patch memory stores (0 = Whole, the
+ * default, so older programs load with it), display (as the note values are shown) */
+static const struct { uint8_t beats, code, d[3]; } CHORD[ARPUI_CHORDS] = {
+    {  1, 1, {UC_BLANK, UC_BLANK, 4} },                    /* Qtr */
+    {  2, 2, {UC_BLANK, UC_BLANK, 2} },                    /* Half */
+    {  4, 0, {UC_BLANK, UC_BLANK, 1} },                    /* Whole */
+    {  8, 3, {UC_BLANK, 2, UC_B} },                        /* 2 bars */
+    { 16, 4, {UC_BLANK, 4, UC_B} },                        /* 4 bars */
+};
+
+static int chord_index(const arp_t *a)                     /* the engine's chord length as a list index */
+{
+    for (int i = 0; i < ARPUI_CHORDS; i++)
+        if (CHORD[i].beats == a->chord_beats)
+            return i;
+    return 2;                                              /* Whole */
+}
 enum { P1 = 0, P4 = 3, P5 = 4, P6 = 5, P7 = 6, P8 = 7 };
 
 static const uint8_t MODE_TEXT[ARP_MODES][3] = {
@@ -78,44 +97,68 @@ static void stock_tone_toggle(arpui_t *u)
     u->led_fix = ARPUI_LED_FIX_MS;
 }
 
-/* switching the arp on (any route) silences the tone first */
+/* switching the arp on (any route) silences the tone first; either way the HOLD latch of
+ * the mode being left is remembered and the one being entered restored (a replayed HOLD
+ * press makes stock flip its latch, LED and hold handler) */
 static void ui_enable(arpui_t *u, arp_t *a, int on)
 {
+    on = on != 0;
     if (on && !a->enabled && plat_tone_on())
         stock_tone_toggle(u);
+    if (on != a->enabled) {
+        int latch = plat_hold_latch() != 0, want;
+        if (on) { u->hold_stock = (uint8_t)latch; want = u->hold_arp; }
+        else    { u->hold_arp = (uint8_t)latch;   want = u->hold_stock; }
+        if (want != latch)
+            plat_stock_hold_press();
+    }
     arp_enable(a, on);
 }
 
 /* --- patch memory ------------------------------------------------------------------------ */
 /* the saved settings live in two spare program parameters ("Patch memory"):
- * 94 = octaves + 4 * L (L = 1: a long note value; 0 = no arp data),
+ * 94 = octaves + 4 L + 8 C + 40 M (L = 1: a long note value; C = chord length code; M = ArP; 0 = no arp data),
  * 93 = n * 10 + mode * 2 + on/off, n = the Prophet-6 position (L = 0) or the long value 0..2 (L = 1) */
 static void store_patch(const arpui_t *u, const arp_t *a)
 {
     int code = rate_code(&u->rate), lng = code >= 10;
-    plat_param_store(ARPUI_PARAM_OCT, a->octaves + (lng ? 4 : 0));
+    plat_param_store(ARPUI_PARAM_OCT, a->octaves + (lng ? 4 : 0) + 8 * CHORD[chord_index(a)].code + 40 * (a->seq_arp ? 1 : 0));
     plat_param_store(ARPUI_PARAM_PACK, (lng ? code - 10 : code) * 10 + a->mode * 2 + (a->enabled ? 1 : 0));
 }
 
 void arpui_program_loaded(arpui_t *u, arp_t *a)
 {
-    int oct = plat_param_read(ARPUI_PARAM_OCT), pack = plat_param_read(ARPUI_PARAM_PACK);
-    int lng = oct >= 5 && oct <= 8, note, mode, on;
+    int v = plat_param_read(ARPUI_PARAM_OCT), pack = plat_param_read(ARPUI_PARAM_PACK);
+    unsigned f, c, lng, oct;                               /* unsigned: the target has no signed-divide helper */
+    int m, note, mode, on, ci = -1;
     if (u->kill)
         return;
-    if (lng)
-        oct -= 4;
-    if (oct < 1 || oct > 4 || pack < 0 || pack > (lng ? ARPUI_PACK_MAX_LONG : ARPUI_PACK_MAX)) {
+    u->hold_arp = u->hold_stock = 0;                       /* a program load drops both HOLD latches */
+    if (v < 1 || v > ARPUI_OCT_MAX || pack < 0) {
         ui_enable(u, a, 0);                                /* no arp data: off, settings untouched */
+        return;
+    }
+    m = v > 40;
+    f = (unsigned)(v - 40 * m) - 1u;                       /* 0..39: octaves-1 + 4 L + 8 C */
+    c = f / 8u;
+    lng = (f % 8u) >= 4u;
+    oct = f % 4u + 1u;
+    for (int i = 0; i < ARPUI_CHORDS; i++)
+        if (CHORD[i].code == c)
+            ci = i;
+    if (ci < 0 || pack > (lng ? ARPUI_PACK_MAX_LONG : ARPUI_PACK_MAX)) {
+        ui_enable(u, a, 0);
         return;
     }
     note = pack / 10;
     mode = pack % 10 / 2;
     on = pack & 1;
-    arp_set_octaves(a, oct);
+    arp_set_octaves(a, (int)oct);
     arp_set_mode(a, mode);
     rate_set_code(&u->rate, lng ? 10 + note : note);
     apply_rate(u, a);
+    arp_set_seq_arp(a, m);
+    arp_set_chord_beats(a, CHORD[ci].beats);
     ui_enable(u, a, on);
 }
 
@@ -162,11 +205,18 @@ static void rec_enter(arpui_t *u, arp_t *a)
 
 static void rec_leave(arpui_t *u, arp_t *a, int restore)   /* restore = 0 when the Globals menu takes the display */
 {
+    int recorded = !a->seq_fresh;                          /* a step was recorded: the old sequence was discarded */
     u->rec = 0;
     arp_seq_record(a, 0);
     disp_cancel(&u->disp);                                 /* the readout goes with the mode */
     if (restore)
         plat_display_restore();
+    if (recorded && !a->enabled) {                         /* a recording is made to be heard */
+        ui_enable(u, a, 1);
+        if (restore)
+            show_status(u, a);
+        store_patch(u, a);
+    }
 }
 
 /* --- tap tempo (A440 + Velocity) -------------------------------------------------------- */
@@ -242,6 +292,21 @@ static void combo(arpui_t *u, arp_t *a, int id)
         if (!a->enabled)
             u->tone_pending = 1;                           /* toggled on the release, when HOLD is up */
         break;
+    case ARPUI_UNISON:                                     /* sequence playback: POL / ArP */
+        arp_set_seq_arp(a, !a->seq_arp);
+        if (a->seq_arp)
+            show3(u, UC_A, UC_R, UC_P);
+        else
+            show3(u, UC_P, UC_O, UC_L);
+        store_patch(u, a);
+        break;
+    case ARPUI_AFTERTOUCH: {                               /* ArP chord length: the next in the cycle */
+        int i = (int)((unsigned)(chord_index(a) + 1) % ARPUI_CHORDS);
+        arp_set_chord_beats(a, CHORD[i].beats);
+        show3(u, CHORD[i].d[0], CHORD[i].d[1], CHORD[i].d[2]);
+        store_patch(u, a);
+        break;
+    }
     case ARPUI_TUNE:
         if (u->rec)
             rec_leave(u, a, 1);

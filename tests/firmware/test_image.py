@@ -70,6 +70,7 @@ IFACE = [
     0x2003CEF5,   # plain program parameter store(layer, param, value)
     0x2003B6B1,   # hold off (both sources): the original callee at the program-loaded hook
     0x200574FA,   # ui + 0x16A: stock's A440 reference tone flag (byte)
+    0x2005752C,   # ui + 0x19C: stock's HOLD button latch (byte)
 ]
 
 

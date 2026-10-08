@@ -25,6 +25,7 @@ void arp_init(arp_t *a)
 {
     zero(a, sizeof *a);
     a->octaves = 1;
+    a->chord_beats = 4;                                    /* a whole note per chord */
     a->bpm = 120;
     a->beats_num = 1;
     a->beats_den = 2;
@@ -131,6 +132,8 @@ static void reset_pattern(arp_t *a)
     a->dir = 1;
     a->asg_stay = 0;
     a->seq_hold = 0;
+    a->chord_pos = 0;                                      /* ArP: from the first chord, clock afresh */
+    a->chord_restart = 1;
 }
 
 /* --- pattern --------------------------------------------------------------------------- */
@@ -218,6 +221,8 @@ static void choose(arp_t *a, const uint8_t *order, int n, int seq)
     a->last_base = order[idx];
 }
 
+static void step(arp_t *a);
+
 /* the reference pitch: the lowest note of the first step that has notes (-1: all rests) */
 static int seq_reference(const arp_t *a)
 {
@@ -255,13 +260,80 @@ static void seq_step(arp_t *a)
     a->seq_hold = (uint8_t)(a->seq_dur[i] - 1);
 }
 
+/* ArP: one arp step inside the current chord — its notes, transposed, pitch-sorted (recorded
+ * order for Assign), walked like held keys; a rest chord is silence; the chord clock starts at
+ * the chord's first step */
+static void chord_step(arp_t *a)
+{
+    int ref = seq_reference(a), tr, s, n = 0, k;
+    if (a->seq_trigger == ARP_NONE) {
+        reset_pattern(a);
+        return;
+    }
+    if (a->chord_restart) {
+        a->chord_restart = 0;
+        a->chord_acc = 0;
+        a->chord_clk = 0;
+    }
+    s = a->chord_pos;
+    tr = a->seq_trigger - (ref < 0 ? 0 : ref);
+    for (k = 0; k < a->seq_n[s]; k++) {
+        int p = a->seq_note[s][k] + tr;
+        a->order[n] = (p < 0 || p > 127) ? 0xFF : (uint8_t)p;   /* out of range: skipped */
+        a->ovel[n++] = a->seq_vel[s][k];
+    }
+    if (a->mode != ARP_ASSIGN)                             /* by pitch (insertion sort, n <= 10) */
+        for (int i = 1; i < n; i++) {
+            uint8_t o = a->order[i], v = a->ovel[i];
+            int j = i;
+            while (j > 0 && a->order[j - 1] > o) { a->order[j] = a->order[j - 1]; a->ovel[j] = a->ovel[j - 1]; j--; }
+            a->order[j] = o; a->ovel[j] = v;
+        }
+    if (n == 0) {                                          /* a rest: the chord clock runs, nothing sounds */
+        a->at_start = 0;
+        return;
+    }
+    for (int tries = 0; tries <= n * a->octaves; tries++) {
+        int note;
+        choose(a, a->order, n, 1);
+        if (a->order[a->idx] == 0xFF)
+            continue;
+        note = a->order[a->idx] + 12 * a->pass;
+        if (note > 127)
+            continue;
+        sound(a, note, a->ovel[a->idx]);
+        return;
+    }
+}
+
+static int chord_running(const arp_t *a)                  /* ArP: a chord is in progress */
+{
+    return a->seq_len && a->seq_arp && !a->at_start && !a->chord_restart;
+}
+
+/* ArP: a chord boundary — the next chord starts now, its pattern and step clock afresh */
+static void chord_advance(arp_t *a)
+{
+    release(a);
+    a->chord_pos = (uint8_t)(a->chord_pos + 1 < a->seq_len ? a->chord_pos + 1 : 0);   /* no signed divide helper on the target */
+    a->at_start = 1;
+    a->dir = 1;
+    a->acc = 0;
+    a->swing_short = 0;
+    a->chord_clk = 0;
+    step(a);
+}
+
 static void step(arp_t *a)
 {
     uint8_t *order = a->order, *vel = a->ovel;
     int n, seq = a->mode == ARP_ASSIGN;
     release(a);
     if (a->seq_len) {
-        seq_step(a);
+        if (a->seq_arp)
+            chord_step(a);
+        else
+            seq_step(a);
         return;
     }
     n = base_order(a, order, vel);
@@ -532,6 +604,22 @@ void arp_set_ext(arp_t *a, int ext)
     beat_reset(a);
 }
 
+void arp_set_seq_arp(arp_t *a, int on)
+{
+    on = on != 0;
+    if (on == a->seq_arp)
+        return;
+    a->seq_arp = (uint8_t)on;
+    reset_pattern(a);                                      /* from the next step: the first step / chord */
+}
+
+void arp_set_chord_beats(arp_t *a, int beats)
+{
+    if (beats < 1) beats = 1;
+    if (beats > 16) beats = 16;
+    a->chord_beats = (uint8_t)beats;                       /* the running chord's boundary moves with it */
+}
+
 /* --- seq record mode --------------------------------------------------------------------- */
 void arp_seq_record(arp_t *a, int on)
 {
@@ -636,18 +724,28 @@ void arp_realtime(arp_t *a, int byte, int port)
     case 0xF8: {
         /* sc = clocks per step, or per pair with swing: long = 2/3 of it, short = 1/3, the
          * pair boundary at multiples of sc from Start */
-        unsigned sc = step_clocks(a), m = a->clocks % sc;
-        unsigned lng = a->swing ? sc / 3 * 2 : sc;
+        unsigned sc = step_clocks(a), m, lng = a->swing ? sc / 3 * 2 : sc;
+        int in_chord;
         beat_measure(a);
         a->loss = 0;
         if (!a->running)
             return;
+        in_chord = a->enabled && !a->seq_rec && chord_running(a);
+        if (in_chord && a->chord_clk == 24u * a->chord_beats * a->seq_dur[a->chord_pos]) {
+            chord_advance(a);                              /* on the beat grid, whatever the note value */
+            a->chord_clk++;
+            a->clocks++;
+            break;
+        }
+        m = (in_chord ? a->chord_clk : a->clocks) % sc;    /* ArP: arp steps counted from the chord's start */
         if (a->enabled && !a->seq_rec) {
             if (m == 0 || m == lng)
                 boundary(a);
             else if (a->gate_open && !a->seq_hold && ((m < lng && m == lng / 2) || (m > lng && m - lng == (sc - lng) / 2)))
                 release(a);                                /* the gate, in a seq step's last arp step */
         }
+        if (chord_running(a))
+            a->chord_clk++;
         a->clocks++;
         break;
     }
@@ -683,6 +781,15 @@ void arp_tick(arp_t *a)
     }
     if (!a->enabled || a->seq_rec)
         return;
+    if (chord_running(a)) {                                /* ArP: the chord clock, beats x tempo, remainder carried */
+        uint32_t target = 60000u * a->chord_beats * a->seq_dur[a->chord_pos];
+        a->chord_acc += a->bpm;
+        if (a->chord_acc >= target) {
+            a->chord_acc -= target;
+            chord_advance(a);                              /* cuts an arp step in progress */
+            return;
+        }
+    }
     a->acc += 3u * a->bpm * a->beats_den;
     if (a->gate_open && !a->seq_hold && a->acc >= step_units(a) / 2)
         release(a);                                        /* the gate, in a seq step's last arp step */

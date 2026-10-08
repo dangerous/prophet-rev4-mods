@@ -11,10 +11,10 @@ static int failures, checks;
     printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while (0)
 
 /* ---- fake platform ------------------------------------------------------------------ */
-enum { EV_VON, EV_VOFF, EV_D3, EV_INT, EV_RESTORE, EV_LED, EV_PARAM, EV_A440_STOCK };
+enum { EV_VON, EV_VOFF, EV_D3, EV_INT, EV_RESTORE, EV_LED, EV_PARAM, EV_A440_STOCK, EV_HOLD_STOCK };
 typedef struct { int type, a, b, c; } ev_t;
 static ev_t log_[4096];
-static int nlog, fake_globals_open, fake_a440_down, fake_tone_on;
+static int nlog, fake_globals_open, fake_a440_down, fake_tone_on, fake_latch;
 static void push(int t, int a, int b, int c) { if (nlog < 4096) log_[nlog++] = (ev_t){t, a, b, c}; }
 void plat_voice_on(int src, int note, int vel) { push(EV_VON, src, note, vel); }
 void plat_voice_off(int src, int note) { push(EV_VOFF, src, note, 0); }
@@ -26,6 +26,8 @@ int  plat_globals_open(void) { return fake_globals_open; }
 int  plat_a440_down(void) { return fake_a440_down; }
 int  plat_tone_on(void) { return fake_tone_on; }
 void plat_stock_a440_press(void) { push(EV_A440_STOCK, 0, 0, 0); fake_tone_on = !fake_tone_on; }   /* stock toggles its tone */
+int  plat_hold_latch(void) { return fake_latch; }
+void plat_stock_hold_press(void) { push(EV_HOLD_STOCK, 0, 0, 0); fake_latch = !fake_latch; }      /* stock toggles its latch */
 static int params[99];
 int  plat_param_read(int p) { return params[p]; }
 void plat_param_store(int p, int v) { params[p] = v; push(EV_PARAM, p, v, 0); }
@@ -41,7 +43,7 @@ static void clear_log(void) { nlog = 0; }
 enum { CH_U = 0x1E, CH_P = 0x19, CH_D = 0x0D, CH_N = 0x17, CH_R = 0x1B, CH_I = 0x12, CH_T = 0x1D,
        CH_S = 0x1C, CH_Y = 0x22, CH_O = 0x18, CH_F = 0x0F, CH_E = 0x0E, CH_LO = 0x24, BLANK = 0x25 };
 enum { A440 = ARPUI_A440, GLOBALS = ARPUI_GLOBALS, GROUP = ARPUI_GROUP, BANK = ARPUI_BANK, VELOCITY = ARPUI_VELOCITY, UNISON = 0x19,
-       OSCB_KEYB = 36, CH_A = 0x0A, CH_B = 0x0B,
+       AFTERTOUCH = ARPUI_AFTERTOUCH, OSCB_KEYB = 36, CH_A = 0x0A, CH_B = 0x0B, CH_L = 0x15,
        TUNE = ARPUI_TUNE, HOLD = ARPUI_HOLD,
        P1 = 0, P2 = 1, P3 = 2, P4 = 3, P5 = 4, P6 = 5, P7 = 6, P8 = 7,
        PRESS = 1, RELEASE = 2, REPEAT = 3, LOCAL = ARP_SRC_LOCAL, MIDI = ARP_SRC_MIDI };
@@ -51,7 +53,7 @@ static arp_t a;
 
 static void reset(void) {
     arpui_init(&u); arp_init(&a);
-    clear_log(); fake_globals_open = 0; fake_a440_down = 0; fake_tone_on = 0;
+    clear_log(); fake_globals_open = 0; fake_a440_down = 0; fake_tone_on = 0; fake_latch = 0;
     memset(params, 0, sizeof params);
     for (int i = 0; i < ARPUI_BOOT_TICKS; i++) arpui_tick(&u, &a);     /* past the kill-switch window */
     clear_log();
@@ -196,11 +198,17 @@ static void test_record_mode_without_steps_keeps_the_sequence(void) {
     enter_rec();
     note(60, 100); note(60, 0); note(64, 100); note(64, 0);
     tap_a440();
-    CHECK(!u.rec && a.seq_len == 2 && !a.enabled);                     /* the arp stays off */
+    CHECK(!u.rec && a.seq_len == 2 && a.enabled && last_int() == 120);   /* recorded something: the arp comes on, BPM shown */
     enter_rec();
     CHECK(u.rec && last_is_rn(0) && a.seq_len == 2);                  /* the old one stays until a step is recorded */
     enter_rec();                                                       /* A440 + Tune again leaves */
-    CHECK(!u.rec && a.seq_len == 2 && !a.enabled);
+    CHECK(!u.rec && a.seq_len == 2 && a.enabled);                      /* nothing recorded: the arp as it was */
+    tap_a440();
+    CHECK(!a.enabled);
+    enter_rec();
+    btn(HOLD, PRESS); btn(HOLD, RELEASE);                              /* a rest alone is a recording too */
+    tap_a440();
+    CHECK(!u.rec && a.seq_len == 1 && a.enabled);
 }
 
 static void test_tune_without_a440_is_stock(void) {
@@ -211,6 +219,7 @@ static void test_tune_without_a440_is_stock(void) {
 static void test_hold_button_is_rest_or_tie_in_record_mode(void) {
     reset();
     CHECK(btn(HOLD, PRESS) == 0 && btn(HOLD, RELEASE) == 0);           /* not recording: stock HOLD */
+    tap_a440();                                                        /* arp on, so leaving shows no BPM */
     enter_rec();
     clear_log();
     CHECK(btn(HOLD, PRESS) == 1 && a.seq_len == 1 && a.seq_n[0] == 0 && last_is_rst());   /* no key down: a rest, rSt flashes */
@@ -345,6 +354,7 @@ static void test_pedal_on_transition_is_rest_or_tie_in_record_mode(void) {
 
 static void test_record_readout_persists_and_patch_display_returns_on_leaving(void) {
     reset();
+    tap_a440();                                                        /* arp on, so leaving shows no BPM */
     enter_rec();
     clear_log();
     btn(A440, PRESS); btn(BANK, PRESS); btn(BANK, RELEASE); btn(A440, RELEASE);
@@ -604,7 +614,7 @@ static void test_tap_tempo_consumption_and_scope(void) {
     CHECK(btn(VELOCITY, RELEASE) == 1 && !a.enabled);                  /* orphan release consumed */
     CHECK(btn(VELOCITY, PRESS) == 0 && btn(VELOCITY, RELEASE) == 0);
     btn(A440, PRESS);
-    CHECK(btn(UNISON, PRESS) == 1 && last_int() == UNISON && a.bpm == 120);   /* Unison: just the id readout now */
+    CHECK(btn(UNISON, PRESS) == 1 && count_type(EV_INT) == 0 && a.bpm == 120);   /* Unison: not tap tempo any more */
     btn(UNISON, RELEASE); btn(A440, RELEASE);
     reset();                                                           /* no store: BPM is not saved */
     tap_a440();
@@ -725,6 +735,8 @@ enum { N_4B, N_2B, N_1, N_HALF, N_QTR, N_8D, N_8, N_8S, N_8T, N_16, N_16S, N_16T
 static int is_long(int note) { return note < N_HALF; }
 static int pack(int note, int mode, int on) { return (is_long(note) ? N_HALF - 1 - note : note - N_HALF) * 10 + mode * 2 + on; }
 static int pack94(int note, int oct) { return oct + (is_long(note) ? 4 : 0); }
+/* ... + 8 * C (0 = Whole, 1 = Qtr, 2 = Half, 3 = 2 bars, 4 = 4 bars) + 40 * M (ArP) */
+static int pack94c(int note, int oct, int c, int m) { return pack94(note, oct) + 8 * c + 40 * m; }
 
 static void test_settings_are_written_to_the_patch_slots(void) {
     reset();
@@ -787,6 +799,110 @@ static void test_patch_round_trip_for_every_setting(void) {
                 }
     CHECK(bad == 0);
     CHECK(pack(N_32, ARP_ASSIGN, 1) == 99 && pack(N_4B, ARP_ASSIGN, 1) == 29 && pack94(N_4B, 4) == 8);   /* the largest values written */
+    CHECK(pack94c(N_4B, 4, 4, 1) == 80);
+}
+
+/* ---- arpeggiated playback: the combos, the display, the slots ----------------------- */
+static void test_unison_toggles_playback_mode_and_aftertouch_cycles_chord_length(void) {
+    reset();
+    CHECK(a.seq_arp == 0 && a.chord_beats == 4);                       /* defaults: POL, Whole */
+    btn(A440, PRESS);
+    CHECK(btn(UNISON, PRESS) == 1 && a.seq_arp == 1 && last_d3_is(CH_A, CH_R, CH_P));   /* ArP */
+    CHECK(btn(UNISON, RELEASE) == 1);
+    CHECK(params[ARPUI_PARAM_OCT] == pack94c(N_8, 1, 0, 1));           /* saved: M */
+    btn(UNISON, PRESS); btn(UNISON, RELEASE);
+    CHECK(a.seq_arp == 0 && last_d3_is(CH_P, CH_O, CH_L));             /* POL */
+    CHECK(params[ARPUI_PARAM_OCT] == pack94c(N_8, 1, 0, 0));
+    static const int CYCLE[][4] = {   /* beats, code, display */
+        { 8, 3, 2, CH_B }, { 16, 4, 4, CH_B }, { 1, 1, BLANK, 4 }, { 2, 2, BLANK, 2 }, { 4, 0, BLANK, 1 } };
+    for (int i = 0; i < 5; i++) {                                      /* from Whole: 2b 4b 4 2 1 */
+        CHECK(btn(AFTERTOUCH, PRESS) == 1 && btn(AFTERTOUCH, RELEASE) == 1);
+        CHECK(a.chord_beats == CYCLE[i][0] && last_d3_is(BLANK, CYCLE[i][2], CYCLE[i][3]));
+        CHECK(params[ARPUI_PARAM_OCT] == pack94c(N_8, 1, CYCLE[i][1], 0));
+    }
+    CHECK(btn(A440, RELEASE) == 1 && !a.enabled);                      /* combos: no toggle */
+    CHECK(btn(UNISON, PRESS) == 0 && btn(AFTERTOUCH, PRESS) == 0);     /* without A440: stock */
+}
+
+static void test_playback_mode_and_chord_length_round_trip_and_old_programs_load(void) {
+    int bad = 0;
+    reset();
+    for (int c = 0; c < 5; c++)
+        for (int m = 0; m < 2; m++) {
+            static const int BEATS[5] = { 4, 1, 2, 8, 16 };          /* by code */
+            arp_set_seq_arp(&a, m); arp_set_chord_beats(&a, BEATS[c]);
+            btn(A440, PRESS); btn(P2, PRESS); btn(P2, RELEASE); btn(A440, RELEASE);   /* a store */
+            if (params[ARPUI_PARAM_OCT] != pack94c(N_8, 2, c, m)) bad++;
+            arp_set_seq_arp(&a, !m); arp_set_chord_beats(&a, BEATS[(c + 1) % 5]); arp_set_octaves(&a, 4);   /* disturb */
+            arpui_program_loaded(&u, &a);
+            if (a.seq_arp != m || a.chord_beats != BEATS[c] || a.octaves != 2) bad++;
+        }
+    CHECK(bad == 0);
+    arp_set_seq_arp(&a, 1); arp_set_chord_beats(&a, 16);
+    params[ARPUI_PARAM_OCT] = 3; params[ARPUI_PARAM_PACK] = pack(N_8S, ARP_UP, 1);   /* saved before: POL, Whole */
+    arpui_program_loaded(&u, &a);
+    CHECK(a.seq_arp == 0 && a.chord_beats == 4 && a.octaves == 3 && rate_index(&u.rate) == N_8S);
+    params[ARPUI_PARAM_OCT] = 7; params[ARPUI_PARAM_PACK] = pack(N_4B, ARP_UP, 1);   /* 1.1.0 long value: still POL, Whole */
+    arpui_program_loaded(&u, &a);
+    CHECK(a.seq_arp == 0 && a.chord_beats == 4 && a.octaves == 3 && rate_index(&u.rate) == N_4B);
+    params[ARPUI_PARAM_OCT] = 81; params[ARPUI_PARAM_PACK] = 1;        /* out of range: no arp data */
+    if (!a.enabled) tap_a440();
+    CHECK(a.enabled);
+    arpui_program_loaded(&u, &a);
+    CHECK(!a.enabled && a.seq_arp == 0 && a.chord_beats == 4);
+}
+
+/* ---- two HOLD latches ----------------------------------------------------------------- */
+static void hold_press_to_stock(void) {                                /* a HOLD press the UI passes to stock */
+    CHECK(btn(HOLD, PRESS) == 0 && btn(HOLD, RELEASE) == 0);
+    fake_latch = !fake_latch;
+    arpui_hold(&u, &a, fake_latch);                                    /* stock's handler reports the merged state */
+}
+
+static void test_arp_latch_and_stock_latch_are_remembered_separately(void) {
+    reset();
+    tap_a440();                                                        /* arp on, latch off */
+    hold_press_to_stock();                                             /* the arp's latch on */
+    CHECK(fake_latch && a.hold);
+    clear_log();
+    tap_a440();                                                        /* arp off: stock's latch was off -> replayed off */
+    CHECK(!a.enabled && count_type(EV_HOLD_STOCK) == 1 && !fake_latch);
+    arpui_hold(&u, &a, 0);
+    CHECK(!a.hold);
+    tap_a440();                                                        /* arp on: its latch was on -> replayed on */
+    CHECK(a.enabled && count_type(EV_HOLD_STOCK) == 2 && fake_latch);
+    arpui_hold(&u, &a, 1);
+    CHECK(a.hold);
+    hold_press_to_stock();                                             /* arp's latch off again */
+    CHECK(!fake_latch);
+    tap_a440();                                                        /* arp off: both off, nothing to replay */
+    CHECK(count_type(EV_HOLD_STOCK) == 2 && !fake_latch);
+    hold_press_to_stock();                                             /* stock's latch on, arp off */
+    CHECK(fake_latch);
+    tap_a440();                                                        /* arp on: its latch off -> replayed off; stock's remembered on */
+    CHECK(count_type(EV_HOLD_STOCK) == 3 && !fake_latch);
+    arpui_hold(&u, &a, 0);
+    tap_a440();                                                        /* arp off: stock's latch back on */
+    CHECK(count_type(EV_HOLD_STOCK) == 4 && fake_latch);
+}
+
+static void test_pedal_is_momentary_and_program_load_clears_both_latches(void) {
+    reset();
+    tap_a440();
+    arpui_hold(&u, &a, 1);                                             /* pedal down (latch byte stays 0) */
+    CHECK(a.hold && !fake_latch);
+    tap_a440();                                                        /* arp off: no latch to remember or restore */
+    CHECK(count_type(EV_HOLD_STOCK) == 0);
+    arpui_hold(&u, &a, 0);
+    tap_a440();
+    hold_press_to_stock();                                             /* arp's latch on */
+    params[94] = 1; params[93] = 31;                                   /* a program load: stock drops the latch ... */
+    fake_latch = 0; arpui_hold(&u, &a, 0);
+    arpui_program_loaded(&u, &a);
+    tap_a440();                                                        /* ... and the arp's memory of it is gone too */
+    CHECK(!a.enabled && count_type(EV_HOLD_STOCK) == 0);
+    tap_a440();
+    CHECK(a.enabled && count_type(EV_HOLD_STOCK) == 0 && !fake_latch);
 }
 
 static void test_long_note_values_load_and_old_programs_still_do(void) {
@@ -800,7 +916,7 @@ static void test_long_note_values_load_and_old_programs_still_do(void) {
     params[ARPUI_PARAM_OCT] = 3; params[ARPUI_PARAM_PACK] = 7 * 10 + ARP_ASSIGN * 2 + 1;   /* saved before the long values: 16th S */
     arpui_program_loaded(&u, &a);
     CHECK(a.enabled && a.octaves == 3 && rate_index(&u.rate) == N_16S && a.swing);
-    static const int BAD[][2] = { { 5, 30 }, { 8, 99 }, { 9, 1 }, { 12, 1 } };   /* (94, 93): n > 2 with the flag, 94 out of range */
+    static const int BAD[][2] = { { 5, 30 }, { 8, 99 }, { 81, 1 }, { 127, 1 } };   /* (94, 93): n > 2 with the flag, 94 out of range */
     for (int i = 0; i < 4; i++) {
         params[ARPUI_PARAM_OCT] = BAD[i][0]; params[ARPUI_PARAM_PACK] = BAD[i][1];
         arpui_program_loaded(&u, &a);
@@ -844,7 +960,7 @@ static void test_program_without_arp_data_switches_off_and_leaves_settings(void)
     params[ARPUI_PARAM_OCT] = 0; params[ARPUI_PARAM_PACK] = 0;         /* a factory program */
     arpui_program_loaded(&u, &a);
     CHECK(!a.enabled && a.mode == ARP_ASSIGN && a.octaves == 2 && rate_index(&u.rate) == N_8S);   /* off, untouched */
-    static const int BAD[][2] = { { 0, 99 }, { 9, 1 }, { -1, 1 }, { 1, 100 }, { 1, 127 }, { 1, -1 } };   /* (94, 93) */
+    static const int BAD[][2] = { { 0, 99 }, { 81, 1 }, { -1, 1 }, { 1, 100 }, { 1, 127 }, { 1, -1 } };   /* (94, 93) */
     for (int i = 0; i < 6; i++) {
         tap_a440();
         CHECK(a.enabled);
@@ -893,6 +1009,10 @@ int main(void) {
     test_program_load_applies_saved_state();
     test_patch_round_trip_for_every_setting();
     test_long_note_values_load_and_old_programs_still_do();
+    test_unison_toggles_playback_mode_and_aftertouch_cycles_chord_length();
+    test_playback_mode_and_chord_length_round_trip_and_old_programs_load();
+    test_arp_latch_and_stock_latch_are_remembered_separately();
+    test_pedal_is_momentary_and_program_load_clears_both_latches();
     test_program_without_arp_data_switches_off_and_leaves_settings();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;

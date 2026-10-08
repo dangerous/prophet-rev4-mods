@@ -20,6 +20,9 @@
 #define ARPUI_LED_A440 0x24
 #define ARPUI_POT_GLIDE 0x16
 #define ARPUI_VELOCITY 0x0B         /* A440 + Velocity = tap tempo (beside A440: one hand) */
+#define ARPUI_AFTERTOUCH 0x0A       /* A440 + Aftertouch = chord length (ArP) */
+#define ARPUI_UNISON 0x19           /* A440 + Unison = sequence playback POL / ArP */
+#define ARPUI_CHORDS 5                /* chord lengths: Qtr, Half, Whole, 2 bars, 4 bars */
 #define ARPUI_TUNE 0x0C             /* A440 + Tune = seq record mode on / off */
 #define ARPUI_HOLD 0x0E             /* A440 + HOLD = stock tuning tone (arp off); in record mode: rest / tie */
 #define ARPUI_BLINK_MS 500            /* record mode: A440 LED on / off time */
@@ -29,7 +32,8 @@
 #define ARPUI_PARAM_PACK 93           /* patch slot: n * 10 + mode * 2 + on/off (n: Prophet-6 position, or long value 0..2) */
 #define ARPUI_PACK_MAX 99             /* larger values of 93 are not arp data (29 with the long flag) */
 #define ARPUI_PACK_MAX_LONG 29
-#define ARPUI_PARAM_OCT 94            /* patch slot: octaves 1..4 + 4 if the note value is a long one, 0 = no arp data */
+#define ARPUI_PARAM_OCT 94            /* patch slot: octaves 1..4 + 4 L (long note value) + 8 C (chord length code) + 40 M (ArP); 0 = no arp data */
+#define ARPUI_OCT_MAX 80
 #define ARPUI_BOOT_TICKS 3000         /* kill-switch window after power-on (3 s; the panel link comes up late) */
 
 typedef struct {
@@ -51,6 +55,8 @@ typedef struct {
     uint16_t rec_ms;                  /* record mode: ms into the LED blink cycle */
     uint8_t  tone_pending;            /* A440 + HOLD pressed with the arp off: toggle the tone on HOLD's release */
     uint8_t  led_fix;                 /* ms until the arp LED is asserted again after a replayed A440 press */
+    uint8_t  hold_arp, hold_stock;    /* the two HOLD latches: the one not in use is remembered here */
+    uint8_t  pad3[2];
 } arpui_t;
 
 void arpui_init(arpui_t *u);

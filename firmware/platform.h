@@ -15,6 +15,8 @@ int  plat_a440_down(void);                        /* stock button-held table: A4
 int  plat_param_read(int param);                  /* stock live program parameter, layer A */
 int  plat_tone_on(void);                          /* stock's A440 reference tone is sounding (ui + 0x16A) */
 void plat_stock_a440_press(void);                 /* replay an A440 press to stock: toggles its tone (HOLD up) */
+int  plat_hold_latch(void);                       /* stock's HOLD button latch (ui + 0x19C) */
+void plat_stock_hold_press(void);                 /* replay a HOLD press to stock: toggles its latch, LED and hold */
 void plat_param_store(int param, int value);      /* stock plain parameter store, layer A */
 
 #endif

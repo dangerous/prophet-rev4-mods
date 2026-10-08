@@ -132,6 +132,20 @@ Manual verification on the instrument. Record results against the spec markers i
       again: `tiE` flashes, then `r10`. Release the key. (That step is three arp steps long;
       the count is the length recorded so far in arp steps — every gesture adds one.)
 - [ ] Sustain pedal (`HLd` mode): pedal with no key down = rest, pedal with a key down = tie.
+- [ ] Arp off, record two chords, tap A440: the arp comes on (LED, BPM) and the sequence plays
+      on the next key. Arp off, A440 + Tune, tap A440 with nothing recorded: the arp stays off.
+- [ ] Arpeggiated playback: record C major, F major, G major, C major as four chord steps.
+      A440 + Unison → `ArP`. Note value `16`, chord length `1` (A440 + Aftertouch shows the
+      cycle `2b 4b 4 2 1`). Hold a key: 16 sixteenths over C, then F, G, C — a bar each; `dn`
+      runs each chord downwards, chords still in order; `o 2` arpeggiates each chord over two
+      octaves. Chord length `4`: a chord per beat. A tied step lasts twice as long; a rest is
+      silence. A440 + Unison → `POL`: the chords as blocks again. Save a program in `ArP` with
+      `2b`, load another, reload: both come back.
+- [ ] Two HOLD latches: arp on, HOLD on (latched notes play). Tap A440 off: HOLD LED goes
+      off, nothing is held. Press HOLD (stock hold on), play and release: notes sustain. Tap
+      A440 on: HOLD LED on again, the arp latches, the synth's hold is suspended. Tap A440
+      off: HOLD LED stays on (stock hold back). HOLD off; tap A440 on: the arp's latch is
+      still on. Pedal (`HLd`): momentary in both modes.
 - [ ] A440 + Bank while recording: `UP`… shows for 1.5 s, then `r N` returns.
 - [ ] Tap A440: the patch number returns, LED steady (arp still on). Press and hold C: the
       sequence plays — single notes, the chord as a chord, the rest silent, the tied step
