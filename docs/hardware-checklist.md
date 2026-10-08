@@ -134,7 +134,7 @@ Manual verification on the instrument. Record results against the spec markers i
       key → **adds** (the MIDI note counts as a key still down). Release the MIDI note,
       play a key → fresh start.
 
-## Seq (spec "Seq") — 2.0.0: the independent sequencer, all unverified
+## Seq (spec "Seq") — the independent sequencer (2.0.x; panel run-through 2026-10-08, the MIDI-sync items still open)
 
 Record mode (verified in 1.x; re-check what changed):
 

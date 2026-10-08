@@ -306,9 +306,10 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
   been exercised on hardware.
 - **2.0.0 is entirely unverified on hardware** (independent sequencer: generator select,
   transport incl. MIDI arm/Stop/Continue, orders, transposition, Back, 512 steps, two note
-  values, per-note hold answer for generated notes). Checklist: `docs/hardware-checklist.md` "Seq". The per-note hold question is answered
-  (the DSP decides; see "Live sustain" above); the engine-side sustain of live notes is the
-  remaining unverified piece of 4a.
+  values, per-note hold answer for generated notes). Checklist: `docs/hardware-checklist.md` "Seq". The per-note hold question is answered (the DSP decides; see "Live sustain" above) and the
+  engine-side sustain of live notes was confirmed with 2.0.1; what remains unverified is the
+  sequencer under MIDI clock (arm / Stop / Continue / loss — fixed blind in 2.0.2), pedal
+  rest/tie, MIDI-in recording and the 512-step cap.
 - Decisions made while implementing 2.0.0, folded into the spec: selecting `SEq` with
   nothing recorded is refused (`---`, `ArP` stays) rather than selecting an empty generator;
   A440 + Program 6 with the arp running leaves the arp running; a clock-source change

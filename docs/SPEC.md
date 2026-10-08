@@ -535,8 +535,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
    each defaults to 8th `[HW: verified 2026-10-08, Prophet-10 Rev4 — one shared value until that day]`.
 1. The step length is one of thirteen values, from longest to shortest. Three long ones for
    pad sequences — **4 bars** (16 beats), **2 bars** (8 beats), **Whole** (1 bar, 4 beats)
-   `[HW: verified 2026-10-08, Prophet-10 Rev4]` **(change: added above the Prophet-6's list, so 64 steps of 4 bars make a
-   256-bar sequence)** — then the Prophet-6's ten values, in the Prophet-6's order:
+   `[HW: verified 2026-10-08, Prophet-10 Rev4]` **(change: added above the Prophet-6's list for pad sequences — a 4-bar step per chord)** — then the Prophet-6's ten values, in the Prophet-6's order:
    **Half** (1/2 note, 2 beats), **Qtr** (1/4, 1 beat), **8th D**
    (dotted eighth, 3/4 beat), **8th** (1/2 beat), **8th S** (eighth swing), **8th T**
    (eighth triplet, 1/3 beat), **16th** (1/4 beat), **16th S** (sixteenth swing), **16th T**

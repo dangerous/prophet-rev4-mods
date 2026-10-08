@@ -44,9 +44,9 @@ instrument, step by step; the manual below is the reference.
 - Nothing else changes: with the arp off the synth is stock, and the whole patch can be
   bypassed at power‑on.
 
-The arpeggiator and the recording side were verified on a Prophet‑10 Rev4 (October 2026);
-the 2.0.0 sequencer transport is new and not yet tried on hardware — the spec marks what
-has been. Sequential's A440 tuning‑reference tone is still there — on A440 + HOLD, since
+Verified on a Prophet‑10 Rev4 (October 2026), including the 2.0 sequencer from the panel; the
+spec marks the few paths not yet tried on hardware (the sequencer under MIDI clock, recording
+from MIDI‑in, the pedal as rest/tie). Sequential's A440 tuning‑reference tone is still there — on A440 + HOLD, since
 A440 itself is now the arp button.
 
 ## Installing

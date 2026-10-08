@@ -14,9 +14,10 @@ plus a Python CLI that unpacks, patches and re-packs the OS SysEx image.
   copyrighted and not committed (see `fixtures/README.md`, `fixtures/SHA256SUMS`). Tests read
   them and skip, with a warning, when they are missing.
 - `tools/` — Python packing/patching CLI (`python3 -m tools ...`).
-- `firmware/` — engine C sources (`arp.c`, `arpui.c`, `oct.c`, `rate.c`, `disp.c`, `vhold.c`
-  portable; `native.c` the hooks and stock interface table), built freestanding for
-  `thumbv7a` at a fixed address; `hooks_native.json` lists the patched stock sites.
+- `firmware/` — engine C sources (`arp.c` the arpeggiator, `seq.c` the sequencer, `arpui.c`
+  the UI, `oct.c`, `rate.c`, `disp.c`, `vhold.c` portable; `native.c` the hooks and stock
+  interface table), built freestanding for `thumbv7a` at a fixed address;
+  `hooks_native.json` lists the patched stock sites.
 - `tests/` — `unittest` suites for the tooling and the built image; host-side C harnesses for
   the engine behaviour.
 - `site/` — the browser patcher published by GitHub Pages (`index.html`, `patcher.js`
