@@ -3,7 +3,7 @@ window.PATCH = {
  "name": "prophet10_native",
  "version": "2.0.0",
  "built": "2026-10-08",
- "commit": "470c218",
+ "commit": "789a793",
  "base": {
   "name": "prophet5_main_2.1.0.syx",
   "size": 241459,
