@@ -186,9 +186,12 @@ Playing it, with the sequencer selected (A440 + Keyboard shows `SEq`):
   (a dotted 8th into a bar) is cut at the chord change; triplets fit.
 - **Transposition** takes effect from the next step or chord and stays until you record
   again or clear; the command key itself doesn't sound. It needs Local Control on.
-- **Playing over it**: keys and MIDI‑in notes sound as normal and never affect playback;
-  HOLD and the pedal are the synth's own hold for them. Starting or stopping the sequencer
-  doesn't cut them. Voices are shared with the sequence (a chord step takes up to ten).
+- **Playing over it**: keys and MIDI‑in notes sound as normal and never affect playback.
+  HOLD and the pedal sustain what you play — while the sequence runs the patch does the
+  sustaining itself, so the sequence's own notes keep their gates (notes released under
+  HOLD sound until HOLD goes off or you press them again). Starting or stopping the
+  sequencer doesn't cut your notes. Voices are shared with the sequence (a chord step takes
+  up to ten).
 - **MIDI sync** (`Syn`): a tap arms the sequencer and it starts on the next step of the
   DAW's grid; the DAW's Stop pauses it where it is and Continue resumes; Start takes it back
   to the first step; a tap of A440 stops it for good. CC 123–127 (all notes off) stop it too.

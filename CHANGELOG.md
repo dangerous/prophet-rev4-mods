@@ -36,6 +36,10 @@ and behaviour change; the arpeggiator is unchanged and programs saved by 1.x loa
   (1.2.0 switched the arp on).
 - A440 + Program 6 outside record mode clears the sequence and selects `ArP`.
 - The tuning tone (A440 + HOLD) is available whenever the selected generator is stopped.
+- **HOLD while the sequencer runs**: the synth's own hold is suspended, as it is while the
+  arp is on (the voice engine would sustain the sequence's notes too — confirmed on
+  hardware), and the patch sustains the notes *you* play itself: released under HOLD or the
+  pedal they keep sounding until HOLD goes off or you press them again.
 - The engine's state area grows to 16 KB (and the code limit shrinks to 16 KB) for the 512
   events.
 

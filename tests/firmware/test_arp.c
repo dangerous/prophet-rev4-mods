@@ -494,6 +494,42 @@ static void test_four_bar_steps_internal_and_midi_clock(void) {
     CHECK(n_on() == 2 && on_note(1) == E3);
 }
 
+/* ---- live sustain (the sequencer runs: the engine sustains live notes under HOLD itself) ---- */
+static void test_live_sustain_defers_releases_until_hold_off(void) {
+    reset();                                                           /* arp off: the live path */
+    arp_hold(&a, 1);
+    on(C4); off(C4);
+    CHECK(n_off() == 1 && !sounding[C4]);                             /* sustain off: stock's hold would do it */
+    arp_set_sustain(&a, 1);
+    on(D4); off(D4);
+    CHECK(n_off() == 1 && sounding[D4]);                              /* deferred */
+    on(E4); off(E4);
+    CHECK(sounding[E4]);
+    arp_set_sustain(&a, 0);                                            /* the sequencer stopped: still ours until HOLD off */
+    CHECK(sounding[D4] && sounding[E4]);
+    on(F4); off(F4);
+    CHECK(!sounding[F4]);                                              /* a new release is stock's business again */
+    arp_hold(&a, 0);
+    CHECK(!sounding[D4] && !sounding[E4] && n_off() == 4);            /* HOLD off: the set is released */
+    arp_set_sustain(&a, 1); arp_hold(&a, 1);
+    on(C4); off(C4);
+    CHECK(sounding[C4]);
+    clear_log();
+    on(C4);                                                            /* pressed again: the old note goes first */
+    CHECK(n_off() == 1 && n_on() == 1 && sounding[C4] && log_[0].on == 0 && log_[1].on == 1);
+    off(C4);
+    CHECK(sounding[C4]);
+    arp_all_notes_off(&a);
+    CHECK(arp_pool_count(&a) == 0);
+    arp_hold(&a, 0);
+    CHECK(n_off() == 1);                                               /* nothing left to release */
+    arp_set_sustain(&a, 1); arp_hold(&a, 1);
+    on(G3); off(G3);
+    CHECK(sounding[G3]);
+    arp_enable(&a, 1);                                                 /* the arp starts: live notes are cut as always */
+    CHECK(!sounding[G3]);
+}
+
 /* ---- the chord source (the sequencer's Arpeggiated style feeds the arp a chord) ------------ */
 static void test_chord_source_runs_the_pattern_over_the_given_notes(void) {
     static const uint8_t notes[3] = { E4, C4, 67 }, vels[3] = { 90, 100, 80 };
@@ -748,6 +784,7 @@ int main(void) {
     test_bpm_follows_the_midi_clock_over_a_beat();
     test_bpm_window_restarts_on_transport_and_loss();
     test_four_bar_steps_internal_and_midi_clock();
+    test_live_sustain_defers_releases_until_hold_off();
     test_chord_source_runs_the_pattern_over_the_given_notes();
     test_chord_source_under_midi_clock_counts_from_the_chord();
     test_realtime_reports_accepted_clocks();

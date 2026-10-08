@@ -645,26 +645,33 @@ this engine deliberately differs it is marked **(change)** with the reason.
 4. With the arp off nothing changes: stock hold behaves exactly as before — except in seq
    record mode, which suspends the synth's hold in the same way while it lasts, arp on or
    off ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`.
-4a. **With `SEq` selected** HOLD and the pedal are the synth's own hold for the **live**
-   notes; they never affect the sequencer's transport. The sequencer's **generated** notes
-   keep their programmed gates regardless of HOLD `[HW: unverified — see the realisation: if
-   stock's voice path cannot tell the two apart, generated notes sustain under HOLD too, as
-   the arp's did before "HOLD while the arp is on"]`. Selecting `SEq` while the arp runs stops
+4a. **With `SEq` selected** HOLD and the pedal never affect the sequencer's transport. While
+    the sequencer **runs** (playing, or armed under MIDI clock), the synth's own hold is
+    suspended as it is while the arp is on — stock's voice engine sustains every released
+    voice while its hold flag is on and cannot tell a generated note from a live one `[HW:
+    2026-10-08, Prophet-10 Rev4 — with the per-note answer of the first 2.0.0 build, the
+    sequence's chords sustained under HOLD]` — and the engine sustains the **live** notes
+    itself: with HOLD active (button, or pedal in `HLd` mode) a live note's release is
+    deferred until HOLD goes off or the key is pressed again, also after the sequencer has
+    stopped in the meantime. **Generated** notes keep their programmed gates `[HW:
+    unverified]`. With the sequencer stopped, new releases are stock's own hold's. Selecting `SEq` while the arp runs stops
     it, which hands the HOLD latch over exactly as switching the arp off does (rule 3);
     selecting `ArP` leaves the arp stopped, so the synth's hold stays in use until the arp is
     started, which hands over as switching it on.
 5. Realisation: stock `note_off` asks the hold state (`bl 0x2003B694` at `0x2003EACE`) and,
    when it is on, hands the voice to the voice engine's sustain instead of releasing it; the
    voice engine is told about hold by the message `0x080D0000 | state` posted from the hold
-   handler (`0x200396CA`). Let *suspended* = the arp is enabled or seq record mode is
-   active. The engine hooks `0x2003EACE` (expecting `0x2003B695`) to answer "off" while
+   handler (`0x200396CA`). Let *suspended* = the arp is enabled, or seq record mode is active, or `SEq` is selected and
+   the sequencer is running. The engine hooks `0x2003EACE` (expecting `0x2003B695`) to answer "off" while
    suspended, skips the hold message in its hold hook while suspended (still passing the
    state to the arp's hold event), and on every transition of *suspended* with HOLD active
-   posts the message itself (`0x2003D325`: off when it begins, on when it ends). For the
-   Seq's generated notes the hook answers "off" to note-offs the engine itself issues (it
-   flags its own `plat_voice_off` calls) and stock's state to every other note-off, so live
-   notes sustain and generated notes do not; whether stock's voice engine honours the
-   per-note answer is what hardware must confirm. Stock's
+   posts the message itself (`0x2003D325`: off when it begins, on when it ends). The live path (`arp.c` with the arp off) keeps a *sustained* set: while the UI has
+   software sustain on (`SEq` selected, running, not recording) and the merged HOLD state is
+   on, a live release marks the note instead of sending stock's note-off; HOLD off releases
+   the set, a re-pressed key releases its old note first, all-notes-off empties it. The set
+   outlives the sequencer stopping (stock's hold, back on, covers new releases; ours are
+   released at HOLD off). A per-note "off" answer for generated note-offs was tried first
+   and did not work: the voice engine's own hold flag decides `[HW: 2026-10-08]`. Stock's
    latch byte at `ui + 0x19C` carries the active mode's latch: at each arp on/off transition
    the UI remembers it for the mode being left and, if the mode being entered remembers a
    different state, replays a HOLD button press through the button post (`0x2003BC31(0x0E,
@@ -791,9 +798,8 @@ play over it." *Keys down* and *HOLD active* are as in "Re-latch under HOLD".
    the sequencer runs restarts it as a Start under the new clock.
 7. **Live notes.** Keys (after the keyboard octave shift) and MIDI-in notes sound directly,
    polyphonically and with their velocity, and never start, stop, restart, transpose or
-   otherwise alter playback; releasing them changes nothing; HOLD and the pedal are the
-   synth's own hold for them ("HOLD while the arp is on" 4a) and re-latch does not exist
-   here; starting or stopping the sequence does not cut them. Voices are the stock
+   otherwise alter playback; releasing them changes nothing; HOLD and the pedal sustain them — the engine's own sustain while the sequencer runs ("HOLD
+   while the arp is on" 4a) — and re-latch does not exist here; starting or stopping the sequence does not cut them. Voices are the stock
    allocator's to share and steal: a chord step takes up to ten, an arpeggiated step one.
 8. **MIDI CC 123–127** silence everything and stop (and disarm) the sequencer; the
    recording is kept, also during recording.
@@ -917,5 +923,5 @@ play over it." *Keys down* and *HOLD active* are as in "Re-latch under HOLD".
   area grows to 16 KB for the 512 events (24 bytes each, 12 KB); the arp's state shrinks to
   1 KB without the sequence. A chord handed to the arp on a clock or a tick is the arp's
   step for that clock or tick (the sequencer runs first; the arp then skips it), so chord
-  boundaries fall exactly on the grid. Generated note-offs are flagged for the hold-query
-  hook ("HOLD while the arp is on").
+  boundaries fall exactly on the grid. The live path's software sustain is switched by the UI with the sequencer's running
+  state ("HOLD while the arp is on" 4a).
