@@ -1,9 +1,9 @@
 {
- "version": "2.0.2",
+ "version": "2.1.0",
  "built": "2026-10-08",
- "commit": "899dc4d",
+ "commit": "cf3babe",
  "result": {
-  "name": "prophet5_main_2.1.0_patched_2.0.2.syx",
-  "sha256": "8c8a85de4dd880364e687b8a16e3a00542aee8526a7fd60003a850bd592e61c6"
+  "name": "prophet5_main_2.1.0_patched_2.1.0.syx",
+  "sha256": "236fa4096559c8cfa486f1ea828e6d473459382ced3eac0a18f44363e76df491"
  }
 }
