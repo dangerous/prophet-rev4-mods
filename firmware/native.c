@@ -15,6 +15,7 @@
 #include "arpui.c"
 #include "rate.c"
 #include "disp.c"
+#include "flash.c"
 #include "oct.c"
 #include "vhold.c"
 
@@ -44,6 +45,7 @@ enum {
     NI_HOLD_OFF,         /* 0x2003B6B1 hold off (both sources): original callee at the program-loaded hook */
     NI_TONE_FLAG,        /* 0x200574FA ui + 0x16A: stock's A440 reference tone on (byte != 0) */
     NI_HOLD_LATCH,       /* 0x2005752C ui + 0x19C: stock's HOLD button latch (byte != 0) */
+    NI_FLASH_READ,       /* 0x2003E2F9 flash_read(off, dst, len): memcpy from the memory-mapped chip under its mutex; the only flash entry (docs/re/flash.md) */
     NI_COUNT
 };
 
@@ -72,6 +74,7 @@ const volatile uint32_t stock_iface[NI_COUNT] = {
     [NI_HOLD_OFF] = 0x2003B6B1u,
     [NI_TONE_FLAG] = 0x200574FAu,
     [NI_HOLD_LATCH] = 0x2005752Cu,
+    [NI_FLASH_READ] = 0x2003E2F9u,
 };
 
 #define SFN(i, type) ((type)(uintptr_t)stock_iface[i])
@@ -91,6 +94,7 @@ typedef void (*word_fn)(uint32_t);
 typedef void (*ptr_fn)(void *);
 typedef int (*param_read_fn)(int, int);
 typedef void (*param_store_fn)(int, int, int);
+typedef int (*flash_read_fn)(uint32_t, void *, uint32_t);
 
 #define DSP_HOLD_MSG 0x080D0000u          /* the hold handler's voice-engine message | state */
 
@@ -110,12 +114,14 @@ enum { Q_NOTE = 1, Q_HOLD = 2, Q_ANO = 3, Q_PROGRAM = 4 };
 #define VHOLD   ((vhold_t *)0x2008F920u)
 #define QUEUE   ((queue_t *)0x2008F940u)
 #define INITED  ((volatile uint8_t *)0x2008FB40u)
+#define FLASH   ((flash_t *)0x2008FB80u)       /* the flash diagnostic: two 512-byte buffers and its state */
 _Static_assert(sizeof(seq_t) <= 0x3400, "seq state too large");
 _Static_assert(sizeof(arp_t) <= 0x400, "arp state too large");
 _Static_assert(sizeof(arpui_t) <= 0x80, "ui state too large");
 _Static_assert(sizeof(oct_t) <= 0xA0, "oct state too large");
 _Static_assert(sizeof(vhold_t) <= 0x10, "vhold state too large");
 _Static_assert(sizeof(queue_t) <= 0x200, "queue too large");
+_Static_assert(sizeof(flash_t) <= 0x480, "flash state too large");   /* 0x2008FB80 .. 0x20090000 */
 
 static void zero_bytes(void *p, unsigned n)
 {
@@ -132,6 +138,8 @@ static void ensure_init(void)
         arp_init(ARP);
         seq_init(SEQ);
         arpui_init(UI);
+        flash_init(FLASH);
+        UI->flash = FLASH;
         oct_init(OCT);
         vhold_init(VHOLD);
         zero_bytes(QUEUE, sizeof *QUEUE);
@@ -220,9 +228,10 @@ void plat_display_int(int v) { SFN(NI_DISPLAY_INT, int_fn)(v); }
 void plat_display_restore(void) { SFN(NI_DISPLAY_RESTORE, ptr_fn)(SPTR(NI_UI, void *)); }
 int  plat_globals_open(void) { return *SPTR(NI_GLOBALS_OPEN, volatile const uint32_t *) != 0; }
 int  plat_a440_down(void) { return *SPTR(NI_A440_HELD, volatile const uint16_t *) != 0; }
-void plat_display_hold(void) { disp_touch(&UI->disp); }   /* oct.c: the shift readout reverts too */
+void plat_display_hold(void) { disp_touch(&UI->disp); UI->flash_msgs = 0; }   /* oct.c: the shift readout reverts too, and drops pending diagnostic results */
 int  plat_param_read(int param) { return SFN(NI_PARAM_READ, param_read_fn)(0, param); }          /* layer A */
 void plat_param_store(int param, int value) { SFN(NI_PARAM_STORE, param_store_fn)(0, param, value); }
+int  plat_flash_read(uint32_t off, void *dst, uint32_t len) { return SFN(NI_FLASH_READ, flash_read_fn)(off, dst, len); }
 int  plat_tone_on(void) { return *SPTR(NI_TONE_FLAG, volatile const uint8_t *) != 0; }
 void plat_stock_a440_press(void) { SFN(NI_BUTTON_POST, button_fn)(ARPUI_A440, 1); }   /* stock: tone toggle (HOLD up) */
 int  plat_hold_latch(void) { return *SPTR(NI_HOLD_LATCH, volatile const uint8_t *) != 0; }

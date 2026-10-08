@@ -34,6 +34,14 @@ void plat_stock_hold_press(void) { push(EV_HOLD_STOCK, 0, 0, 0); fake_latch = !f
 static int params[99];
 int  plat_param_read(int p) { return params[p]; }
 void plat_param_store(int p, int v) { params[p] = v; push(EV_PARAM, p, v, 0); }
+/* an 8 MB flash: bootloader bytes at offset 0, blank otherwise, a 24-bit address wrapping */
+int  plat_flash_read(uint32_t off, void *dst, uint32_t len) {
+    for (uint32_t i = 0; i < len; i++) {
+        uint32_t p = (off + i) % 0x800000u;
+        ((uint8_t *)dst)[i] = p < 0x1000u ? (uint8_t)(p * 7u + 1u) : 0xFF;
+    }
+    return 0;
+}
 
 static int count_type(int t) { int n = 0; for (int i = 0; i < nlog; i++) n += log_[i].type == t; return n; }
 static ev_t *last_of(int t) { for (int i = nlog - 1; i >= 0; i--) if (log_[i].type == t) return &log_[i]; return 0; }
@@ -55,9 +63,10 @@ enum { A440 = ARPUI_A440, GLOBALS = ARPUI_GLOBALS, GROUP = ARPUI_GROUP, BANK = A
 static arpui_t u;
 static arp_t a;
 static seq_t q;
+static flash_t fl;
 
 static void reset(void) {
-    arpui_init(&u); arp_init(&a); seq_init(&q);
+    arpui_init(&u); arp_init(&a); seq_init(&q); flash_init(&fl); u.flash = &fl;
     clear_log(); fake_globals_open = 0; fake_a440_down = 0; fake_tone_on = 0; fake_latch = 0;
     memset(params, 0, sizeof params);
     for (int i = 0; i < ARPUI_BOOT_TICKS; i++) arpui_tick(&u, &a, &q);   /* past the kill-switch window */
@@ -1327,6 +1336,68 @@ static void test_generator_switch_hands_the_latch_over_with_the_arp(void) {
     CHECK(count_type(EV_HOLD_STOCK) == 2 && fake_latch);
 }
 
+/* ---- flash diagnostic (A440 + Sync; spec "Flash diagnostic") ---------------------------- */
+enum { SYNC = ARPUI_SYNC, FLASH_RUN_TICKS = 3312 };   /* the 8 MB fake: 32 + 1912 + 1368 pieces */
+
+static void test_sync_combo_runs_the_flash_diagnostic_and_shows_the_results(void) {
+    reset();
+    btn(A440, PRESS);
+    CHECK(btn(SYNC, PRESS) == 1 && fl.running);
+    CHECK(last_d3_is(CH_F, CH_L, CH_A));                               /* FLA */
+    CHECK(btn(SYNC, RELEASE) == 1);
+    btn(A440, RELEASE);
+    CHECK(!a.enabled);                                                 /* used the hold: no toggle */
+    ticks(1600);
+    CHECK(fl.running && last_d3_is(CH_F, CH_L, CH_A) && count_type(EV_RESTORE) == 0);   /* kept up past 1.5 s */
+    ticks(FLASH_RUN_TICKS - 1600);
+    CHECK(!fl.running && last_d3_is(CH_F, BLANK, 8));                 /* F 8 as the run completes */
+    ticks(1499);
+    CHECK(last_d3_is(CH_F, BLANK, 8));
+    ticks(1);
+    CHECK(last_d3_is(1, BLANK, CH_E));                                 /* 1 E */
+    ticks(1500);
+    CHECK(last_d3_is(2, BLANK, CH_E) && count_type(EV_RESTORE) == 0);  /* 2 E */
+    ticks(1500);
+    CHECK(count_type(EV_RESTORE) == 1);                                /* then the patch display */
+    ticks(3000);
+    CHECK(count_type(EV_RESTORE) == 1 && last_d3_is(2, BLANK, CH_E));  /* and nothing more */
+}
+
+static void test_sync_during_a_run_is_ignored_and_sync_alone_is_stock(void) {
+    reset();
+    CHECK(btn(SYNC, PRESS) == 0 && !fl.running);                      /* no A440: stock Osc A sync */
+    CHECK(btn(SYNC, RELEASE) == 0);
+    btn(A440, PRESS); btn(SYNC, PRESS); btn(SYNC, RELEASE); btn(A440, RELEASE);
+    ticks(100);
+    btn(A440, PRESS);
+    CHECK(btn(SYNC, PRESS) == 1 && btn(SYNC, RELEASE) == 1);           /* consumed, ignored */
+    btn(A440, RELEASE);
+    CHECK(!a.enabled && fl.running);
+    ticks(FLASH_RUN_TICKS - 100);
+    CHECK(!fl.running && last_d3_is(CH_F, BLANK, 8));                 /* on time: the run was not restarted */
+}
+
+static void test_another_message_cancels_the_remaining_results(void) {
+    reset();
+    btn(A440, PRESS); btn(SYNC, PRESS); btn(SYNC, RELEASE); btn(A440, RELEASE);
+    ticks(FLASH_RUN_TICKS);
+    CHECK(last_d3_is(CH_F, BLANK, 8));
+    btn(A440, PRESS); btn(BANK, PRESS); btn(BANK, RELEASE); btn(A440, RELEASE);   /* dn */
+    CHECK(last_d3_is(CH_D, CH_N, BLANK));
+    ticks(1500);
+    CHECK(count_type(EV_RESTORE) == 1 && last_d3_is(CH_D, CH_N, BLANK));   /* 1 E and 2 E dropped */
+    ticks(3000);
+    CHECK(count_type(EV_RESTORE) == 1);
+}
+
+static void test_kill_switch_disables_the_diagnostic(void) {
+    reset();
+    u.kill = 1;
+    btn(A440, PRESS); btn(SYNC, PRESS); btn(SYNC, RELEASE); btn(A440, RELEASE);
+    ticks(10);
+    CHECK(!fl.running && count_type(EV_D3) == 0);
+}
+
 int main(void) {
     test_tap_toggles_arp_with_status_and_led();
     test_repeats_are_ignored();
@@ -1384,6 +1455,10 @@ int main(void) {
     test_program6_outside_record_mode_clears_and_selects_arp();
     test_all_notes_off_stops_the_sequencer_and_empties_the_pool();
     test_generator_switch_hands_the_latch_over_with_the_arp();
+    test_sync_combo_runs_the_flash_diagnostic_and_shows_the_results();
+    test_sync_during_a_run_is_ignored_and_sync_alone_is_stock();
+    test_another_message_cancels_the_remaining_results();
+    test_kill_switch_disables_the_diagnostic();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;
 }

@@ -12,6 +12,7 @@
 
 #include "arp.h"
 #include "disp.h"
+#include "flash.h"
 #include "rate.h"
 #include "seq.h"
 
@@ -28,6 +29,8 @@
 #define ARPUI_CHORDS 5              /* chord lengths: Qtr, Half, Whole, 2 bars, 4 bars */
 #define ARPUI_TUNE 0x0C             /* A440 + Tune = seq record mode on / off */
 #define ARPUI_HOLD 0x0E             /* A440 + HOLD = stock tuning tone (generator stopped); in record mode: rest / tie */
+#define ARPUI_SYNC 0x18             /* A440 + Sync (Osc A Sync) = the read-only flash diagnostic */
+#define ARPUI_FLASH_RESULTS 3       /* its results shown in turn: size, area 1, area 2 */
 #define ARPUI_BLINK_MS 500          /* record mode: A440 LED on / off time */
 #define ARPUI_LED_FIX_MS 100        /* after a replayed A440 press: re-assert the LED (stock's late LED-off) */
 #define ARPUI_TAP_MAX_MS 2000       /* a longer gap starts a new tap series */
@@ -65,6 +68,8 @@ typedef struct {
     uint8_t  tone_pending;            /* A440 + HOLD pressed with the generator stopped: toggle the tone on HOLD's release */
     uint8_t  led_fix;                 /* ms until the LED is asserted again after a replayed A440 press */
     uint8_t  hold_arp, hold_stock;    /* the two HOLD latches: the one not in use is remembered here */
+    uint8_t  flash_msgs;              /* flash diagnostic results still to show after the current message */
+    flash_t *flash;                   /* the diagnostic's state (set by the glue / harness) */
 } arpui_t;
 
 void arpui_init(arpui_t *u);

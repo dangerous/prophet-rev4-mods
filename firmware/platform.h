@@ -3,6 +3,8 @@
 #ifndef PLATFORM_H
 #define PLATFORM_H
 
+#include <stdint.h>
+
 void plat_display_int(int value);                 /* stock 3-digit integer display */
 void plat_display3(int c0, int c1, int c2);       /* stock 3-character display (panel codes) */
 void plat_display_hold(void);                     /* a message was shown: (re)start the 1.5 s revert */
@@ -19,5 +21,6 @@ void plat_stock_a440_press(void);                 /* replay an A440 press to sto
 int  plat_hold_latch(void);                       /* stock's HOLD button latch (ui + 0x19C) */
 void plat_stock_hold_press(void);                 /* replay a HOLD press to stock: toggles its latch, LED and hold */
 void plat_param_store(int param, int value);      /* stock plain parameter store, layer A */
+int  plat_flash_read(uint32_t off, void *dst, uint32_t len);   /* stock flash read (memcpy from the memory-mapped chip under its mutex): 0 ok, 3 range */
 
 #endif

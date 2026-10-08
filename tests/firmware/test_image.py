@@ -71,7 +71,11 @@ IFACE = [
     0x2003B6B1,   # hold off (both sources): the original callee at the program-loaded hook
     0x200574FA,   # ui + 0x16A: stock's A440 reference tone flag (byte)
     0x2005752C,   # ui + 0x19C: stock's HOLD button latch (byte)
+    0x2003E2F9,   # flash read(off, dst, len): the diagnostic's only flash access (docs/re/flash.md)
 ]
+
+# the stock flash driver's write side (docs/re/flash.md): never in the table ("Safety invariants" 8)
+FLASH_WRITE_SIDE = {0x2003E3E4, 0x20036E28, 0x2003E340, 0x2003DD44, 0x2003DBE4}
 
 
 def setUpModule():
@@ -168,6 +172,13 @@ class NativeImageTests(unittest.TestCase):
         self.assertEqual([hex(w) for w in words], [hex(a) for a in IFACE])
         after = struct.unpack_from("<I", self.wrapper + b"\0" * 4, table - REC_BASE + 4 * len(IFACE))[0]
         self.assertNotIn(after, set(IFACE))
+
+    def test_interface_table_has_no_flash_writing_entry(self):
+        table = self.symbols["stock_iface"] & ~1
+        words = struct.unpack_from("<%dI" % len(IFACE), self.wrapper, table - REC_BASE)
+        for w in words:
+            self.assertNotIn(w & ~1, FLASH_WRITE_SIDE, hex(w))
+        self.assertIn(0x2003E2F9, words)
 
     def test_code_materialises_no_unknown_addresses(self):
         layout = (OUT / "native.layout").read_text()

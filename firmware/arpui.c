@@ -3,7 +3,7 @@
 
 enum { UI_PRESS = 1, UI_RELEASE = 2 };
 enum { UC_A = 0x0A, UC_B = 0x0B, UC_C = 0x0C, UC_D = 0x0D, UC_E = 0x0E, UC_F = 0x0F, UC_H = 0x11, UC_I = 0x12,
-       UC_N = 0x17, UC_O = 0x18, UC_P = 0x19, UC_Q = 0x1A, UC_R = 0x1B, UC_S = 0x1C, UC_T = 0x1D, UC_U = 0x1E,
+       UC_L = 0x15, UC_N = 0x17, UC_O = 0x18, UC_P = 0x19, UC_Q = 0x1A, UC_R = 0x1B, UC_S = 0x1C, UC_T = 0x1D, UC_U = 0x1E,
        UC_Y = 0x22, UC_LO = 0x24, UC_BLANK = 0x25, UC_DASH = 0x26 };
 
 /* chord lengths in cycle order: beats, display (as the note values are shown) */
@@ -50,14 +50,17 @@ void arpui_init(arpui_t *u)
 }
 
 /* --- display ---------------------------------------------------------------------------- */
+/* a message from any source other than the flash diagnostic drops its remaining results */
 static void show3(arpui_t *u, int c0, int c1, int c2)
 {
+    u->flash_msgs = 0;
     plat_display3(c0, c1, c2);
     disp_touch(&u->disp);
 }
 
 static void show_int(arpui_t *u, int v)
 {
+    u->flash_msgs = 0;
     plat_display_int(v);
     disp_touch(&u->disp);
 }
@@ -230,6 +233,7 @@ void arpui_program_loaded(arpui_t *u, arp_t *a, seq_t *q)
 /* --- seq record mode (A440 + Tune) ------------------------------------------------------ */
 static void flash3(arpui_t *u, int c0, int c1, int c2)
 {
+    u->flash_msgs = 0;
     plat_display3(c0, c1, c2);
     disp_flash(&u->disp);
 }
@@ -245,8 +249,40 @@ static void draw_rec(const seq_t *q)                       /* the readout: r N, 
 
 static void show_rec(arpui_t *u, const seq_t *q)
 {
+    u->flash_msgs = 0;
     draw_rec(q);
     disp_touch(&u->disp);
+}
+
+/* --- flash diagnostic (A440 + Sync) ------------------------------------------------------ */
+static void show_fla(arpui_t *u)                           /* FLA: a run is in progress */
+{
+    plat_display3(UC_F, UC_L, UC_A);
+    disp_touch(&u->disp);
+}
+
+static void show_flash_result(arpui_t *u)                  /* the next of the three results */
+{
+    const flash_t *f = u->flash;
+    int i = ARPUI_FLASH_RESULTS - u->flash_msgs;           /* 0 size, 1 area 1, 2 area 2 */
+    u->flash_msgs--;
+    if (i == 0) {
+        if (f->size == FLASH_8M)
+            plat_display3(UC_F, UC_BLANK, 8);
+        else if (f->size == FLASH_16M)
+            plat_display3(UC_F, 1, 6);
+        else
+            plat_display3(UC_F, UC_BLANK, UC_DASH);
+    } else {
+        int used = i == 1 ? f->area1 : f->area2;
+        plat_display3(i, UC_BLANK, used == FLASH_USED ? UC_U : UC_E);
+    }
+    disp_touch(&u->disp);
+}
+
+static int flash_running(const arpui_t *u)
+{
+    return u->flash && u->flash->running;
 }
 
 static void rest_tie(arpui_t *u, seq_t *q)                 /* HOLD button or pedal while recording */
@@ -404,6 +440,12 @@ static void combo(arpui_t *u, arp_t *a, seq_t *q, int id)
     case ARPUI_KEYB:
         select_gen(u, a, q, !u->gen);
         break;
+    case ARPUI_SYNC:                                       /* the read-only flash diagnostic */
+        if (u->flash && flash_start(u->flash)) {
+            u->flash_msgs = 0;                             /* an earlier run's results are dropped */
+            show_fla(u);
+        }
+        break;                                             /* a run in progress: ignored */
     default:
         show_int(u, id);                                   /* button id readout */
         break;
@@ -617,10 +659,22 @@ void arpui_tick(arpui_t *u, arp_t *a, seq_t *q)
         return;
     update_sustain(u, a, q);                               /* catches changes the clock made (loss, CC) */
     if (disp_tick(&u->disp)) {
-        if (u->rec)
+        if (u->flash_msgs)
+            show_flash_result(u);                          /* the next result */
+        else if (flash_running(u))
+            show_fla(u);                                   /* FLA stays up for the whole run */
+        else if (u->rec)
             draw_rec(q);                                   /* a message over the readout: back to r N */
         else
             plat_display_restore();
+    }
+    if (u->flash) {                                        /* the diagnostic reads one piece per tick; a
+                                                              result shown here gets its full 1.5 s */
+        flash_tick(u->flash);
+        if (flash_take(u->flash)) {
+            u->flash_msgs = ARPUI_FLASH_RESULTS;
+            show_flash_result(u);
+        }
     }
     if (u->led_fix && --u->led_fix == 0 && gen_running(u, a, q) && !u->rec)
         u->led_on = 0;                                     /* stock's late LED-off has landed: assert ours again */
