@@ -41,7 +41,8 @@ class StubImage(unittest.TestCase):
         self.base_path = base
         self.base = base.read_bytes()
         self.image = self.image_path.read_bytes()
-        self.text = manifest.generate_js(self.base, self.image, commit="abc1234", built="2026-10-08")
+        self.text = manifest.generate_js(self.base, self.image, commit="abc1234", built="2026-10-08",
+                                         version="1.2.3")
         self.m = manifest.parse_js(self.text)
 
     def tearDown(self):
@@ -55,13 +56,27 @@ class ManifestFormatTests(StubImage):
         m = self.m
         self.assertEqual(m["format"], 1)
         self.assertEqual(m["name"], "prophet10_native")
+        self.assertEqual(m["version"], "1.2.3")
         self.assertEqual(m["built"], "2026-10-08")
         self.assertEqual(m["commit"], "abc1234")
         self.assertEqual(m["base"], {"name": "prophet5_main_2.1.0.syx", "size": len(self.base),
                                      "sha256": hashlib.sha256(self.base).hexdigest()})
-        self.assertEqual(m["result"], {"name": "prophet10_native.syx", "size": len(self.image),
-                                       "sha256": hashlib.sha256(self.image).hexdigest()})
-        self.assertEqual(set(m), {"format", "name", "built", "commit", "base", "result", "spans"})
+        self.assertEqual(m["result"], {"name": "prophet5_main_2.1.0_patched_1.2.3.syx", "size": len(self.image),
+                                       "sha256": hashlib.sha256(self.image).hexdigest()})   # Sequential's naming pattern
+        self.assertEqual(set(m), {"format", "name", "version", "built", "commit", "base", "result", "spans"})
+
+    def test_default_version_is_the_version_file(self):
+        v = (ROOT / "VERSION").read_text().strip()
+        self.assertRegex(v, r"^\d+\.\d+\.\d+$")                       # semantic versioning
+        m = manifest.parse_js(manifest.generate_js(self.base, self.image))
+        self.assertEqual(m["version"], v)
+        self.assertEqual(m["result"]["name"], "prophet5_main_2.1.0_patched_%s.syx" % v)
+
+    def test_version_json_describes_what_the_page_installs(self):
+        v = manifest.version_json(self.m)
+        self.assertEqual(v, {"version": "1.2.3", "built": "2026-10-08", "commit": "abc1234",
+                             "result": {"name": "prophet5_main_2.1.0_patched_1.2.3.syx",
+                                        "sha256": hashlib.sha256(self.image).hexdigest()}})
 
     def test_spans_are_ascending_minimal_and_end_with_the_appended_record(self):
         base_payload = syx.decode(self.base).payload
@@ -126,9 +141,10 @@ class ApplyTests(StubImage):
     def test_cli_manifest_and_apply(self):
         mpath, out = self.dir / "manifest.js", self.dir / "out.syx"
         r = _cli("manifest", "--base", self.base_path, "--image", self.image_path, "-o", mpath,
-                 "--commit", "abc1234", "--built", "2026-10-08")
+                 "--commit", "abc1234", "--built", "2026-10-08", "--version", "1.2.3")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(mpath.read_text(), self.text)
+        self.assertEqual(json.loads((self.dir / "version.json").read_text()), manifest.version_json(self.m))   # written beside it
         r = _cli("apply", mpath, self.base_path, out)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(out.read_bytes(), self.image)
@@ -176,6 +192,7 @@ global.window = {}; eval(fs.readFileSync(manifestJs, 'utf8')); const patch = win
 const base = new Uint8Array(fs.readFileSync(baseFile));
 const r = P.apply(patch, base);
 if (!r.ok) { console.error('unexpected: ' + r.error); process.exit(2); }
+if (patch.version !== '1.2.3' || !patch.result.name.endsWith('_patched_1.2.3.syx')) { console.error('version'); process.exit(4); }
 fs.writeFileSync(outFile, Buffer.from(r.bytes));
 const wrong = P.apply(patch, new Uint8Array(fs.readFileSync(otherFile)));
 if (wrong.ok || !/not .*Main OS 2\.1\.0/i.test(wrong.error) || !wrong.error.includes(patch.base.sha256)) {

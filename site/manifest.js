@@ -1,15 +1,16 @@
 window.PATCH = {
  "format": 1,
  "name": "prophet10_native",
+ "version": "1.0.0",
  "built": "2026-10-08",
- "commit": "5f0d87d",
+ "commit": "bce0469",
  "base": {
   "name": "prophet5_main_2.1.0.syx",
   "size": 241459,
   "sha256": "baeabb20635a98effce8958395db7c54b67e15e7524fb01c82d1cbc081bf4682"
  },
  "result": {
-  "name": "prophet10_native.syx",
+  "name": "prophet5_main_2.1.0_patched_1.0.0.syx",
   "size": 278927,
   "sha256": "7cfe0b8f85368f10bf276492a7a6faea5e3846d703ef6d2bd9a6939ea2e1725f"
  },

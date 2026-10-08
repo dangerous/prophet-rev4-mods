@@ -79,11 +79,14 @@ def cmd_diff(args) -> int:
 
 def cmd_manifest(args) -> int:
     base, image = Path(args.base).read_bytes(), Path(args.image).read_bytes()
-    text = manifest.generate_js(base, image, commit=args.commit, built=args.built)
-    Path(args.out).write_text(text)
+    text = manifest.generate_js(base, image, commit=args.commit, built=args.built, version=args.version)
+    out = Path(args.out)
+    out.write_text(text)
     m = manifest.parse_js(text)
-    print("wrote %s: %d span(s), result %s %s" % (args.out, len(m["spans"]), m["result"]["name"],
-                                                   m["result"]["sha256"]))
+    version_path = out.with_name("version.json")
+    version_path.write_text(json.dumps(manifest.version_json(m), indent=1) + "\n")
+    print("wrote %s and %s: version %s, %d span(s), result %s %s"
+          % (out, version_path, m["version"], len(m["spans"]), m["result"]["name"], m["result"]["sha256"]))
     return 0
 
 
@@ -127,6 +130,7 @@ def main(argv=None) -> int:
     p.add_argument("-o", "--out", required=True)
     p.add_argument("--commit", help="recorded commit (default: git HEAD)")
     p.add_argument("--built", help="recorded date, YYYY-MM-DD (default: today)")
+    p.add_argument("--version", help="recorded release version (default: the VERSION file)")
     p.set_defaults(func=cmd_manifest)
 
     p = sub.add_parser("apply", help="apply a patch manifest to the stock OS file (the reference applier)")

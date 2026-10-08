@@ -156,7 +156,7 @@ static void test_random_is_uniform_over_the_pool_and_may_repeat(void) {
         if (k && n == on_note(k - 1)) repeats++;
     }
     CHECK(ok && seen[C3] > 50 && seen[E3] > 50 && seen[G3] > 50);
-    CHECK(repeats > 10);                                               /* no repeat avoidance (V5 behaviour) */
+    CHECK(repeats > 10);                                               /* no repeat avoidance (the Arp Mod behaviour) */
 }
 
 /* ---- octaves per pass ---------------------------------------------------------------- */

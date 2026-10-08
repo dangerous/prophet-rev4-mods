@@ -34,7 +34,7 @@
 
 <h2>What this installs</h2>
 <table>
-  <tr><td>Image</td><td><span id="p-name"></span>, built <span id="p-built"></span> from commit <code id="p-commit"></code></td></tr>
+  <tr><td>Version</td><td><strong id="p-version"></strong> (<span id="p-name"></span>, built <span id="p-built"></span> from commit <code id="p-commit"></code>)</td></tr>
   <tr><td>Needs</td><td>Sequential's <code id="p-base-name"></code> (<span id="p-base-size"></span> bytes)<br><span class="hash" id="p-base-hash"></span></td></tr>
   <tr><td>Produces</td><td><code id="p-result-name"></code> (<span id="p-result-size"></span> bytes)<br><span class="hash" id="p-result-hash"></span></td></tr>
 </table>
@@ -73,7 +73,7 @@
   function $(id) { return document.getElementById(id); }
   function text(id, v) { $(id).textContent = v; }
 
-  text('p-name', patch.name); text('p-built', patch.built); text('p-commit', patch.commit);
+  text('p-version', patch.version); text('p-name', patch.name); text('p-built', patch.built); text('p-commit', patch.commit);
   text('p-base-name', patch.base.name); text('p-base-name2', patch.base.name);
   text('p-base-size', patch.base.size.toLocaleString()); text('p-base-hash', patch.base.sha256);
   text('p-result-name', patch.result.name); text('p-result-size', patch.result.size.toLocaleString());

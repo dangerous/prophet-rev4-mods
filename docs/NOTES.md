@@ -9,12 +9,16 @@ behavioural source of truth; this file is the engineering context around it.
   Work happens in a worktree per feature under `.claude/worktrees/` (`relatch-seq` for the
   2026-10-06/07 work, `poly-seq` for the polyphonic sequencer); `main` is merged from the
   root checkout with a plain `git merge`.
+- The release version is the `VERSION` file (semantic versioning, bumped by hand); `make
+  manifest` writes it into `site/manifest.js` and `site/version.json` (the README badge reads
+  the latter) and names the download `prophet5_main_2.1.0_patched_<version>.syx`. Release
+  steps: `docs/DEVELOPING.md`.
 - `dist/` holds the installable image + `SHA256SUMS` (written from inside `dist/`, so verify
   with `cd dist && shasum -a 256 -c SHA256SUMS`). **Never delete dist files**; superseded
   builds go to `dist/old/` with a hash suffix. The `.syx` files are git-ignored and therefore
   per checkout: copy new builds from the worktree's `dist/` to the root's `dist/` (David
   flashes from the root) — a stale root `dist/` nearly got flashed on 2026-10-07.
-- Original inputs in `~/git/prophet` (stock 2.1.0, Panel 1.1.3, the V5 arp mod and its
+- Original inputs in `~/git/prophet` (stock 2.1.0, Panel 1.1.3, the Arp Mod and its
   guide, an 800 MB Overview.MOV); the two files the tests need are copied to `fixtures/`
   (git-ignored — the repo ships only `fixtures/README.md` + `SHA256SUMS`).
 - Scratchpad (session-only, may be gone): decoded images and full disassembly listings
@@ -25,9 +29,9 @@ behavioural source of truth; this file is the engineering context around it.
 
 ## Hardware status (David's Prophet-10 Rev4, no DIN cable → bootloader recovery unavailable)
 
-- 2026-10-06/07, wrapper era (hooks chained in front of the third-party V5 arp): re-latch,
+- 2026-10-06/07, wrapper era (hooks chained in front of the third-party Arp Mod): re-latch,
   seq, note values, octave shift, HOLD suspension and display revert were all verified on
-  hardware before the engine replaced V5.
+  hardware before the engine replaced the Arp Mod.
 - 2026-10-07, **engine** (`prophet10_native.syx`, stock 2.1.0 base): first flash passed the
   whole checklist (boot, A440, display revert, pattern incl. per-pass octaves, HOLD, seq,
   Glide tempo, note values, Syn, Lo Freq shift incl. MIDI Out, CC 123, program change,

@@ -17,9 +17,9 @@ a Python build/packing CLI.
 ## Conventions
 
 - "Stock" = Sequential Main OS 2.1.0. "The engine" = the code this project adds, one
-  record appended to stock. "V5" = Nicolas Maldonado's third-party Arp Mod V5, whose
-  documented behaviour the arp was modelled on; named only where behaviour deliberately
-  differs from it.
+  record appended to stock. "The Arp Mod" = the third-party arpeggiator mod for the Rev4
+  that circulated privately before this project, whose documented behaviour the arp was
+  modelled on; named only where behaviour deliberately differs from it.
 - Addresses are RAM addresses as loaded by the stock OS loader unless stated otherwise.
 - Each behaviour carries a hardware-verification marker: `[HW: unverified]` or
   `[HW: verified <date>, <unit>]`. Host tests enforce the behaviour; the marker records
@@ -172,11 +172,15 @@ resources, and it works equally from a local copy of its directory.
 
 #### Patch manifest
 
+- The project has a **release version** — semantic versioning, in the `VERSION` file at the
+  repository root, bumped by hand for each release (`1.0.0` first).
 - `python3 -m tools manifest --base BASE.syx --image IMAGE.syx -o site/manifest.js` writes a
   JavaScript file that assigns `window.PATCH` one JSON object: `format` (1), `name`
-  (`prophet10_native`), `built` (ISO date), `commit` (the repository's short HEAD hash, or
-  `unknown`), `base` and `result` — each `{name, size, sha256}` of the stock file and of the
-  image — and `spans`: the edits that turn the base's **decoded payload** into the image's,
+  (`prophet10_native`), `version` (from `VERSION`), `built` (ISO date), `commit` (the
+  repository's short HEAD hash, or `unknown`), `base` and `result` — each `{name, size,
+  sha256}` of the stock file and of the image, the result being named
+  `prophet5_main_2.1.0_patched_<version>.syx` — and `spans`: the edits that turn the base's
+  **decoded payload** into the image's,
   each `{offset, data}` with `data` base64 and `offset` a position in the base payload, in
   ascending order and non-overlapping. A span **replaces** the bytes at its offset
   (differences less than 16 bytes apart share one span); the engine record is the last span
@@ -189,6 +193,9 @@ resources, and it works equally from a local copy of its directory.
   (replacing, or inserting before the base byte at `offset`); encode as a Main OS file;
   require SHA-256(result) = `result.sha256`. The result is byte-identical to `python3 -m
   tools build` for the same inputs.
+- Beside the manifest it writes `version.json` — `{version, built, commit, result: {name,
+  sha256}}` — so the README's version badge, and anything else, can read what the page
+  installs without parsing JavaScript.
 - `python3 -m tools apply MANIFEST.js BASE.syx OUT.syx` is the reference applier. It writes
   nothing and prints one line on stderr (exit status 1) when the base is not the file the
   manifest was made for (naming the file's hash and the expected one) or when the result's
@@ -199,12 +206,12 @@ resources, and it works equally from a local copy of its directory.
 - Published by GitHub Pages at `https://dangerous.github.io/prophet-rev4-mods/` from the
   `site/` directory **alone** (a GitHub Actions deployment of that directory; nothing else
   in the repository is served).
-- Shows what it builds (name, date, commit) and the two hashes it will check. The user picks
+- Shows what it builds (version, date, commit) and the two hashes it will check. The user picks
   or drops their stock `.syx`; the page applies the manifest under the rules above, in the
   browser, and then: a base-hash mismatch names the problem (not Sequential's Main OS
   2.1.0 — the file's hash and the expected one), nothing is offered; a result-hash mismatch
   says so and offers no download; success shows the result's SHA-256 marked as matching
-  the release and offers `prophet10_native.syx` for download, with the install steps
+  the release and offers `prophet5_main_2.1.0_patched_<version>.syx` for download, with the install steps
   (SysEx Librarian or equivalent, Globals → MIDI SysEx = USB) and the warranty/risk notice.
 - The page's applier (`patcher.js`, plain JavaScript, no framework) produces the same bytes
   as the reference applier; the acceptance test runs it under Node.js against the fixture
@@ -216,7 +223,7 @@ resources, and it works equally from a local copy of its directory.
 
 The arp proper. The behaviours specified in their own sections (re-latch, seq, note
 value, keyboard octave shift, HOLD while the arp is on, display messages, button id
-readout) are realised by this engine. V5's documented behaviour was the baseline; where
+readout) are realised by this engine. The Arp Mod's documented behaviour was the baseline; where
 this engine deliberately differs it is marked **(change)** with the reason.
 
 #### Settings and defaults
@@ -239,7 +246,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
   Program 5 = toggle clock source (`int` / `Syn`); Program 6 = clear sequence; Program 7/8 =
   note value longer/shorter (− / +, + is faster); Unison = tempo tap (below); Tune = seq record mode on/off ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; any other button = id readout. Any of these cancels the toggle
   on A440 release. Held-repeat events (value 3) are ignored. A combo button whose release
-  arrives after A440 has been released is still consumed **(change: V5 leaked the orphan
+  arrives after A440 has been released is still consumed **(change: the Arp Mod leaked the orphan
   release to stock)**.
 - **A440 + Glide Rate** sets the tempo `[HW: verified 2026-10-07, Prophet-10 Rev4]`: while
   A440 is held, turning Glide Rate sets the BPM of the internal clock, 40–300 (`BPM = 40 + round(260 · raw / 1023)`, raw
@@ -250,7 +257,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
   hold, so the A440 release does not toggle the arp, also under `Syn`. Both pot hooks (raw store and change
   post) are consumed exactly while A440 is held (and the kill switch is not engaged); the
   patch's glide value is not touched. **Glide Rate alone is always the normal glide control**,
-  also while the arp is running. **(change: V5, and this engine before 2026-10-07, captured
+  also while the arp is running. **(change: the Arp Mod, and this engine before 2026-10-07, captured
   the pot as tempo whenever the arp was on, which made glide unusable with the arp running.)**
 - **A440 + Unison is tap tempo** `[HW: verified 2026-10-07, Prophet-10 Rev4]`: while A440 is held, each press of
   Unison (button id 25 / `0x19`) is a tempo tap. The first tap of a series shows `tAP` and
@@ -272,7 +279,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
   BPM is not saved with the program (see above).
 - **Display**: transient messages (mode, octaves, clock, note value, BPM while the pot
   moves or on a tempo tap, `tAP`, `Syn` for a tempo gesture under external clock, step count, shift, readout) show for 1.5 s, then the display returns to the stock
-  program display **(change: V5 left `OFF` / BPM / `Syn` on the display for as long as the
+  program display **(change: the Arp Mod left `OFF` / BPM / `Syn` on the display for as long as the
   arp was on)**. Switching the arp on shows the BPM (`Syn` under external clock) for 1.5 s;
   switching it off shows `OFF` for 1.5 s.
 - **Globals menu**: while the stock Globals menu is open, every button including A440
@@ -325,15 +332,15 @@ this engine deliberately differs it is marked **(change)** with the reason.
 - **Octaves N**: the pattern is played in the base octave, then transposed +12 for each
   further pass, N passes in all (2 octaves: C3 D4 | C4 D5). Down plays the highest pass
   first. Up/Down bounces over the whole N-pass sequence. Random picks over all N passes.
-  **(change: V5 merged the transpositions into one pitch-sorted set, giving C3 C4 D4 D5.)**
+  **(change: the Arp Mod merged the transpositions into one pitch-sorted set, giving C3 C4 D4 D5.)**
   Transposed notes above 127 are skipped.
 - A single pool note repeats every step. Changing the pool mid-pattern keeps the current
   pass and position (position clamped to the new pool size; in Assign removing entries
   never skips one: the entry that followed the note just played is still the next step). Changing mode or octaves
   restarts the pattern at its first step on the next step boundary without disturbing the
-  phase **(change: V5 forced an immediate step)**.
+  phase **(change: the Arp Mod forced an immediate step)**.
 - Each step releases the previous step note and plays the new one with the pool note's own
-  velocity. Gate = 50 % of the step (as V5).
+  velocity. Gate = 50 % of the step (as the Arp Mod).
 
 #### Clock
 
@@ -374,21 +381,21 @@ this engine deliberately differs it is marked **(change)** with the reason.
 - Step notes go to the stock voice allocator exactly as a local key would (`note_on(1, note,
   vel)` / `note_off(1, note)`). The stock keyboard MIDI Out keeps carrying the raw held keys
   (shifted, per "Keyboard octave shift"), not the arp; the arp never sends MIDI itself (as
-  V5 — an "arp to MIDI Out" option is a possible later feature).
+  the Arp Mod — an "arp to MIDI Out" option is a possible later feature).
 - Local Control off: stock does not pass local keys to the OS note path, so the arp is fed
-  by MIDI-in only (as V5).
+  by MIDI-in only (as the Arp Mod).
 - MIDI CC 123–127 (all notes off, omni, mono, poly): stock all-notes-off runs, then the pool
-  is cleared and the arp silenced; the HOLD state is not changed **(change: V5 hooked only
+  is cleared and the arp silenced; the HOLD state is not changed **(change: the Arp Mod hooked only
   CC 123 and dropped its own hold flag)**. CC 64 reaches the arp as hold via the stock merged
   state.
 - Program change / patch load: the arp continues on the new patch with its keys down, mode
   and tempo. Stock switches HOLD off when a program loads, so latched notes drop then (as
-  stock and V5 behave).
+  stock and the Arp Mod behave).
 
 #### Robustness
 
 - Events from the other task are queued to the tick; the queue holds 64 events; if it ever
-  fills, the newest events are dropped and the arp is **not** disabled **(change: V5 cleared
+  fills, the newest events are dropped and the arp is **not** disabled **(change: the Arp Mod cleared
   and disabled the arp on overflow)**.
 - **Kill switch**: A440 **held from before power-on** disables every arp hook for the
   session (all hooks fall straight through to stock), so a misbehaving engine can be
@@ -585,7 +592,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
    one shorter message: 0.25 s ("Seq"). Nothing stays on the display permanently, with one
    exception: while seq record mode lasts the display returns to its readout `r N`
    instead, and the patch display comes back when record mode ends ("Seq")
-   `[HW: verified 2026-10-08, Prophet-10 Rev4]`. `(change from V5, which kept OFF / BPM / Syn up for as long as the
+   `[HW: verified 2026-10-08, Prophet-10 Rev4]`. `(change from the Arp Mod, which kept OFF / BPM / Syn up for as long as the
    arp was on)`
 2. A new message restarts the 1.5 s.
 3. Realisation: the UI keeps one timer, restarted by every message it shows (1.5 s, or
@@ -643,7 +650,7 @@ be non-empty.
 6. Realisation: the engine's note pool (`arp.c`): when HOLD is active, no key is down and
    latched notes exist, a note-on empties the latched set and releases the sounding
    step before adding the key; the pattern restarts at the next step boundary ("Arp
-   engine" — Start rule). `[HW: verified 2026-10-06 (V5-based build) and 2026-10-07 (engine)]`
+   engine" — Start rule). `[HW: verified 2026-10-06 (Arp-Mod-based build) and 2026-10-07 (engine)]`
 
 ### Seq (step-recorded sequence) `[HW: verified 2026-10-08, Prophet-10 Rev4 — record mode (A440 + Tune, tap to leave), chord steps, rests and ties via the HOLD button, the `r N` readout and the blinking LED, playback; the pedal as rest/tie, recording from MIDI-in and a tied step under Syn not yet exercised. The hold-A440 recording this replaced was verified 2026-10-06/07]`
 

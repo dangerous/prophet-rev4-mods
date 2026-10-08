@@ -16,7 +16,8 @@ from . import records, syx
 FORMAT = 1
 NAME = "prophet10_native"
 BASE_NAME = "prophet5_main_2.1.0.syx"
-RESULT_NAME = NAME + ".syx"
+RESULT_PATTERN = "prophet5_main_2.1.0_patched_%s.syx"   # Sequential's naming pattern, plus our version
+ROOT = Path(__file__).resolve().parents[1]
 MERGE_GAP = 16                     # differences fewer than this many bytes apart share a span
 PREFIX = "window.PATCH = "
 
@@ -76,6 +77,11 @@ def image_spans(base_payload: bytes, image_payload: bytes) -> List[Span]:
     return spans + [(ins_off, inserted, True)]
 
 
+def read_version(root: Path = ROOT) -> str:
+    """The release version: the VERSION file at the repository root (semantic versioning)."""
+    return (root / "VERSION").read_text().strip()
+
+
 def git_commit(cwd: Optional[Path] = None) -> str:
     try:
         r = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
@@ -88,7 +94,8 @@ def git_commit(cwd: Optional[Path] = None) -> str:
 
 
 def generate(base_file: bytes, image_file: bytes, commit: Optional[str] = None,
-             built: Optional[str] = None) -> dict:
+             built: Optional[str] = None, version: Optional[str] = None) -> dict:
+    version = version or read_version()
     base_payload = syx.decode(base_file).payload
     image = syx.decode(image_file)
     if image.target != "main":
@@ -97,10 +104,11 @@ def generate(base_file: bytes, image_file: bytes, commit: Optional[str] = None,
     return {
         "format": FORMAT,
         "name": NAME,
+        "version": version,
         "built": built or datetime.date.today().isoformat(),
         "commit": commit or git_commit(),
         "base": {"name": BASE_NAME, "size": len(base_file), "sha256": sha256(base_file)},
-        "result": {"name": RESULT_NAME, "size": len(image_file), "sha256": sha256(image_file)},
+        "result": {"name": RESULT_PATTERN % version, "size": len(image_file), "sha256": sha256(image_file)},
         "spans": [dict({"offset": off, "data": base64.b64encode(data).decode("ascii")},
                        **({"insert": True} if insert else {})) for off, data, insert in spans],
     }
@@ -111,8 +119,14 @@ def to_js(m: dict) -> str:
 
 
 def generate_js(base_file: bytes, image_file: bytes, commit: Optional[str] = None,
-                built: Optional[str] = None) -> str:
-    return to_js(generate(base_file, image_file, commit, built))
+                built: Optional[str] = None, version: Optional[str] = None) -> str:
+    return to_js(generate(base_file, image_file, commit, built, version))
+
+
+def version_json(m: dict) -> dict:
+    """What the page installs, for the README badge and other readers: site/version.json."""
+    return {"version": m["version"], "built": m["built"], "commit": m["commit"],
+            "result": {"name": m["result"]["name"], "sha256": m["result"]["sha256"]}}
 
 
 def parse_js(text: str) -> dict:

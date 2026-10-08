@@ -1,6 +1,6 @@
-# Stock Main OS 2.1.0 — the ten V5 patch sites, their functions and execution contexts
+# Stock Main OS 2.1.0 — the ten Arp Mod patch sites, their functions and execution contexts
 
-Sources: `orig.asm` (stock), `hack.asm` (V5), `blob.asm`, `orig_ram.bin` (RAM image, base 0x20010000).
+Sources: `orig.asm` (stock), `hack.asm` (the Arp Mod), `blob.asm`, `orig_ram.bin` (RAM image, base 0x20010000).
 Confidence per fact: **H** high, **M** medium, **L** low.
 
 ## 0. Architecture facts that decide "locking or not"
@@ -43,7 +43,7 @@ Confidence per fact: **H** high, **M** medium, **L** low.
 buttons/pots, MIDI realtime bytes) and the Prophet5 AO task (prio 2: MIDI note-on/off, CC123, HOLD). The timer task
 pre-empts the AO task at any instruction (higher priority, every tick); the four timer callbacks never pre-empt each
 other (one task). Nothing hooked runs in an ISR. Any state shared between the timer-side hooks and the AO-side hooks
-(or touched by both) needs a critical section (`cpsid/cpsie` as V5 does at 0x20088F9E–0x20088FC4, or
+(or touched by both) needs a critical section (`cpsid/cpsie` as the Arp Mod does at 0x20088F9E–0x20088FC4, or
 taskENTER_CRITICAL) or a single-producer/single-consumer design. Timer callbacks must not block.
 
 ## 1. Site 0x200343D8..0x200343EC — MIDI byte-parser system-status jump table
@@ -54,7 +54,7 @@ taskENTER_CRITICAL) or a single-producer/single-consumer design. Timer callbacks
 - **The table** is a jump table, not a state table: `200343aa: subs r0,#0xf0 ; cmp r0,#0xc ; bhi 0x2003443a ; adr r3,#4 ; ldr.w pc,[r3,r0,lsl #2]`
   → base **0x200343B8**, index = status − 0xF0:
 
-| idx | status | word addr | stock target | V5 (hack.asm) |
+| idx | status | word addr | stock target | the Arp Mod (hack.asm) |
 |---|---|---|---|---|
 | 0 | F0 | 0x200343B8 | 0x200343ED (SysEx start) | same |
 | 1–7 | F1–F7 | 0x200343BC–D4 | 0x2003443B (`mov r0,r4; bl 0x20033d08` reset parser for port; continue) | same |
@@ -64,7 +64,7 @@ taskENTER_CRITICAL) or a single-producer/single-consumer design. Timer callbacks
 | 11 | **FB** | **0x200343E4** | 0x20034343 | **0x20089095** |
 | 12 | **FC** | **0x200343E8** | 0x20034343 | **0x20089095** |
 
-  Stock therefore discards clock/start/continue/stop entirely at byte level. V5's trampoline 0x20089094:
+  Stock therefore discards clock/start/continue/stop entirely at byte level. The Arp Mod's trampoline 0x20089094:
   `push {r0-r4,lr}; add r0,r0,#0xf0 (status byte); mov r1,r4 (port); bl sniff 0x20088F58; pop; ldr pc,[pc] → 0x20034343`.
   hooks.json's "entry 1/3/4/5" numbering is relative to 0x200343D4; the real meaning is F8/FA/FB/FC. (H)
 
@@ -75,7 +75,7 @@ taskENTER_CRITICAL) or a single-producer/single-consumer design. Timer callbacks
   old = pedal?1:button (`2003968c…2003969a`), store new (`200396a0/200396a6`), new merged → r4 (`200396ba: and r4,r0,#1`);
   if changed: `200396c2: orr r0,r0,#0x8000000 ; orr r0,r0,#0xd0000 ; 200396ca: bl 0x2003d324` (DSP message 0x080D0000|state),
   `200396ce: cbnz r4 ; bl 0x2003eee0` (state 0 → release held voices), `200396d4: movs r0,#0x23; movs r1,#0; bl 0x20036824` (HOLD LED off) then on if r4.
-- **Original / replacement:** `200396ca: f003 fe2b bl 0x2003d324` → V5 `f04f fcd9 bl 0x20089080`. V5 hook: `push {r4,lr}; ldr r3,=0x2003D325; blx r3`
+- **Original / replacement:** `200396ca: f003 fe2b bl 0x2003d324` → the Arp Mod `f04f fcd9 bl 0x20089080`. Arp Mod hook: `push {r4,lr}; ldr r3,=0x2003D325; blx r3`
   (performs the stock DSP post), `mov r0,r4; bl 0x20088f36` (enqueue hold event, state = r4), `pop {r4,pc}`. **r4 = merged new hold state** is the only input. (H)
 - `0x2003D324` = post 32-bit word to the voice DSP: `ldrb [0x20057570]; cbnz → return 0` (DSP comms disabled flag) else `[0x2005B7D0]→vtable[0xC](word)`. (M)
 - **Callers / contexts** (all are Prophet5-AO state code unless noted) (H for listed ones, M for "no others"):
@@ -92,11 +92,11 @@ taskENTER_CRITICAL) or a single-producer/single-consumer design. Timer callbacks
   **0xB → MIDI channel message 0x2003B018**, 0xA → local controllers 0x2003AE22, 8 → `0x2003B65E: movs r0,#3` (ignored, see §7).
   Event layout for sig 0xB (built by `0x2003BD5C`, posted from the MIDI Process Task): `[4]` port/ch, **`[6]` status (channel stripped), `[8]` data1, `[0xA]` data2**, `[0xC]` extra.
   Context: **Prophet5 AO task (prio 2)**; data path: UART/USB → parser timer (Tmr Svc) → stream buffer `0x2003011C` → MIDI Process Task (prio 3) `0x20033D88` → `20033f10: bl 0x2003bd5c` → AO queue. (H)
-- **0x2003B032 (note-off):** `2003b028: cmp r3,#0x80 ; 2003b02e: movs r0,#2 ; ldrh r1,[r1,#8] ; 2003b032: f003 ff53 bl 0x2003eedc` → V5 `f04d fe7b bl 0x20088d2c`. Args r0 = src 2, r1 = note. (H)
-- **0x2003B07A (note-on):** `2003b074: movs r0,#2 ; ldrh r1,[r1,#8] ; ldrh r2,[r5,#0xa] ; 2003b07a: f003 fdef bl 0x2003ec5c` → V5 `f04d fe3f bl 0x20088cfc`. r0 = 2, r1 = note, r2 = velocity. (H)
+- **0x2003B032 (note-off):** `2003b028: cmp r3,#0x80 ; 2003b02e: movs r0,#2 ; ldrh r1,[r1,#8] ; 2003b032: f003 ff53 bl 0x2003eedc` → the Arp Mod `f04d fe7b bl 0x20088d2c`. Args r0 = src 2, r1 = note. (H)
+- **0x2003B07A (note-on):** `2003b074: movs r0,#2 ; ldrh r1,[r1,#8] ; ldrh r2,[r5,#0xa] ; 2003b07a: f003 fdef bl 0x2003ec5c` → the Arp Mod `f04d fe3f bl 0x20088cfc`. r0 = 2, r1 = note, r2 = velocity. (H)
   (The MIDI task already turns 0x90 vel 0 into status 0x80: `20033dd8: cmp r3,r1 ; moveq r1,#0x80`.)
-- **0x2003B294 (CC 123):** CC dispatch `2003b082: ldrh r0,[r1,#8]` … `2003b110: cmp r0,#0x7b ; beq.w 0x2003b294` ; `2003b294: f003 fca6 bl 0x2003ebe4` → V5 `f04d fdf5 bl 0x20088e82`. No arguments. (H)
-  Note: CC 124–127 also call all-notes-off (`2003b13e: cmp r0,#0x7f ; bhi … ; 2003b144: bl 0x2003ebe4`) and V5 does **not** hook that site.
+- **0x2003B294 (CC 123):** CC dispatch `2003b082: ldrh r0,[r1,#8]` … `2003b110: cmp r0,#0x7b ; beq.w 0x2003b294` ; `2003b294: f003 fca6 bl 0x2003ebe4` → the Arp Mod `f04d fdf5 bl 0x20088e82`. No arguments. (H)
+  Note: CC 124–127 also call all-notes-off (`2003b13e: cmp r0,#0x7f ; bhi … ; 2003b144: bl 0x2003ebe4`) and the Arp Mod does **not** hook that site.
 
 ## 4. Sites 0x2003BE9C, 0x2003BECC — keyboard FIFO consumer
 
@@ -106,8 +106,8 @@ taskENTER_CRITICAL) or a single-producer/single-consumer design. Timer callbacks
   `2003beb8: movs r0,#7 ; bl 0x20037b20 ; cmp r0,#2` → global 7 (Local Control; CC122 toggles it 0↔2 at 0x2003B124) == 2 → local path:
   `2003bec2: movs r0,#1 ; ldrb r1,[sp,#6] ; ldrb r2,[sp,#7] ; 2003becc: bl 0x2003ec5c` then `2003bed0…2003bed8: bl 0x2003bce0(note,vel)`;
   else (local off) → direct MIDI send `0x20033F84(ch=global 6, port=0x20037B2C(), note, vel)` / `0x20033F38` for vel 0.
-- **0x2003BE9C:** original `f001 fcc4 bl 0x2003d828` = fifo_count(fifo) — `{[0] buf,[4] wr,[8] rd,[0xC] size}` → `wr>=rd ? wr-rd : size+wr-rd`; V5 `f04c ff59 bl 0x20088d52` (kbd-scan tick hook, same (fifo) → count contract). (H)
-- **0x2003BECC:** original `f002 fec6 bl 0x2003ec5c` = note_on(src=1, note, vel); V5 `f04c fec0 bl 0x20088c50`. (H)
+- **0x2003BE9C:** original `f001 fcc4 bl 0x2003d828` = fifo_count(fifo) — `{[0] buf,[4] wr,[8] rd,[0xC] size}` → `wr>=rd ? wr-rd : size+wr-rd`; the Arp Mod `f04c ff59 bl 0x20088d52` (kbd-scan tick hook, same (fifo) → count contract). (H)
+- **0x2003BECC:** original `f002 fec6 bl 0x2003ec5c` = note_on(src=1, note, vel); the Arp Mod `f04c fec0 bl 0x20088c50`. (H)
 - FIFO producer is the keyboard-scan **ISR** (IRQ 0x4C, §0); velocity from contact timing (`2003649a: cmp r3,#0x89 … rsbhi r4,r3,#0x8a ; movls r4,#0x7f`). (H)
 
 ## 5. Sites 0x2003C244, 0x2003C292, 0x2003C2A6 — panel event-word decoder (buttons and pots)
@@ -118,21 +118,21 @@ taskENTER_CRITICAL) or a single-producer/single-consumer design. Timer callbacks
   Word type = bits 15..13 (`2003c214: ubfx r3,r0,#13,#3 ; subs r3,#1 ; tbb`): **4 = button, 6 = pot low byte, 7 = pot high byte**; others return.
   - Button (0x2003C22A): `ubfx r5,r0,#4,#2` value (1 press/2 release/3 held), `ubfx r6,r0,#6,#7` id; `bl 0x20036114(id,value)` gate (accepts 1..3) →
     **0x2003C244: `f7ff fcf4 bl 0x2003bc30`** = post button event: `QF_newX_(8, NO_MARGIN, sig 4)`; `e[4]=id (u16), e[6]=value (u8)`; `QACTIVE_POST([0x2004D5EC], e, 1)`
-    (`2003bc50: strb r4,[r0,#6] ; strh r5,[r0,#4] ; … ldr r4,[r2,#0xc] ; bx r3`). V5: `f04c fe31 bl 0x20088eaa` (button hook (id,value)). (H)
+    (`2003bc50: strb r4,[r0,#6] ; strh r5,[r0,#4] ; … ldr r4,[r2,#0xc] ; bx r3`). The Arp Mod: `f04c fe31 bl 0x20088eaa` (button hook (id,value)). (H)
   - Pot type 7 (0x2003C2AC): `ubfx r0,r0,#7,#6` id, `and r1,r4,#0x7f` → `0x20036B5C`: `pot_tbl[id].hi = (v<<7)&0xF80` (table 0x20079D84, 16-byte rows). (H)
   - Pot type 6 (0x2003C24A): `ubfx r5,r0,#7,#6` **id**, raw = `(word&0x7f) | pot_tbl[id].hi` (`2003c256…2003c25e`); id 1 gets a centre-detent remap `0x2003C1D0(0x1DD,0x223,raw)`;
     `r6 = 0x20036C70(id, raw)` new scaled value (= raw·(max+1)>>10, max from pot→param table), `r1 = 0x20036B6C(id)` old raw, `r7 = 0x20036C70(id, old)`;
-    **0x2003C292: `f7fa fc5d bl 0x20036b50`** = `pot_tbl[id].raw = r1` (`20036b50: lsls r0,r0,#4 ; ldr r3,=0x20079D84 ; str r1,[r3,r0]`), **args r0 = pot id, r1 = 12-bit raw**. V5: `f04c fe7d bl 0x20088f90`.
+    **0x2003C292: `f7fa fc5d bl 0x20036b50`** = `pot_tbl[id].raw = r1` (`20036b50: lsls r0,r0,#4 ; ldr r3,=0x20079D84 ; str r1,[r3,r0]`), **args r0 = pot id, r1 = 12-bit raw**. The Arp Mod: `f04c fe7d bl 0x20088f90`.
     Then `2003c296: cmp r7,r6 ; bne post ; ldrb [0x2005754A] ; cbz return` → **0x2003C2A6: `f7ff fce1 bl 0x2003bc6c`** = post pot-change event:
-    `QF_newX_(10, NO_MARGIN, sig 6)`; `e[4]=id, e[6]=new scaled, e[8]=old scaled` (`2003bc8e: strh r6,[r0,#4] ; strh r5,[r0,#8] ; strh r4,[r0,#6]`); **args r0 = id, r1 = old, r2 = new**. V5: `f04c feb3 bl 0x20089010`. (H)
+    `QF_newX_(10, NO_MARGIN, sig 6)`; `e[4]=id, e[6]=new scaled, e[8]=old scaled` (`2003bc8e: strh r6,[r0,#4] ; strh r5,[r0,#8] ; strh r4,[r0,#6]`); **args r0 = id, r1 = old, r2 = new**. The Arp Mod: `f04c feb3 bl 0x20089010`. (H)
     The AO consumes sig 6 at 0x2003AC1A (`ldrh r6,[r1,#4]` id → `0x20036C30(id)` program-parameter index → apply/display).
 - **What these two hooks are (answer to the hypotheses): the Glide Rate pot → arp tempo.** (H)
   - Blob `0x20088F90` (replaces the raw store): `mov r4,r1 (raw); mov r5,r0 (id); bl 0x20088c80 (init guard); … 20088fa4: sub.w r3,r5,#0x16 ; clz r3,r3 ; lsrs r3,r3,#5` (= id == **22**),
     `20088fb0: ldrb.w r1,[r0,#0x308]` (0x200891D0+0x308 = **0x200894D8 arp-enabled byte**), `ands r1,r3`; if both: `add.w r0,r0,#0x33c (queue 0x2008950C); uxth r2,r4; movs r1,#4 ; b.w 0x20088aae`
-    → **enqueue V5 event type 4 (tempo) with the raw pot value, and skip the stock store**; else `20088fd8: movw r2,#0x6b51; movt r2,#0x2003 … bx r2` → stock `0x20036B51(id, raw)`.
+    → **enqueue Arp Mod event type 4 (tempo) with the raw pot value, and skip the stock store**; else `20088fd8: movw r2,#0x6b51; movt r2,#0x2003 … bx r2` → stock `0x20036B51(id, raw)`.
   - Blob `0x20089010` (replaces the event post): same `id == 0x16 && arp enabled` test (`20089026…20089040`); if true `2008904a: pop {r4,r5,r6,pc}` → **swallow the pot-change event** (stock never sees the Glide change); else tail-call `0x2003BC6D(id, old, new)` with registers restored (`2008904c…2008905e`).
   - Pot id 22 → program parameter **13** via the stock pot→parameter table at 0x2004D190 (`pot 22 -> 13`); parameter 13's descriptor (0x2004C478+13·12) = max 127, default 0.
-    V5's guide (fixtures/Prophet5_Arp_V5_Guide.pdf p.1): "With the arp enabled and internal clock selected, turn **Glide Rate** for 40-300 BPM… Glide Rate returns to normal when the arp is off" — exactly the swallow-when-enabled behaviour above. Identity "pot 22 = Glide Rate" rests on the V5 guide + this behaviour (H); the mapping 13 = Glide Rate in the Rev4 parameter numbering is from memory of the manual (M).
+    the Arp Mod's guide (p. 1): "With the arp enabled and internal clock selected, turn **Glide Rate** for 40-300 BPM… Glide Rate returns to normal when the arp is off" — exactly the swallow-when-enabled behaviour above. Identity "pot 22 = Glide Rate" rests on the Arp Mod guide + this behaviour (H); the mapping 13 = Glide Rate in the Rev4 parameter numbering is from memory of the manual (M).
   - Not Globals entry/exit, not program change: no code in either entry touches state or program data. (H)
 
 ## 6. note_on / note_off / all-notes-off — signatures and callers
@@ -145,7 +145,7 @@ taskENTER_CRITICAL) or a single-producer/single-consumer design. Timer callbacks
 - **`0x2003EEDC` = `b.w 0x2003e95c`, a thunk; real note_off = `0x2003E95C(r0 = src, r1 = note)`** (`2003e960: mov r10,r0 ; mov r0,r1 ; bl 0x2003c024` clears the per-key state, then per layer finds/releases voices; src only re-passed on re-trigger `2003ea8c: mov r1,r10 ; bl 0x2003e828`).
   Callers: `2003b032` src 2 (MIDI, AO); `2003a248` src 2 (A440 release, AO); implicit via note_on vel 0. Hold-off release `0x2003EEE0` re-triggers with src **0** (`2003ef40: movs r1,#0`). (H)
 - **`0x2003EBE4` = all_notes_off()**: posts voice-off for voices 0x81A..0x823 (`movw r4,#0x81a … movw r7,#0x824 ; lsls r0,r4,#16 ; bl 0x2003d324`), clears per-note state for notes 0..127 (`2003ec18: bl 0x2003c024`), zeroes `[0x200600A4]`,`[+4]`.
-  Other callers (none hooked by V5): 0x20034664, 0x20037BE0 (set-global idx 6), 0x20039786 (boot state, button 0x22), 0x2003A1A2, 0x2003A58C, 0x2003A7DA, 0x2003A9D6, 0x2003AB58, **0x2003B144 (CC 124–127)**, 0x2003CD12, 0x2003D146 (program load), 0x2003EC50 (voice-count change wrapper 0x2003EC38). (H)
+  Other callers (none hooked by the Arp Mod): 0x20034664, 0x20037BE0 (set-global idx 6), 0x20039786 (boot state, button 0x22), 0x2003A1A2, 0x2003A58C, 0x2003A7DA, 0x2003A9D6, 0x2003AB58, **0x2003B144 (CC 124–127)**, 0x2003CD12, 0x2003D146 (program load), 0x2003EC50 (voice-count change wrapper 0x2003EC38). (H)
 
 ## 7. Side finding: `0x2003BCE0` (the planned octave-shift "MIDI out" hook at 0x2003BED8) is not a MIDI send
 
@@ -154,7 +154,7 @@ Every Prophet5 state maps sig 8 to a no-op: main `0x2003B65E: movs r0,#3`; 0x200
 
 ## 8. Per-site summary
 
-| site | function (start) | stock instr → V5 | regs at call | task context |
+| site | function (start) | stock instr → the Arp Mod | regs at call | task context |
 |---|---|---|---|---|
 | 0x200343D8/E0/E4/E8 | MIDI byte parser 0x200342EC (timer cb) | words 0x20034343 → 0x20089095 (F8/FA/FB/FC slots) | r0 = status−0xF0, r4 = port | **Tmr Svc (prio 6)** |
 | 0x200396CA | hold_set 0x20039688 | `bl 0x2003d324` → `bl 0x20089080` | r0 = DSP word 0x080D0000|state, **r4 = new hold** | **Prophet5 AO (prio 2)** |
@@ -167,4 +167,4 @@ Every Prophet5 state maps sig 8 to a no-op: main `0x2003B65E: movs r0,#3`; 0x200
 | 0x2003C292 | panel decoder 0x2003C204 | `bl 0x20036b50` → `bl 0x20088f90` | r0=pot id, r1=raw value | Tmr Svc |
 | 0x2003C2A6 | panel decoder 0x2003C204 | `bl 0x2003bc6c` → `bl 0x20089010` | r0=pot id, r1=old, r2=new | Tmr Svc |
 
-Open/unverified: FreeRTOS `configUSE_PREEMPTION` not read from the tick ISR (assumed 1 — the default, and V5 itself uses `cpsid/cpsie` around its queue); exact tick rate taken from NOTES (1 kHz); port index meaning (0 DIN / 1 USB) inferred from the two reader functions, not from hardware code.
+Open/unverified: FreeRTOS `configUSE_PREEMPTION` not read from the tick ISR (assumed 1 — the default, and the Arp Mod itself uses `cpsid/cpsie` around its queue); exact tick rate taken from NOTES (1 kHz); port index meaning (0 DIN / 1 USB) inferred from the two reader functions, not from hardware code.
