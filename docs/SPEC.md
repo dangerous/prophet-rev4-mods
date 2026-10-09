@@ -280,8 +280,18 @@ this engine deliberately differs it is marked **(change)** with the reason.
   (value 3) are ignored. A combo button whose release arrives after A440 has been released
   is still consumed **(change: the Arp Mod leaked the orphan release to stock)**.
 - **A440 + Glide Rate** sets the tempo `[HW: verified 2026-10-07, Prophet-10 Rev4]`: while
-  A440 is held, turning Glide Rate sets the BPM of the internal clock, 40–300 (`BPM = 40 + round(260 · raw / 1023)`, raw
-  0–1023), whether the arp is on or off. **Under external clock (`Syn`) it does nothing to
+  A440 is held, turning Glide Rate sets the BPM of the internal clock, 40–300 (`BPM = 40 +
+  round(260 · raw / 1023)`, raw 0–1023), whether the arp is on or off. **The knob picks the tempo up rather than jumping to it** `[HW: verified 2026-10-09,
+  Prophet-10 Rev4]`: at the start of each A440 hold the
+  knob is inert until the tempo its position maps to reaches or crosses the current BPM;
+  from that movement on it sets the BPM for the rest of the hold. A tempo tap during the
+  hold re-arms the pickup (the knob is no longer where the tempo is). While inert, a turn
+  still shows the current BPM — the value to reach — and counts as using the A440 hold, so
+  the release does not toggle. **(change 2026-10-09: until then the first movement jumped to
+  the knob's position.)** Realisation: the UI remembers the glide pot's last raw value
+  whether or not A440 is held, so the first movement of a hold is judged against where the
+  knob came from; "crosses" means the previous and the new mapped tempo lie on opposite
+  sides of the BPM (the panel skips values on a fast turn). **Under external clock (`Syn`) it does nothing to
   the BPM** `[HW: verified 2026-10-07, Prophet-10 Rev4]` (the tempo follows the clock, "Clock"): the display shows
   `Syn` as the hint instead. The display shows the BPM while
   the pot turns (a display message like any other). Turning the pot counts as using the A440

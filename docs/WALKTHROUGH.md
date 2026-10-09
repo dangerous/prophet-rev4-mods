@@ -25,8 +25,10 @@ isn't already. "A440 + X" always means: hold A440 down, press X, let go of both.
 
 ## 2. Tempo and note values
 
-6. Arp on, chord held. **Hold A440 and turn Glide Rate**: the display follows the tempo,
-   40–300 BPM. (Glide Rate on its own is still glide, even with the arp running.)
+6. Arp on, chord held. **Hold A440 and turn Glide Rate**: at first nothing happens — the
+   display shows `120`, the tempo to reach — then as the knob passes 120 the tempo follows
+   it, 40–300 BPM. The knob picks the tempo up like that at every A440 hold, so it never
+   lurches. (Glide Rate on its own is still glide, even with the arp running.)
 7. **Hold A440 and tap Velocity** in time: `tAP` on the first tap, then the tempo you tapped
    from the second on. Four taps settle it.
 8. **A440 + Program 8**: `8S` — eighth-note swing. Again: `8t` (triplets), `16`, `16S`,
@@ -53,12 +55,12 @@ isn't already. "A440 + X" always means: hold A440 down, press X, let go of both.
     `r 1`, `r 2`, `r 3`. Timing doesn't matter — every note is one step.
 15. **Play a chord** (C, E and G together). `r 4` — notes held together are one step.
 16. **Press HOLD with no key down**: `rSt` flashes, then `r 5` — a rest.
-17. **Hold a D and press HOLD**: `tiE` flashes, `r 6`. Press HOLD again while still holding D:
-    `tiE`, `r 7`. Let go of D. That step is now three steps long. (The sustain pedal does the
-    same as HOLD here.)
+17. **Hold a D**: `r 6`. **Press HOLD** while still holding it: `tiE` flashes, `r 7`. Press
+    HOLD again: `tiE`, `r 8`. Let go of D. That step is now three steps long — the note and
+    two ties. (The sustain pedal does the same as HOLD here.)
 18. Made a mistake? **Press Group** (A440 not held): the last thing you entered is undone — a
-    tie first (`r 6`), then another (`r 5`), then the D itself (`r 4`). Put it back the same
-    way as before.
+    tie first (`r 7`), then the other (`r 6`), then the D itself (`r 5`). Put it back the
+    same way as before (`r 8`).
 19. **Tap A440.** The recording is finished; the sequencer is selected and waiting.
     (A440 + Program 6 while recording would have cleared it and let you start over; tapping
     A440 without having played anything keeps your previous sequence.)

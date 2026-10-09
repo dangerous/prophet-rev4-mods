@@ -44,7 +44,12 @@ Manual verification on the instrument. Record results against the spec markers i
 - [ ] A440 + Bank/Group: `dn` (G E C), `Ud` (C E G E C…), `rnd`, `ASS`, `UP`; Group goes
       the other way (`UP` → `ASS` → `rnd`). A440 + Program 2:
       `o 2` → C E G C' E' G'. Hold C3 + D4 at `o 2`: C3 D4 C4 D5 (per pass).
-- [ ] Hold A440 and turn Glide Rate: BPM shown while turning, 40–300, the tempo follows,
+- [ ] Hold A440 and turn Glide Rate from a position far from the tempo: the display shows
+      the current BPM and the tempo does not move until the knob passes it; from there the
+      tempo follows the knob, 40–300. Release A440, move the knob (glide), hold A440 and turn
+      again: inert again until it passes the tempo. Tap a tempo while holding A440, then turn:
+      inert until the knob passes the tapped tempo `[2.1.0]`.
+- [ ] (Then as before) BPM shown while turning, 40–300, the tempo follows,
       patch number back after 1.5 s; releasing A440 does **not** toggle the arp. Also with
       the arp off (hold A440, turn, release: still off; tap on: the new BPM). Under `Syn`:
       hold A440 and turn Glide Rate → `Syn`, the tempo is unchanged, no toggle on release.

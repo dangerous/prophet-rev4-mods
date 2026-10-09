@@ -4,7 +4,7 @@ Versions of the patch as published through the patcher — the `VERSION` file, t
 name (`prophet5_main_2.1.0_patched_<version>.syx`) and `site/version.json`. Each entry names
 the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
 
-## 2.1.0 — 2026-10-08
+## 2.2.0 — 2026-10-09
 
 ### Added
 - **Flash diagnostic (read-only)**: A440 + Sync (Osc A Sync) reads the serial flash to
@@ -13,6 +13,15 @@ the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
   8 MB part, 20 s on 16 MB; everything keeps working), then three results of 1.5 s each:
   `F 8` / `F16` / `F -` (size), `1 E` / `1 U` (area 1 empty / used), `2 E` / `2 U` (area 2).
   Nothing is written; the image test asserts the engine holds no flash-writing entry.
+
+## 2.1.0 — 2026-10-09
+
+### Changed
+- **The tempo knob picks the tempo up instead of jumping to it.** With A440 held, Glide Rate
+  stays inert until the tempo its position maps to reaches or crosses the current BPM; from
+  there it sets the tempo for the rest of the hold. Every new A440 hold (and a tempo tap
+  during one) arms the pickup again. While inert the display shows the BPM you need to
+  reach. No more tempo lurches when the knob happens to sit somewhere else.
 
 ## 2.0.2 — 2026-10-08
 

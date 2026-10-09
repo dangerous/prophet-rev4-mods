@@ -97,6 +97,8 @@ behavioural source of truth; this file is the engineering context around it.
   **HOLD sustains the sequence's chords**: the voice engine's own hold flag decides, the
   per-note "off" answer at the hold query is inert. David: good enough to publish as is.
   The other run-through steps passed by exception.
+- 2026-10-09, **2.1.0** (`tempo-pickup`, image `dc8eb3ea`): the tempo knob picks the tempo up
+  instead of jumping; flashed and confirmed on the panel, published.
 - 2026-10-08, **2.0.2** (`seq-review-fixes`): four review findings in `seq.c` — arming off the
   grid, Continue resetting the arpeggio, a stale pending note value, chord-clock drift —
   each with a regression test; unflashed (MIDI-sync paths and a 137 BPM drift that the panel
@@ -200,6 +202,11 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
 - HOLD while the arp is on: hook the hold query in `note_off`; withhold the voice-engine
   hold message while *suspended* (arp enabled or seq record mode, `arpui_suspended`);
   re-post it on transitions of that state (`vhold.c`).
+- Tempo knob pickup (2.1.0): `arpui_pot_store` records the glide pot's raw value on every
+  report (`glide_raw`, 0xFFFF until the first), and while A440 is held sets the BPM only
+  once `tempo_caught` — the mapped tempo of the previous and the new raw straddle (or hit)
+  the BPM. `tempo_caught` clears at each A440 press and on a tempo tap. The first report
+  after power-on is judged on its own (no "from").
 - Tap tempo (A440 + Velocity, id 11; Unison until 2026-10-08): `arpui_t.ms` is a
   free-running 1 ms counter bumped in `arpui_tick`; the UI keeps the last tap time and up to
   4 intervals (uint16, ≤ 2000 ms); BPM = round(60000·n / Σ). A gap > 2000 ms starts a new

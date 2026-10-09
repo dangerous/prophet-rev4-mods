@@ -5,17 +5,15 @@
 An arpeggiator and a polyphonic step sequencer for the Sequential **Prophet‑5 / Prophet‑10
 Rev4**, added to Sequential's own Main OS 2.1.0 as a firmware patch. You apply the patch to
 your copy of the official OS in your browser and install the result over USB like any OS
-update. Everything is controlled from the front panel — no menus, no computer at the gig.
+update. Everything is controlled from the front panel.
 
 **Built on someone else's idea.** The notion of patching the Rev4's firmware, and the proof
 that it works, belong to another person: an arpeggiator mod that circulated privately
 showed the way and set the control conventions this project keeps (A440 as the arp button,
 Bank/Group for modes, Glide Rate for tempo). This project began as additions chained in
-front of that mod and grew into its own engine with a good deal more — the polyphonic
-sequencer with rests and ties, the keyboard octave shift, tap tempo, patch memory, a kill
-switch — and with design decisions of my own wherever I thought the behaviour should
-differ (the spec marks each one), which is why it is published in its own right. You are
-welcome to fork it and make your own.
+front of that mod and makes several additions — the polyphonic
+sequencer with rests and ties, the keyboard octave shift, tap tempo, patch memory, tempo divisions,
+and more.
 
 New here? The [walkthrough](docs/WALKTHROUGH.md) takes you through every feature at the
 instrument, step by step; the manual below is the reference.
@@ -108,7 +106,7 @@ the program number comes back.
 | A440 + **Program 1–4** | 1–4 octaves | `o 1` … `o 4` |
 | A440 + **Program 5** | Clock: internal / MIDI sync | `int` / `Syn` |
 | A440 + **Program 7** / **8** | The arp's note value longer (−) / shorter (+) | `4b 2b 1 2 4 8d 8 8S 8t 16 16S 16t 32` |
-| A440 + **Glide Rate** knob | Tempo 40–300 BPM | the BPM |
+| A440 + **Glide Rate** knob | Tempo 40–300 BPM (picks up the current tempo first, no jump) | the BPM |
 | A440 + **Velocity** (tap repeatedly) | Tap tempo | `tAP`, then the BPM |
 | A440 + **HOLD** (generator stopped) | Sequential's A440 tuning tone on / off | A440 LED, as stock |
 | **HOLD** (or pedal in `HLd` mode) | Latch | — |
@@ -124,7 +122,9 @@ the program number comes back.
   steps of 4 bars is 256 bars), then the Prophet‑6's ten in its order: half, quarter,
   dotted 8th, 8th, 8th swing, 8th triplet, 16th, 16th swing, 16th triplet, 32nd. The swing
   values play pairs of steps long–short (2 : 1).
-- **Tempo.** The knob and the taps set the internal clock. Under MIDI sync the arp follows
+- **Tempo.** The knob and the taps set the internal clock. The knob **picks up** rather than
+  jumps: each time you hold A440 it does nothing until you turn it past the tempo you're
+  at (the display shows that tempo meanwhile), then it follows your hand. Under MIDI sync the arp follows
   the incoming clock and transport (Start/Stop/Continue, 24 ppqn, always on the DAW's grid);
   the tempo it measures from the clock is what the internal clock resumes at when you switch
   back to `int`, and the two tempo gestures just show `Syn`.
