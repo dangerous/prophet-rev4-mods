@@ -4,7 +4,7 @@ Versions of the patch as published through the patcher — the `VERSION` file, t
 name (`prophet5_main_2.1.0_patched_<version>.syx`) and `site/version.json`. Each entry names
 the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
 
-## Unreleased
+## 2.3.0 — 2026-10-10
 
 ### Added
 - **Gate length.** A440 + Amp Decay sets how long each generated note sounds, 5–100 % of the
