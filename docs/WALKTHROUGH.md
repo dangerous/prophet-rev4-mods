@@ -34,6 +34,8 @@ isn't already. "A440 + X" always means: hold A440 down, press X, let go of both.
 8. **A440 + Program 8**: `8S` — eighth-note swing. Again: `8t` (triplets), `16`, `16S`,
    `16t`, `32`. **Program 7** goes the other way: `8`, `8d` (dotted), `4`, `2`, then the long
    ones: `1` (a whole note per step), `2b` (two bars), `4b` (four bars). Set it back to `8`.
+   **Hold A440 and turn Amp Decay**: the gate jumps to the knob and follows it — `5` is a
+   click, `100` legato-length notes that end as the next begins. Set it back to `50`.
 
 ## 3. HOLD
 

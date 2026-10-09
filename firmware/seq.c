@@ -16,6 +16,8 @@ void seq_init(seq_t *q)
     q->beats_den = 2;
     q->dir = 1;
     q->loss = SEQ_LOSS_TICKS;
+    q->gate = ARP_GATE_DEFAULT;
+    q->gate_cur = ARP_GATE_DEFAULT;
 }
 
 int seq_running(const seq_t *q)
@@ -30,6 +32,7 @@ static void gen_release(seq_t *q)                          /* the Chords notes: 
         plat_voice_off(ARP_SRC_LOCAL, q->snd[i]);
     q->snd_n = 0;
     q->gate_open = 0;
+    q->gate_ms = 0;
 }
 
 static void silence(seq_t *q, arp_t *a)                    /* everything the sequencer generates */
@@ -99,9 +102,11 @@ static void sound_event(seq_t *q, arp_t *a)
             q->snd[q->snd_n++] = notes[k];
         }
         q->gate_open = (uint8_t)(n > 0);
+        q->gate_cur = q->gate;                             /* a change waits for the next event */
     } else {
         arp_set_beats(a, q->beats_num, q->beats_den);      /* the note rate */
         arp_set_swing(a, q->swing);
+        arp_set_gate(a, q->gate);                          /* and the Seq's gate */
         arp_chord_set(a, notes, vels, n);                  /* its pattern afresh, the first note now */
     }
 }
@@ -184,8 +189,10 @@ void seq_clear(seq_t *q, arp_t *a)
     seq_zero(q->rec_down, sizeof q->rec_down);
 }
 
-/* Internal clock: every tick adds 3*bpm*den; a step at 180000*num, the gate at half; with
- * swing the pair's long step is due at 120000*num and the short one at 60000*num. */
+/* Internal clock: every tick adds 3*bpm*den; a step at 180000*num, the gate at (g + 1) / 20
+ * of the event's last step; with swing the pair's long step is due at 120000*num and the
+ * short one at 60000*num. Under MIDI clock the gate is a ms countdown from the last step's
+ * clock, as the arp's. */
 static uint32_t seq_step_units(const seq_t *q)
 {
     uint32_t u = 60000u * q->beats_num;
@@ -215,6 +222,8 @@ int seq_tick(seq_t *q, arp_t *a)
     uint32_t units;
     int set = 0;
     if (a->ext) {
+        if (q->gate_ms && --q->gate_ms == 0 && q->gate_open)
+            gen_release(q);                                /* the gate, in ms from the last step's clock */
         if (q->armed && q->loss < SEQ_LOSS_TICKS && ++q->loss == SEQ_LOSS_TICKS) {
             silence(q, a);                                 /* clock lost: silence; clocks returning start at event 1 */
             q->playing = 0;
@@ -227,8 +236,9 @@ int seq_tick(seq_t *q, arp_t *a)
         return 0;
     units = seq_step_units(q);
     q->acc += 3u * a->bpm * q->beats_den;
-    if (q->style == SEQ_CHORDS && q->gate_open && q->remain == 1 && q->acc >= units / 2)
-        gen_release(q);                                    /* half-way through the event's last step */
+    if (q->style == SEQ_CHORDS && q->gate_open && q->remain == 1 && q->gate_cur < ARP_GATES - 1
+        && q->acc * 20u >= units * (q->gate_cur + 1u))
+        gen_release(q);                                    /* the gate of the event's last step; 100 %: the boundary */
     if (q->acc >= units) {
         q->acc -= units;
         if (q->swing)
@@ -252,9 +262,20 @@ int seq_tick(seq_t *q, arp_t *a)
     return set;
 }
 
+/* Chords under MIDI clock: a step of len clocks has begun; when it is the event's last, the
+ * gate's countdown starts (none at 100 %: the next event releases it) */
+static void arm_gate(seq_t *q, const arp_t *a, unsigned len)
+{
+    unsigned ms;
+    if (!q->gate_open || q->remain != 1 || q->gate_cur >= ARP_GATES - 1)
+        return;
+    ms = (q->gate_cur + 1u) * len * 125u / a->bpm;
+    q->gate_ms = (uint16_t)(ms ? ms : 1);
+}
+
 /* an accepted clock (the arp counts it after us, so a->clocks is this clock's index on the
  * grid counted from Start — kept while the sequencer is disarmed): a step (or swing pair)
- * every sc clocks, the gate half-way through the event's last step */
+ * every sc clocks, the gate in the event's last step */
 static void on_clock(seq_t *q, arp_t *a)
 {
     unsigned sc = seq_step_clocks(q), lng = q->swing ? sc / 3 * 2 : sc, m;
@@ -266,14 +287,17 @@ static void on_clock(seq_t *q, arp_t *a)
         if (m == 0) {
             silence(q, a);
             begin(q, a);
+            if (q->style == SEQ_CHORDS)
+                arm_gate(q, a, lng);
         }
         return;
     }
     if (q->style == SEQ_CHORDS) {
-        if ((m == 0 || m == lng) && --q->remain == 0)
-            next_event(q, a);                              /* else an inner boundary: no retrigger */
-        else if (q->gate_open && q->remain == 1 && ((m < lng && m == lng / 2) || (m > lng && m - lng == (sc - lng) / 2)))
-            gen_release(q);
+        if (m == 0 || m == lng) {
+            if (--q->remain == 0)
+                next_event(q, a);                          /* else an inner boundary: no retrigger */
+            arm_gate(q, a, m == 0 ? lng : sc - lng);
+        }
     } else if (++q->chord_clk >= chord_target_clocks(q)) {
         next_event(q, a);                                  /* on the beat grid, whatever the note value */
     }
@@ -494,4 +518,10 @@ int seq_rec_back(seq_t *q)
     q->total--;
     seq_zero(q->rec_down, sizeof q->rec_down);                 /* the open chord is closed */
     return 1;
+}
+
+void seq_set_gate(seq_t *q, int g)
+{
+    if (g >= 0 && g < ARP_GATES)
+        q->gate = (uint8_t)g;
 }

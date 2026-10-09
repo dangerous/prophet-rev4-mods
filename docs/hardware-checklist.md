@@ -96,8 +96,11 @@ Manual verification on the instrument. Record results against the spec markers i
       `Ud`.
 - [ ] Save a program in `ASS` (arp on, e.g. `8t`, `o 3`). Load another program, reload it:
       `ASS`, `8t`, `o 3`, on. Then `UP` again and re-save: reloads as `UP`.
-- [ ] Programs saved with arp settings by an earlier build (only the 2026-10-07 test saves)
-      need re-saving: they load with other settings.
+- [ ] Programs saved with arp settings by an earlier build (test saves only) need
+      re-saving: the 93/94 layout changed with the gate (2026-10-10); they load with other
+      settings or as no arp data.
+- [ ] Gate: save a program at gate `15` and another at `100`; load each: the gate comes back.
+      A factory program leaves the gate as it was.
 - [ ] MIDI program change from the DAW to the saved program: same as the panel.
 - [ ] Dump the program over SysEx and load it back: settings survive.
 - [ ] BPM, clock source and keyboard shift are **not** changed by loading.
@@ -170,7 +173,7 @@ Transport and generators:
 
 - [ ] With a recording, tap A440: the sequence plays from step 1 at the tempo (BPM shown,
       LED lit): single notes, the chord as a chord, the rest silent, the tied step held for
-      three steps and released half-way through its last one. Tap A440: `OFF`, silence.
+      three steps and released at the gate of its last one (half-way at the default). Tap A440: `OFF`, silence.
 - [ ] While it plays: play the keyboard — every key sounds polyphonically with its velocity
       and nothing changes in the sequence; HOLD / pedal sustain *your* notes only (rule 4a
       above); starting or stopping the sequence does not cut your notes.
@@ -237,6 +240,26 @@ Transport and generators:
       mid-run re-aligns at the next multiple counted from Start.
 - [ ] Seq: record a sequence, hold a key, change the value: the sequence follows.
 
+## Gate (spec "Gate")
+
+- [ ] Arp on, internal clock, `8`, hold a chord. Hold A440 and turn **Amp Decay** from far
+      away from the middle: the gate jumps to the knob's position at once and follows it,
+      `5` … `100` in steps of 5. Releasing A440 does **not** toggle the arp. (This also confirms Amp Decay's pot id, 0x11 — if another knob responds, or none
+      does, record which.)
+- [ ] `5`: short clicks; `50`: as before; `100`: each note lasts until the next starts (the
+      envelopes still retrigger). Amp Decay on its own is the amp decay, also with the arp
+      running, and the patch's decay was not changed by the A440 turns.
+- [ ] Swing (`8S`) at `25`: both the long and the short step are shortened in proportion.
+- [ ] `Syn` with a DAW at 120: at `25` the 16ths are short clicks; at `100` legato. Change
+      the DAW to 90: the gate follows the measured tempo. At `32` and `50` the notes are
+      audibly half the step (no longer one clock of three).
+- [ ] Seq: select `SEq`, A440 + Amp Decay: the knob sets the **Seq's** gate (the Arp's
+      is left as it was). Chords style at `15`: chords become short stabs, a tied chord
+      is held through and cut short only in its last step. Arpeggiated style: the arp notes
+      inside each chord use the Seq's gate, and a change during a long chord applies from the
+      next arp note. Select `ArP` again: the Arp's gate is back.
+- [ ] Record a user program with the Seq's gate at `25`; change it, reload: `25` again.
+
 ## Keyboard octave shift (spec "Keyboard octave shift")
 
 - [ ] Tap the Osc B **Lo Freq** button: Lo Freq still toggles, LED changing on the *release*.
@@ -264,11 +287,16 @@ Transport and generators:
       about a quarter of a second and return to `r N` instead of the patch number.
 - [ ] A new message within the 1.5 s restarts the timing (e.g. Bank, Bank, Bank).
 
-## Button id readout (spec "Button id readout")
+## Button and knob id readout (spec "Button and knob id readout")
 
 - [ ] Hold A440, press a button the arp doesn't use (Osc B Keyboard = 36;
       GLOBALS = 13 must still open the menu — it abandons the hold).
 - [ ] Release A440: the arp does not toggle.
+- [ ] Hold A440 and turn knobs one at a time: each shows `P` and its id, and its sound does
+      not change while A440 is held. Note the ids (the stock pot table suggests Volume 0,
+      Master Tune 1, cutoff 9, amp ADSR 16–19 with **Amp Decay 17**, Glide Rate 22) —
+      **Amp Decay must not show a readout** (it sets the gate); if it does, record its id.
+      Release A440: no toggle, and each knob works normally again.
 
 ## Flash diagnostic (spec "Flash diagnostic") — read-only
 

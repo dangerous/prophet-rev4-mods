@@ -3,13 +3,13 @@
  * stock's verified writer after stock has stored the program, read back on a program load.
  * Portable: flash access through platform.h (plat_flash_read / plat_flash_write). The block:
  *
- *   0  'P' 'S' 'Q' '1'            magic
+ *   0  'P' 'S' 'Q' '2'            magic (a 'PSQ1' block, before the gate, is no valid block)
  *   4  length (u16 LE)            bytes in the block, header included
  *   6  flags                      bit 0 = a sequence follows ("no sequence" otherwise)
  *   7  slot                       0..199: the user program the block belongs to
  *   8  checksum (u16 LE)          sum of the program's 99 stored parameters
- *  10  rate code, style, order, chord beats, transpose (int8), generator selection
- *  16  events: duration (u16 LE), count, count x (note, velocity)
+ *  10  rate code, style, order, chord beats, transpose (int8), generator selection, gate
+ *  17  events: duration (u16 LE), count, count x (note, velocity)
  *
  * An erased block (0xFF) or anything that does not match the program just loaded is "no
  * valid block": the live sequence is left alone. */
@@ -26,7 +26,7 @@
 #define SEQMEM_END (SEQMEM_BASE + SEQMEM_SLOTS * SEQMEM_BLOCK)   /* 0xC80000, exclusive */
 #define SEQMEM_SECTOR 4096u              /* the verified writer's unit */
 #define SEQMEM_PIECE 1024u               /* read scratch */
-#define SEQMEM_HEADER 16u
+#define SEQMEM_HEADER 17u
 #define SEQMEM_PARAMS 99                 /* stored program parameters summed into the checksum */
 
 enum { SEQMEM_NONE = 0, SEQMEM_LOADED = 1 };
@@ -36,6 +36,7 @@ typedef struct {
     uint8_t style, order, chord_beats;
     int8_t  transpose;
     uint8_t gen;                      /* generator selection: 0 ArP, 1 SEq */
+    uint8_t gate;                     /* the Seq's gate, index 0..ARP_GATES-1 */
 } seqmem_settings_t;
 
 /* The slot of a program location: 0..199 for a user program, -1 for factory or out of range. */

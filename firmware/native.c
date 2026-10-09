@@ -338,7 +338,7 @@ void hook_button(int id, int value)
 void hook_pot_store(int pot, int raw)
 {
     ensure_init();
-    if (!killed() && arpui_pot_store(UI, ARP, pot, raw))
+    if (!killed() && arpui_pot_store(UI, ARP, SEQ, pot, raw))
         return;
     SFN(NI_POT_STORE, button_fn)(pot, raw);
 }
@@ -346,7 +346,7 @@ void hook_pot_store(int pot, int raw)
 void hook_pot_change(int pot, int old, int new_value)
 {
     ensure_init();
-    if (!killed() && arpui_pot_change(UI, ARP, pot))
+    if (!killed() && arpui_pot_change(UI, ARP, SEQ, pot))
         return;
     SFN(NI_POT_CHANGE, pot3_fn)(pot, old, new_value);
 }

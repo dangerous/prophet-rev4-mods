@@ -37,9 +37,9 @@ instrument, step by step; the manual below is the reference.
   per chord.
 - **Keyboard octave shift** — ±2 octaves from the panel, applied to the keys, the arp and
   MIDI Out.
-- **Patch memory** — the arp's on/off, mode, octaves and note value are saved with each
+- **Patch memory** — the arp's on/off, mode, octaves, note value and gate are saved with each
   program, and so is the **sequence**: a Record on a user program stores the recording with
-  its style, order, note value, chord length, transposition and generator selection in a
+  its style, order, note value, gate, chord length, transposition and generator selection in a
   block of the synth's own flash, and loading the program brings it all back — on the
   instrument, no computer involved. Changing programs never stops a running sequence; a
   program with a saved sequence takes over at the next step.
@@ -111,6 +111,7 @@ the program number comes back.
 | A440 + **Program 5** | Clock: internal / MIDI sync | `int` / `Syn` |
 | A440 + **Program 7** / **8** | The arp's note value longer (−) / shorter (+) | `4b 2b 1 2 4 8d 8 8S 8t 16 16S 16t 32` |
 | A440 + **Glide Rate** knob | Tempo 40–300 BPM (picks up the current tempo first, no jump) | the BPM |
+| A440 + **Amp Decay** knob | Gate: how long each note sounds, 5–100 % of the step (jumps to the knob) | `5` … `100` |
 | A440 + **Velocity** (tap repeatedly) | Tap tempo | `tAP`, then the BPM |
 | A440 + **HOLD** (generator stopped) | Sequential's A440 tuning tone on / off | A440 LED, as stock |
 | **HOLD** (or pedal in `HLd` mode) | Latch | — |
@@ -139,7 +140,13 @@ the program number comes back.
   hold back as you left it, switching it on brings the arp's latch back, and the HOLD LED
   always shows the one in use. The sustain pedal is momentary and belongs to whichever is
   active.
-- Glide Rate on its own is always the normal glide, even with the arp running. Keys played
+- **Gate** sets how long each step's note sounds: 5–100 % of the step in 5 % steps, 50 % by
+  default (the fixed gate of earlier builds). At 100 % a note lasts until the next one starts.
+  The arp and the sequencer each have their own; the knob sets the selected one's, and the
+  arp's is saved with the program. Under MIDI sync it is timed from the tempo the arp
+  measures, so short gates stay short on long clock steps.
+- Glide Rate and Amp Decay on their own are always the normal glide and amp decay, even with
+  the arp running. Keys played
   via MIDI In arpeggiate like local keys; MIDI Out carries the keys you play, not the arp.
 - **Tuning tone.** With the selected generator stopped, hold A440 and press HOLD: the stock
   A440 reference tone toggles, lighting the A440 LED as it does in stock. Starting a
@@ -174,13 +181,14 @@ Playing it, with the sequencer selected (A440 + Keyboard shows `SEq`):
 | A440 + **a key** | Transpose: middle C = as recorded, any other key = that many semitones | the offset |
 | A440 + **Bank** / **Group** | Order (chords style): forward / backward / pendulum | `For` `bAC` `Pnd` |
 | A440 + **Program 7** / **8** | The sequencer's note value longer (−) / shorter (+) | as the arp's |
+| A440 + **Amp Decay** knob | The sequencer's gate (both styles) | `5` … `100` |
 | A440 + **Unison** | Style: chords / arpeggiated | `CHd` / `ArP` |
 | A440 + **Aftertouch** | Chord length for `ArP` (quarter → half → whole → 2 bars → 4 bars) | `4 2 1 2b 4b` |
 | A440 + **Program 6** | Clear the sequence (the arp is selected again) | `---` |
 
 - **Chords** (`CHd`): one step per sequencer step at the sequencer's note value — a chord
-  sounds as recorded and is released half‑way through its last step, ties hold it for their
-  length, rests are silence. The arp's direction and octaves don't apply here.
+  sounds as recorded and is released at the sequencer's gate of its last step (half‑way by
+  default), ties hold it for their length, rests are silence. The arp's direction and octaves don't apply here.
 - **Arpeggiated** (`ArP`): the sequence becomes a chord progression. Each step is held for
   the **chord length** while the arpeggiator plays its notes at the sequencer's note value,
   in the arp's direction mode and octaves (A440 + Bank / Group and Program 1–4 while in this
@@ -203,7 +211,7 @@ Playing it, with the sequencer selected (A440 + Keyboard shows `SEq`):
   one stopped; what you were holding on the keyboard keeps sounding. The HOLD button's
   latch is handed over as described under HOLD above.
 - Limits: 512 timing steps, 10 notes per chord. The sequence and its settings (style, order,
-  note value, chord length, transposition) are saved with user programs — see Patch memory.
+  note value, gate, chord length, transposition) are saved with user programs — see Patch memory.
 
 ### Keyboard octave shift
 
@@ -258,8 +266,10 @@ Tempo, clock source and keyboard shift remain global and are not saved.
   for that session — every hook passes straight through to the stock OS.
 - While the **Globals** menu is open every button is passed to the stock OS untouched.
   (Stock ignores A440 while its menu is open, which is why the tone has its own combo.)
-- **Button id readout.** Hold A440 and press a button the patch doesn't use: its panel id
-  is shown. Handy if you want to add controls of your own.
+- **Button and knob id readout.** Hold A440 and press a button the patch doesn't use: its
+  panel id is shown. Turn any knob other than Glide Rate and Amp Decay: `P` and the knob's
+  id (`P 9`, `P16` …), and the knob's own parameter doesn't move while A440 is held. Handy if
+  you want to add controls of your own.
 - **Flash diagnostic (read‑only).** Hold A440 and press **Sync** (Osc A): the patch reads
   the serial flash — a climbing number while it runs, then three readings of 1.5 s:
   `F16`/`F 8`/`F -` (chip size), `1 E`/`1 U` and `2 E`/`2 U` (whether the two areas the

@@ -4,6 +4,33 @@ Versions of the patch as published through the patcher — the `VERSION` file, t
 name (`prophet5_main_2.1.0_patched_<version>.syx`) and `site/version.json`. Each entry names
 the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
 
+## Unreleased
+
+### Added
+- **Gate length.** A440 + Amp Decay sets how long each generated note sounds, 5–100 % of the
+  step in 5 % steps (50 % by default, the fixed gate until now; 100 % lasts until the next
+  note). The gate jumps to the knob (no pickup, unlike the tempo). The Arp and the Seq
+  have a gate each and the knob edits the selected one's: the Arp's is saved with the
+  program, the Seq's with the sequence. In the Chords style a chord is released at the gate
+  of its last step; in the Arpeggiated style every arp note inside a chord uses the Seq's
+  gate. Amp Decay alone is always the amp decay.
+
+- **Knob id readout.** With A440 held, turning any knob other than Glide Rate and Amp Decay
+  shows `P` and its pot id (`P 0` … `P27`), as unassigned buttons show theirs; the turn is
+  consumed.
+
+### Changed
+- **Knobs turned with A440 held no longer reach the stock OS** (they show their id instead).
+- **A program load while the Arpeggiated style is mid-chord no longer disturbs the chord**:
+  the Arp's loaded note value, swing and gate are remembered for when the Arp next runs as
+  the Arp (until now the rest of the chord switched to them, then reverted).
+- **Under MIDI sync the gate is timed in ms** from each step's clock at the tempo measured
+  from the clock, instead of counted in clocks (a 32nd at 50 % is now half its length, not
+  one clock of three).
+- **Program parameters 93/94 have a new layout** (one number holding on/off, mode, octaves,
+  note value and gate), and sequence blocks are `PSQ2`. Programs and sequences saved by
+  earlier builds must be re-saved; there is no compatibility with the 1.2.0 layout any more.
+
 ## 2.2.0 — 2026-10-09
 
 ### Added

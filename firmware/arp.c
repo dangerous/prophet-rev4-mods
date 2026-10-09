@@ -2,7 +2,9 @@
 #include "platform.h"
 
 /* Internal clock: every 1 ms tick adds 3*bpm*den to the accumulator; a step is due at
- * 180000*num (= 60000/bpm ms * num/den beats) and the gate closes at half that. With swing
+ * 180000*num (= 60000/bpm ms * num/den beats) and the gate closes at (g + 1) / 20 of that
+ * (the step's own gate index g, 9 = half). Under MIDI clock the gate is a ms countdown from
+ * the step's clock: (g + 1) / 20 x clocks x 2500 / bpm. With swing
  * num/den is a pair of steps: the long step is due at 120000*num, the short one at
  * 60000*num (2/3 and 1/3, exact in integers). The remainder is carried so the average
  * tempo is exact. */
@@ -34,6 +36,8 @@ void arp_init(arp_t *a)
     a->at_start = 1;
     a->loss = ARP_LOSS_TICKS;
     a->rng = 0x9E3779B9u;
+    a->gate = ARP_GATE_DEFAULT;
+    a->gate_cur = ARP_GATE_DEFAULT;
 }
 
 /* --- pool ------------------------------------------------------------------------------ */
@@ -125,13 +129,24 @@ static void release(arp_t *a)                             /* the step note: a ge
         plat_voice_off(ARP_SRC_LOCAL, a->sounding);
     a->sounding = ARP_NONE;
     a->gate_open = 0;
+    a->gate_ms = 0;
 }
+
+static unsigned step_clocks(const arp_t *a);
 
 static void sound(arp_t *a, int note, int vel)
 {
     plat_voice_on(ARP_SRC_LOCAL, note, vel);
     a->sounding = (uint8_t)note;
     a->gate_open = 1;
+    a->gate_cur = a->gate;                                 /* a change waits for the next step */
+    if (a->ext && a->gate_cur < ARP_GATES - 1) {           /* 100 %: the next step releases it */
+        unsigned len = a->syn_len, ms;
+        if (!len)                                          /* not on a clock (a chord set): a pair's first step */
+            len = a->swing ? step_clocks(a) / 3 * 2 : step_clocks(a);
+        ms = (a->gate_cur + 1u) * len * 125u / a->bpm;
+        a->gate_ms = (uint16_t)(ms ? ms : 1);
+    }
 }
 
 static void reset_pattern(arp_t *a)
@@ -574,11 +589,10 @@ void arp_rt_apply(arp_t *a, int byte)
         } else {
             m = a->clocks % sc;
         }
-        if (clocked(a)) {
-            if ((m == 0 && !fresh) || m == lng)
-                step(a);
-            else if (a->gate_open && ((m < lng && m == lng / 2) || (m > lng && m - lng == (sc - lng) / 2)))
-                release(a);                                /* the gate */
+        if (clocked(a) && ((m == 0 && !fresh) || m == lng)) {
+            a->syn_len = (uint16_t)(m == 0 ? lng : sc - lng);   /* the step's clocks, for its gate */
+            step(a);
+            a->syn_len = 0;
         }
         a->clocks++;
         break;
@@ -615,6 +629,8 @@ int arp_realtime(arp_t *a, int byte, int port)
 void arp_tick(arp_t *a)
 {
     if (a->ext) {                                          /* also with the arp off: the BPM follows */
+        if (a->gate_ms && --a->gate_ms == 0 && a->gate_open)
+            release(a);                                    /* the gate, in ms from the step's clock */
         if (a->loss < ARP_LOSS_TICKS && ++a->loss == ARP_LOSS_TICKS) {
             release(a);                                    /* clock lost: silence, wait for clocks */
             a->port = ARP_NONE;
@@ -626,8 +642,8 @@ void arp_tick(arp_t *a)
     if (!clocked(a))
         return;
     a->acc += 3u * a->bpm * a->beats_den;
-    if (a->gate_open && a->acc >= step_units(a) / 2)
-        release(a);                                        /* the gate */
+    if (a->gate_open && a->gate_cur < ARP_GATES - 1 && a->acc * 20u >= step_units(a) * (a->gate_cur + 1u))
+        release(a);                                        /* the gate; at 100 % the step releases it */
     if (a->acc >= step_units(a)) {
         a->acc -= step_units(a);
         if (a->swing)
@@ -636,3 +652,8 @@ void arp_tick(arp_t *a)
     }
 }
 
+void arp_set_gate(arp_t *a, int g)
+{
+    if (g >= 0 && g < ARP_GATES)
+        a->gate = (uint8_t)g;
+}

@@ -52,6 +52,7 @@ void arpui_init(arpui_t *u)
     disp_init(&u->disp);
     u->cmd_key = ARP_NONE;
     u->glide_raw = ARPUI_RAW_NONE;
+    u->gate = ARP_GATE_DEFAULT;
 }
 
 /* --- display ---------------------------------------------------------------------------- */
@@ -108,12 +109,13 @@ static void show_none(arpui_t *u)                          /* no sequence */
     show3(u, UC_DASH, UC_DASH, UC_DASH);
 }
 
-static void apply_rate(arpui_t *u, arp_t *a)               /* the Arp's note value to the arp */
+static void apply_rate(arpui_t *u, arp_t *a)               /* the Arp's note value and gate to the arp */
 {
     int num, den;
     rate_beats(&u->rate, &num, &den);
     arp_set_beats(a, num, den);
     arp_set_swing(a, rate_swing(&u->rate));
+    arp_set_gate(a, u->gate);
 }
 
 static void apply_seq_rate(arpui_t *u, seq_t *q)           /* the Seq's note value to the sequencer */
@@ -191,21 +193,22 @@ static void select_gen(arpui_t *u, arp_t *a, seq_t *q, int gen)
 }
 
 /* --- patch memory ------------------------------------------------------------------------ */
-/* the saved settings live in two spare program parameters ("Patch memory"):
- * 94 = octaves + 4 L (L = 1: a long note value; 0 = no arp data; 1.2.0 also wrote 8 C + 40 M, read and ignored),
- * 93 = n * 10 + mode * 2 + on/off, n = the Prophet-6 position (L = 0) or the long value 0..2 (L = 1) */
+/* the saved settings live in two spare program parameters ("Patch memory") as one number
+ * V = on/off + 2 mode + 10 (octaves - 1) + 40 note value index + 520 gate index:
+ * 93 = V mod 128, 94 = 1 + V div 128 (0 = no arp data) */
 static void store_patch(const arpui_t *u, const arp_t *a)
 {
-    int code = rate_code(&u->rate), lng = code >= 10;
-    plat_param_store(ARPUI_PARAM_OCT, a->octaves + (lng ? 4 : 0));
-    plat_param_store(ARPUI_PARAM_PACK, (lng ? code - 10 : code) * 10 + a->mode * 2 + (a->enabled ? 1 : 0));
+    unsigned v = (a->enabled ? 1u : 0u) + 2u * a->mode + 10u * (a->octaves - 1u)
+                 + 40u * (unsigned)rate_index(&u->rate) + 520u * u->gate;
+    plat_param_store(ARPUI_PARAM_OCT, (int)(1u + (v >> 7)));
+    plat_param_store(ARPUI_PARAM_PACK, (int)(v & 127u));
 }
 
 void arpui_program_loaded(arpui_t *u, arp_t *a, seq_t *q)
 {
-    int v = plat_param_read(ARPUI_PARAM_OCT), pack = plat_param_read(ARPUI_PARAM_PACK);
-    unsigned f, lng, oct;                                  /* unsigned: the target has no signed-divide helper */
-    int note, mode, on;
+    int hi = plat_param_read(ARPUI_PARAM_OCT), lo = plat_param_read(ARPUI_PARAM_PACK);
+    unsigned v, g;                                         /* unsigned: the target has no signed-divide helper */
+    int on;
     if (u->kill)
         return;
     u->hold_arp = u->hold_stock = 0;                       /* a program load drops both HOLD latches */
@@ -220,24 +223,19 @@ void arpui_program_loaded(arpui_t *u, arp_t *a, seq_t *q)
                 seq_block_load(u, a, q, slot);
         }
     }
-    if (v < 1 || v > ARPUI_OCT_MAX || pack < 0) {
+    v = (unsigned)(hi - 1) * 128u + (unsigned)lo;
+    g = v / 520u;
+    if (hi < 1 || hi > ARPUI_PATCH_HI_MAX || lo < 0 || lo > 127 || g >= ARP_GATES) {
         ui_enable(u, a, 0);                                /* no arp data: off, settings untouched */
         return;
     }
-    f = (unsigned)(v - 40 * (v > 40)) - 1u;                /* 0..39: octaves-1 + 4 L + 8 C (C and M: 1.2.0's, ignored) */
-    lng = (f % 8u) >= 4u;
-    oct = f % 4u + 1u;
-    if (pack > (lng ? ARPUI_PACK_MAX_LONG : ARPUI_PACK_MAX)) {
-        ui_enable(u, a, 0);
-        return;
-    }
-    note = pack / 10;
-    mode = pack % 10 / 2;
-    on = pack & 1;
-    arp_set_octaves(a, (int)oct);
-    arp_set_mode(a, mode);
-    rate_set_code(&u->rate, lng ? 10 + note : note);
-    apply_rate(u, a);
+    on = (int)(v & 1u);
+    arp_set_mode(a, (int)(v / 2u % 5u));
+    arp_set_octaves(a, (int)(v / 10u % 4u + 1u));
+    rate_set_index(&u->rate, (int)(v / 40u % 13u));
+    u->gate = (uint8_t)g;
+    if (!a->chord_on)                                      /* the Seq's chord in progress keeps the Seq's; ui_enable applies ours later */
+        apply_rate(u, a);
     if (u->gen != ARPUI_GEN_ARP)
         on = 0;                                            /* a saved "on" starts the Arp only while ArP is selected */
     ui_enable(u, a, on);
@@ -253,6 +251,7 @@ static void seq_settings_now(const arpui_t *u, const seq_t *q, seqmem_settings_t
     s->chord_beats = q->chord_beats;
     s->transpose = q->transpose;
     s->gen = u->gen;
+    s->gate = q->gate;
 }
 
 /* stock has stored a user program: its block gets the live sequence and settings, or "no sequence" */
@@ -281,6 +280,7 @@ static void seq_block_load(arpui_t *u, arp_t *a, seq_t *q, int slot)
     seq_set_order(q, s.order);
     seq_set_chord_beats(q, s.chord_beats);
     seq_set_transpose(q, s.transpose);
+    seq_set_gate(q, s.gate);
     if (!seq_running(q)) {
         if (s.gen == ARPUI_GEN_SEQ)
             ui_enable(u, a, 0);                            /* SEq: the arp is off */
@@ -700,11 +700,60 @@ static int raw_bpm(int raw)                                /* the tempo a knob p
     return 40 + (260 * raw + 511) / 1023;
 }
 
-int arpui_pot_store(arpui_t *u, arp_t *a, int pot, int raw)
+/* --- Amp Decay ---------------------------------------------------------------------------- */
+/* A440 + Amp Decay = the selected generator's gate; Amp Decay alone is always stock amp decay */
+static int decay_is_gate(const arpui_t *u, int pot)
+{
+    return pot == ARPUI_POT_DECAY && !u->kill && u->a440_held;
+}
+
+static int raw_gate(int raw)                               /* the gate index a knob position maps to */
+{
+    return (int)((19u * (unsigned)raw + 511u) / 1023u);
+}
+
+/* the gate jumps to the knob: no pickup */
+static int pot_gate(arpui_t *u, arp_t *a, seq_t *q, int raw)
+{
+    int gate = raw_gate(raw), seq_sel = u->gen == ARPUI_GEN_SEQ;
+    if (!decay_is_gate(u, ARPUI_POT_DECAY))
+        return 0;
+    u->a440_used = 1;                                      /* the pot used the hold: no toggle */
+    if (gate != (seq_sel ? q->gate : u->gate)) {
+        if (seq_sel) {
+            seq_set_gate(q, gate);                         /* the Seq's: with the recording, not the program */
+            if (a->chord_on)
+                arp_set_gate(a, gate);                     /* Arpeggiated, playing: from the arp's next step */
+        } else {
+            u->gate = (uint8_t)gate;
+            arp_set_gate(a, gate);
+            store_patch(u, a);
+        }
+    }
+    show_int(u, 5 * (gate + 1));                           /* percent */
+    return 1;
+}
+
+/* --- knob id readout ----------------------------------------------------------------------- */
+/* A440 + any knob the engine does not assign: P and its id, the movement consumed */
+static int pot_is_readout(const arpui_t *u, int pot)
+{
+    return !u->kill && u->a440_held && pot >= 0 && pot < ARPUI_POTS && pot != ARPUI_POT_GLIDE && pot != ARPUI_POT_DECAY;
+}
+
+int arpui_pot_store(arpui_t *u, arp_t *a, seq_t *q, int pot, int raw)
 {
     int prev = ARPUI_RAW_NONE, cur;
+    if (pot_is_readout(u, pot)) {
+        unsigned id = (unsigned)pot;                       /* unsigned: no signed-divide helper on the target */
+        u->a440_used = 1;
+        show3(u, UC_P, id >= 10u ? (int)(id / 10u) : UC_BLANK, (int)(id % 10u));
+        return 1;
+    }
     if (raw < 0) raw = 0;
     if (raw > 1023) raw = 1023;
+    if (pot == ARPUI_POT_DECAY && !u->kill)
+        return pot_gate(u, a, q, raw);
     if (pot == ARPUI_POT_GLIDE && !u->kill) {              /* remember where the knob is, tempo or glide */
         prev = u->glide_raw;
         u->glide_raw = (uint16_t)raw;
@@ -728,10 +777,10 @@ int arpui_pot_store(arpui_t *u, arp_t *a, int pot, int raw)
     return 1;
 }
 
-int arpui_pot_change(arpui_t *u, arp_t *a, int pot)
+int arpui_pot_change(arpui_t *u, arp_t *a, seq_t *q, int pot)
 {
-    (void)a;
-    if (!glide_is_tempo(u, pot))
+    (void)a; (void)q;
+    if (!glide_is_tempo(u, pot) && !decay_is_gate(u, pot) && !pot_is_readout(u, pot))
         return 0;
     u->a440_used = 1;
     return 1;
