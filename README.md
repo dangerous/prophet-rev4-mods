@@ -111,7 +111,7 @@ the program number comes back.
 | A440 + **Program 5** | Clock: internal / MIDI sync | `int` / `Syn` |
 | A440 + **Program 7** / **8** | The arp's note value longer (−) / shorter (+) | `4b 2b 1 2 4 8d 8 8S 8t 16 16S 16t 32` |
 | A440 + **Glide Rate** knob | Tempo 40–300 BPM (picks up the current tempo first, no jump) | the BPM |
-| A440 + **Amp Decay** knob | Gate: how long each note sounds, 5–100 % of the step (picks up, as the tempo) | `5` … `100` |
+| A440 + **Amp Decay** knob | Gate: how long each note sounds, 5–100 % of the step (jumps to the knob) | `5` … `100` |
 | A440 + **Velocity** (tap repeatedly) | Tap tempo | `tAP`, then the BPM |
 | A440 + **HOLD** (generator stopped) | Sequential's A440 tuning tone on / off | A440 LED, as stock |
 | **HOLD** (or pedal in `HLd` mode) | Latch | — |

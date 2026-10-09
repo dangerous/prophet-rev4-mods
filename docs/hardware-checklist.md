@@ -243,9 +243,8 @@ Transport and generators:
 ## Gate (spec "Gate")
 
 - [ ] Arp on, internal clock, `8`, hold a chord. Hold A440 and turn **Amp Decay** from far
-      away: the display shows `50` and nothing changes until the knob passes 50; then the
-      gate follows the knob, `5` … `100` in steps of 5. Releasing A440 does **not** toggle the
-      arp. (This also confirms Amp Decay's pot id, 0x11 — if another knob responds, or none
+      away from the middle: the gate jumps to the knob's position at once and follows it,
+      `5` … `100` in steps of 5. Releasing A440 does **not** toggle the arp. (This also confirms Amp Decay's pot id, 0x11 — if another knob responds, or none
       does, record which.)
 - [ ] `5`: short clicks; `50`: as before; `100`: each note lasts until the next starts (the
       envelopes still retrigger). Amp Decay on its own is the amp decay, also with the arp
@@ -254,8 +253,8 @@ Transport and generators:
 - [ ] `Syn` with a DAW at 120: at `25` the 16ths are short clicks; at `100` legato. Change
       the DAW to 90: the gate follows the measured tempo. At `32` and `50` the notes are
       audibly half the step (no longer one clock of three).
-- [ ] Seq: select `SEq`, A440 + Amp Decay: the display shows the **Seq's** gate (`50` at
-      first, not the Arp's). Chords style at `15`: chords become short stabs, a tied chord
+- [ ] Seq: select `SEq`, A440 + Amp Decay: the knob sets the **Seq's** gate (the Arp's
+      is left as it was). Chords style at `15`: chords become short stabs, a tied chord
       is held through and cut short only in its last step. Arpeggiated style: the arp notes
       inside each chord use the Seq's gate, and a change during a long chord applies from the
       next arp note. Select `ArP` again: the Arp's gate is back.

@@ -9,7 +9,7 @@ the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
 ### Added
 - **Gate length.** A440 + Amp Decay sets how long each generated note sounds, 5–100 % of the
   step in 5 % steps (50 % by default, the fixed gate until now; 100 % lasts until the next
-  note). The knob picks the gate up as Glide Rate picks up the tempo. The Arp and the Seq
+  note). The gate jumps to the knob (no pickup, unlike the tempo). The Arp and the Seq
   have a gate each and the knob edits the selected one's: the Arp's is saved with the
   program, the Seq's with the sequence. In the Chords style a chord is released at the gate
   of its last step; in the Arpeggiated style every arp note inside a chord uses the Seq's

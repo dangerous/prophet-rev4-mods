@@ -1592,25 +1592,32 @@ static void test_a_block_load_waits_for_a_running_diagnostic(void) {
 }
 
 /* ---- gate: A440 + Amp Decay (spec "Gate") --------------------------------------------- */
-static void test_amp_decay_sets_the_gate_only_with_a440_held_and_picks_it_up(void) {
+static void test_amp_decay_sets_the_gate_only_with_a440_held_and_jumps_to_the_knob(void) {
     reset();
     CHECK(ARPUI_POT_DECAY == 0x11 && u.gate == ARP_GATE_DEFAULT && a.gate == ARP_GATE_DEFAULT);
     CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_DECAY, 1000) == 0 && arpui_pot_change(&u, &a, &q, ARPUI_POT_DECAY) == 0);   /* A440 up: stock amp decay */
     CHECK(u.gate == 9 && stores() == 0);
     btn(A440, PRESS);
     clear_log();
-    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_DECAY, 900) == 1 && arpui_pot_change(&u, &a, &q, ARPUI_POT_DECAY) == 1);   /* from 19 to 17: inert */
-    CHECK(u.gate == 9 && last_int() == 50);                            /* the target shown */
-    decay(300);                                                        /* 6: crossed 50 % on the way down */
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_DECAY, 900) == 1 && arpui_pot_change(&u, &a, &q, ARPUI_POT_DECAY) == 1);   /* far from 50 %: jumps */
+    CHECK(raw_gate(900) == 17 && u.gate == 17 && last_int() == 90);
+    decay(300);
     CHECK(raw_gate(300) == 6 && u.gate == 6 && last_int() == 35);
-    decay(1023);                                                       /* caught: it follows */
+    decay(1023);
     CHECK(u.gate == 19 && last_int() == 100);
     decay(0);
     CHECK(u.gate == 0 && last_int() == 5);
     CHECK(btn(A440, RELEASE) == 1 && !a.enabled);                      /* used the hold: no toggle */
-    btn(A440, PRESS);                                                  /* a new hold with the knob where the gate is: live at once */
+    btn(A440, PRESS);                                                  /* a new hold: the first movement sets it */
     decay(108);
     CHECK(u.gate == 2);                                                /* 15 % */
+    btn(A440, RELEASE);
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_DECAY, 900);                 /* moved as amp decay in between */
+    btn(A440, PRESS);
+    decay(950);                                                        /* far from 15 %: still jumps */
+    CHECK(u.gate == raw_gate(950) && u.gate == 18);
+    decay(108);
+    CHECK(u.gate == 2);
     btn(A440, RELEASE);
     CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_DECAY, 700) == 0 && u.gate == 2);   /* alone: stock again */
     arp_set_bpm(&a, 120);
@@ -1633,11 +1640,11 @@ static void test_amp_decay_edits_the_selected_generators_gate(void) {
     decay(100);
     CHECK(q.gate == raw_gate(100) && q.gate == 2 && u.gate == 9 && last_int() == 15);
     CHECK(stores() == n);                                              /* the Seq's gate is not in the program record */
-    btn(KEYB, PRESS); btn(KEYB, RELEASE);                              /* ArP: the pickup re-arms on the Arp's gate */
+    btn(KEYB, PRESS); btn(KEYB, RELEASE);                              /* ArP: the knob now sets the Arp's gate */
     CHECK(u.gen == ARPUI_GEN_ARP);
     decay(120);
-    CHECK(u.gate == 9 && last_int() == 50);
-    decay(600);                                                        /* 11: crossed */
+    CHECK(u.gate == raw_gate(120) && u.gate == 2 && last_int() == 15 && q.gate == 2);
+    decay(600);
     CHECK(u.gate == 11 && q.gate == 2);
     btn(A440, RELEASE);
 }
@@ -1760,7 +1767,7 @@ int main(void) {
     test_a_load_while_playing_switches_at_the_next_step_boundary();
     test_a_load_applies_the_saved_generator_only_when_stopped_and_not_in_record_mode();
     test_a_block_load_waits_for_a_running_diagnostic();
-    test_amp_decay_sets_the_gate_only_with_a440_held_and_picks_it_up();
+    test_amp_decay_sets_the_gate_only_with_a440_held_and_jumps_to_the_knob();
     test_amp_decay_edits_the_selected_generators_gate();
     test_the_seq_lends_its_gate_to_the_arp_and_the_arp_gets_its_own_back();
     test_a_seq_gate_change_reaches_the_arpeggiated_style_at_the_next_step();

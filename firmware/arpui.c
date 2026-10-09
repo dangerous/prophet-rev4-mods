@@ -52,7 +52,6 @@ void arpui_init(arpui_t *u)
     disp_init(&u->disp);
     u->cmd_key = ARP_NONE;
     u->glide_raw = ARPUI_RAW_NONE;
-    u->decay_raw = ARPUI_RAW_NONE;
     u->gate = ARP_GATE_DEFAULT;
 }
 
@@ -189,7 +188,6 @@ static void select_gen(arpui_t *u, arp_t *a, seq_t *q, int gen)
     else
         seq_stop(q, a);
     u->gen = (uint8_t)gen;
-    u->gate_caught = 0;                                    /* the knob has to pick the other gate up */
     update_sustain(u, a, q);
     show_gen(u);
 }
@@ -568,7 +566,6 @@ int arpui_button(arpui_t *u, arp_t *a, seq_t *q, int id, int value)
             u->a440_held = 1;
             u->a440_used = 0;
             u->tempo_caught = 0;                           /* the glide knob has to pick the tempo up again */
-            u->gate_caught = 0;                            /* and Amp Decay the gate */
         } else if (value == UI_RELEASE && u->a440_held) {
             end_hold(u);
             if (!u->a440_used)
@@ -714,21 +711,14 @@ static int raw_gate(int raw)                               /* the gate index a k
     return (int)((19u * (unsigned)raw + 511u) / 1023u);
 }
 
+/* the gate jumps to the knob: no pickup */
 static int pot_gate(arpui_t *u, arp_t *a, seq_t *q, int raw)
 {
-    int prev = u->decay_raw, cur = raw_gate(raw), seq_sel = u->gen == ARPUI_GEN_SEQ, gate;
-    u->decay_raw = (uint16_t)raw;
+    int gate = raw_gate(raw), seq_sel = u->gen == ARPUI_GEN_SEQ;
     if (!decay_is_gate(u, ARPUI_POT_DECAY))
         return 0;
     u->a440_used = 1;                                      /* the pot used the hold: no toggle */
-    gate = seq_sel ? q->gate : u->gate;
-    if (!u->gate_caught) {                                 /* pickup: inert until the knob reaches or crosses the gate */
-        int from = prev == ARPUI_RAW_NONE ? cur : raw_gate(prev);
-        if ((from <= gate && gate <= cur) || (cur <= gate && gate <= from))
-            u->gate_caught = 1;
-    }
-    if (u->gate_caught && cur != gate) {
-        gate = cur;
+    if (gate != (seq_sel ? q->gate : u->gate)) {
         if (seq_sel) {
             seq_set_gate(q, gate);                         /* the Seq's: with the recording, not the program */
             if (a->chord_on)
@@ -739,7 +729,7 @@ static int pot_gate(arpui_t *u, arp_t *a, seq_t *q, int raw)
             store_patch(u, a);
         }
     }
-    show_int(u, 5 * (gate + 1));                           /* percent — the target while the knob is inert */
+    show_int(u, 5 * (gate + 1));                           /* percent */
     return 1;
 }
 
