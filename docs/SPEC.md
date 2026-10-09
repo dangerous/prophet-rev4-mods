@@ -276,7 +276,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
   `CHd` / `ArP` and **Aftertouch** = chord length ("Seq") `[HW: verified 2026-10-08,
   Prophet-10 Rev4 as the style and chord-length combos]`; **a keyboard key** (with `SEq` selected, not recording) = sequence transposition ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Sync** (Osc A Sync, id 26 / `0x1A` `[HW: 2026-10-09 — read by the id readout; the stock dispatch table had suggested 24]`) = flash diagnostic
   ("Flash diagnostic"); any other
-  button = id readout. Any of these cancels the toggle on A440 release. Held-repeat events
+  button = id readout, and turning any knob other than Glide Rate and Amp Decay = knob id
+  readout ("Button and knob id readout"). Any of these cancels the toggle on A440 release. Held-repeat events
   (value 3) are ignored. A combo button whose release arrives after A440 has been released
   is still consumed **(change: the Arp Mod leaked the orphan release to stock)**.
 - **A440 + Glide Rate** sets the tempo `[HW: verified 2026-10-07, Prophet-10 Rev4]`: while
@@ -321,7 +322,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
   and release as usual (A440 + Glide Rate is inert under `Syn` the same way). The
   BPM is not saved with the program (see above).
 - **Display**: transient messages (mode, octaves, clock, note value, BPM while the pot
-  moves or on a tempo tap, gate while Amp Decay moves, `tAP`, `Syn` for a tempo gesture under external clock, step count, shift, readout) show for 1.5 s, then the display returns to the stock
+  moves or on a tempo tap, gate while Amp Decay moves, `tAP`, `Syn` for a tempo gesture under external clock, step count, shift, button or knob readout) show for 1.5 s, then the display returns to the stock
   program display **(change: the Arp Mod left `OFF` / BPM / `Syn` on the display for as long as the
   arp was on)**. Switching the arp on shows the BPM (`Syn` under external clock) for 1.5 s;
   switching it off shows `OFF` for 1.5 s.
@@ -760,7 +761,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
    0.25 s for a flash); at expiry the stock patch display is redrawn with
    `0x2003818D(ui = 0x20057390)` — or, while record mode lasts, `r N` is shown again.
 
-### Button id readout `[HW: verified 2026-10-07, Prophet-10 Rev4 — Keyboard 36, GLOBALS 13; Unison read 25 before it became tap tempo, Tune read 12 before it became record mode]`
+### Button and knob id readout `[HW: verified 2026-10-07, Prophet-10 Rev4 for buttons — Keyboard 36, GLOBALS 13; Unison read 25 before it became tap tempo, Tune read 12 before it became record mode]`
 
 While A440 is held, pressing a panel button that the arp does not assign — anything other
 than Program 1–8, Bank, Group, Keyboard Amount (id 8, generator), Aftertouch (id 10 /
@@ -771,6 +772,18 @@ mode), HOLD (id 14 / `0x0E`: the tuning tone, or rest/tie in record mode), Uniso
 keyboard octave shift) — shows that button's id on the display and is otherwise ignored
 (its release is consumed too). An aid for mapping panel button ids when designing new
 combinations.
+
+**Knobs** `[HW: not yet verified]`: while A440 is held, turning any knob other than Glide
+Rate (tempo) and Amp Decay (gate) shows that knob's pot id as `P` and the id in decimal,
+right-aligned in three characters (`P 0` … `P27`, so it cannot be mistaken for a button id),
+a display message like any other, refreshed while the knob turns. The movement is consumed
+— both pot hooks, as for Glide Rate — so the knob's parameter does not change; once A440 is
+released the knob is stock again and its next movement behaves per the pot mode global, as
+after any consumed turn. It counts as using the A440 hold (no toggle on release). Under the
+kill switch, and with the Globals menu open (A440 is stock's there, so it is not held for
+the engine), knobs are stock. **(change: until 2026-10-10 a knob turned with A440 held was
+stock's.)** Realisation: the pot store hook receives every knob's raw value with its id
+(0–27, stock's pot table `0x20079D84`); the readout runs there.
 
 ### Flash diagnostic (read-only) `[HW: verified 2026-10-09, Prophet-10 Rev4 — readings F16 / 1 E / 2 E; progress readout, recall, Sync id 26; the hang at the top 64 KB found and excluded]`
 
