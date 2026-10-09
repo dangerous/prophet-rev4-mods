@@ -280,8 +280,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
   is still consumed **(change: the Arp Mod leaked the orphan release to stock)**.
 - **A440 + Glide Rate** sets the tempo `[HW: verified 2026-10-07, Prophet-10 Rev4]`: while
   A440 is held, turning Glide Rate sets the BPM of the internal clock, 40–300 (`BPM = 40 +
-  round(260 · raw / 1023)`, raw 0–1023), whether the arp is on or off. **The knob picks the
-  tempo up rather than jumping to it** `[HW: unverified]`: at the start of each A440 hold the
+  round(260 · raw / 1023)`, raw 0–1023), whether the arp is on or off. **The knob picks the tempo up rather than jumping to it** `[HW: verified 2026-10-09,
+  Prophet-10 Rev4]`: at the start of each A440 hold the
   knob is inert until the tempo its position maps to reaches or crosses the current BPM;
   from that movement on it sets the BPM for the rest of the hold. A tempo tap during the
   hold re-arms the pickup (the knob is no longer where the tempo is). While inert, a turn

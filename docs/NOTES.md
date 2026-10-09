@@ -97,6 +97,8 @@ behavioural source of truth; this file is the engineering context around it.
   **HOLD sustains the sequence's chords**: the voice engine's own hold flag decides, the
   per-note "off" answer at the hold query is inert. David: good enough to publish as is.
   The other run-through steps passed by exception.
+- 2026-10-09, **2.1.0** (`tempo-pickup`, image `dc8eb3ea`): the tempo knob picks the tempo up
+  instead of jumping; flashed and confirmed on the panel, published.
 - 2026-10-08, **2.0.2** (`seq-review-fixes`): four review findings in `seq.c` — arming off the
   grid, Continue resetting the arpeggio, a stale pending note value, chord-clock drift —
   each with a regression test; unflashed (MIDI-sync paths and a 137 BPM drift that the panel
