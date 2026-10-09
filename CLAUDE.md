@@ -15,7 +15,8 @@ plus a Python CLI that unpacks, patches and re-packs the OS SysEx image.
   them and skip, with a warning, when they are missing.
 - `tools/` — Python packing/patching CLI (`python3 -m tools ...`).
 - `firmware/` — engine C sources (`arp.c` the arpeggiator, `seq.c` the sequencer, `arpui.c`
-  the UI, `oct.c`, `rate.c`, `disp.c`, `vhold.c` portable; `native.c` the hooks and stock
+  the UI, `seqmem.c` sequence blocks in flash, `flash.c` the read-only flash diagnostic,
+  `oct.c`, `rate.c`, `disp.c`, `vhold.c` portable; `native.c` the hooks and stock
   interface table), built freestanding for `thumbv7a` at a fixed address;
   `hooks_native.json` lists the patched stock sites.
 - `tests/` — `unittest` suites for the tooling and the built image; host-side C harnesses for

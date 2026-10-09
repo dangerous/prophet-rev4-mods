@@ -8,10 +8,13 @@ How the project is laid out, built and tested. The behaviour itself is specified
   [`hardware-checklist.md`](hardware-checklist.md) is the manual test pass;
   [`NOTES.md`](NOTES.md) the engineering context; [`re/`](re/) the
   reverse‑engineering notes on the stock OS.
-- `firmware/` — the engine in C11 (`arp.c` pattern and clock, `arpui.c` controls and display,
-  `oct.c`, `rate.c`, `disp.c`, `vhold.c`; `native.c` the hooks and the stock interface
-  table). It is one 32 KB record added at `0x20088000` plus 18 retargeted sites — 14 `BL`s
-  and the four MIDI‑parser table words for realtime bytes (`firmware/hooks_native.json`).
+- `firmware/` — the engine in C11 (`arp.c` pattern and clock, `seq.c` the sequencer,
+  `arpui.c` controls and display, `seqmem.c` the sequence blocks in flash, `flash.c` the
+  read‑only flash diagnostic, `oct.c`, `rate.c`, `disp.c`, `vhold.c`; `native.c` the hooks
+  and the stock interface table). It is one 32 KB record added at `0x20088000` plus 20
+  retargeted sites — 16 `BL`s and the four MIDI‑parser table words for realtime bytes
+  (`firmware/hooks_native.json`). The flash is written in one place only, the program‑store
+  wrapper, through stock's verified writer (`docs/re/flash.md`).
   Nothing runs at boot; the engine only runs when a hooked stock call fires.
 - `tools/` — Python 3.9+, standard library only: `inspect`, `unpack`, `pack`, `diff`,
   `fwbuild`, `build`, `manifest`, `apply`.

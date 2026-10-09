@@ -38,7 +38,11 @@ instrument, step by step; the manual below is the reference.
 - **Keyboard octave shift** — ±2 octaves from the panel, applied to the keys, the arp and
   MIDI Out.
 - **Patch memory** — the arp's on/off, mode, octaves and note value are saved with each
-  program.
+  program, and so is the **sequence**: a Record on a user program stores the recording with
+  its style, order, note value, chord length, transposition and generator selection in a
+  block of the synth's own flash, and loading the program brings it all back — on the
+  instrument, no computer involved. Changing programs never stops a running sequence; a
+  program with a saved sequence takes over at the next step.
 - Nothing else changes: with the arp off the synth is stock, and the whole patch can be
   bypassed at power‑on.
 
@@ -199,7 +203,7 @@ Playing it, with the sequencer selected (A440 + Keyboard shows `SEq`):
   one stopped; what you were holding on the keyboard keeps sounding. The HOLD button's
   latch is handed over as described under HOLD above.
 - Limits: 512 timing steps, 10 notes per chord. The sequence and its settings (style, order,
-  note value, chord length, transposition) are global and not saved — gone at power‑off.
+  note value, chord length, transposition) are saved with user programs — see Patch memory.
 
 ### Keyboard octave shift
 
@@ -219,10 +223,34 @@ saved with programs.
 
 Arp on/off, mode, octaves and the arp's note value are stored with the program when you
 save it (they travel in SysEx program dumps too) and come back when the program is loaded;
-a program saved without arp data loads with the arp off. Loading a program stops the
-sequencer and keeps its recording; a saved "arp on" starts the arp only if it is the
-selected generator. Tempo, clock source, keyboard shift, the generator selection and the
-sequence with its settings are global and not saved.
+a program saved without arp data loads with the arp off. A saved "arp on" starts the arp
+only if it is the selected generator.
+
+**The sequence is saved too.** When you Record a *user* program, the patch also writes the
+recording and its settings — style, order, note value, chord length, transposition and
+which generator is selected — into a 16 KB block of its own in the synth's flash (the
+upper half of the chip, which the stock OS never uses; one block per user program).
+Loading the program brings everything back; power‑off loses nothing that was Recorded.
+What to expect:
+
+- Loading a program **never stops the sequencer**. If the program has a saved sequence, the
+  running one switches to it at the next step, in time; its settings come with it, the
+  generator selection only when the sequencer is stopped.
+- A program **without** a saved sequence leaves the current sequence and settings alone, so
+  you can browse sounds under a running sequence.
+- Recording a program with **nothing recorded** saves "no sequence" explicitly — an earlier
+  sequence cannot come back by surprise. Clearing (A440 + Program 6) only clears the live
+  sequence; the saved one changes at the next Record.
+- A block only counts for the program it was saved with: it remembers the slot and a
+  checksum of the program's parameters, so a program overwritten by a SysEx dump or a bank
+  copy brings no foreign sequence. Factory programs have no blocks; with PRESET off nothing
+  loads (the program's stored parameters are not what sounds then either).
+- Sequences are **not** part of SysEx program dumps; the flash is their home. Going back to
+  the stock OS leaves them where they are, and reinstalling the patch finds them again as
+  long as the programs have not changed. Saving over a program is the only thing that
+  rewrites a block.
+
+Tempo, clock source and keyboard shift remain global and are not saved.
 
 ### Safety net
 
@@ -232,6 +260,15 @@ sequence with its settings are global and not saved.
   (Stock ignores A440 while its menu is open, which is why the tone has its own combo.)
 - **Button id readout.** Hold A440 and press a button the patch doesn't use: its panel id
   is shown. Handy if you want to add controls of your own.
+- **Flash diagnostic (read‑only).** Hold A440 and press **Sync** (Osc A): the patch reads
+  the serial flash — a climbing number while it runs, then three readings of 1.5 s:
+  `F16`/`F 8`/`F -` (chip size), `1 E`/`1 U` and `2 E`/`2 U` (whether the two areas the
+  stock OS never touches are empty or used — area 2 is where the sequence blocks live, so
+  it reads `2 U` once you have saved one). After a run, A440 + Sync recalls the readings
+  one by one; a new run needs a power cycle. It never writes.
+- The patch writes flash in exactly one situation — the sequence block of a user program
+  you Record — through the stock OS's own verified writer, into a region nothing else uses.
+  Your programs, globals and tuning data are written by the stock OS exactly as before.
 
 ## For developers
 

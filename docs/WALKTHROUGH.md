@@ -107,7 +107,7 @@ arpeggiator plays each chord.
     is a chord length of silence.
 32. **A440 + Unison**: `CHd` — the chords play as blocks again, one per step, as in
     section 5. The style, chord length, order, note value and transposition live with the
-    recording until you power off; they are not saved with programs.
+    recording — and are saved with it when you Record a user program (section 8).
 
 ## 7. Keyboard octave shift
 
@@ -122,9 +122,14 @@ arpeggiator plays each chord.
 35. Set the arp up as you like it — on, `Ud`, `o 2`, `16S` — and save the program as you
     would any other (Record, then a slot). Load a different program: the arp follows that
     program (off, if it was saved without arp data). Load yours back: everything returns.
-    Tempo, clock source, keyboard shift, the generator selection and the sequence with its
-    settings are global and are not saved; loading a program stops the sequencer but keeps
-    the recording.
+36. **The sequence goes with it.** With a recording in place, Record a *user* program: the
+    sequence, its style, order, note value, chord length, transposition and the generator
+    selection are stored in the synth's flash with it. Load a factory program: your sequence
+    keeps playing, untouched. Load your program back: it is there again — power the synth
+    off and on, still there. Start it, then load another program that has its own saved
+    sequence: it switches over at the next step without missing a beat. A program saved
+    with nothing recorded brings no sequence and changes nothing. Tempo, clock source and
+    keyboard shift remain global and are not saved.
 
 ## 9. MIDI sync
 
@@ -146,3 +151,6 @@ arpeggiator plays each chord.
 39. **Globals**: while the Globals menu is open every button is stock's.
 40. **Button ids**: hold A440 and press a button the patch doesn't use — its panel id is
     shown. Handy if you want to add a control of your own.
+41. **Flash diagnostic**: hold A440 and press **Sync** — a number climbs while the flash is
+    read, then `F16`, `1 E`, `2 U` (chip size; the two spare areas, the second holding your
+    saved sequences). A440 + Sync again recalls them one at a time. Nothing is written.
