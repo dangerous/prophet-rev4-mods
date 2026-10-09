@@ -234,7 +234,8 @@ void arpui_program_loaded(arpui_t *u, arp_t *a, seq_t *q)
     arp_set_octaves(a, (int)(v / 10u % 4u + 1u));
     rate_set_index(&u->rate, (int)(v / 40u % 13u));
     u->gate = (uint8_t)g;
-    apply_rate(u, a);
+    if (!a->chord_on)                                      /* the Seq's chord in progress keeps the Seq's; ui_enable applies ours later */
+        apply_rate(u, a);
     if (u->gen != ARPUI_GEN_ARP)
         on = 0;                                            /* a saved "on" starts the Arp only while ArP is selected */
     ui_enable(u, a, on);

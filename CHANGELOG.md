@@ -21,6 +21,9 @@ the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
 
 ### Changed
 - **Knobs turned with A440 held no longer reach the stock OS** (they show their id instead).
+- **A program load while the Arpeggiated style is mid-chord no longer disturbs the chord**:
+  the Arp's loaded note value, swing and gate are remembered for when the Arp next runs as
+  the Arp (until now the rest of the chord switched to them, then reverted).
 - **Under MIDI sync the gate is timed in ms** from each step's clock at the tempo measured
   from the clock, instead of counted in clocks (a 32nd at 50 % is now half its length, not
   one clock of three).

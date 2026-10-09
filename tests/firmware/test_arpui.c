@@ -1691,6 +1691,25 @@ static void test_a_seq_gate_change_reaches_the_arpeggiated_style_at_the_next_ste
     CHECK(count_type(EV_VOFF) == 1);
 }
 
+static void test_a_program_load_mid_chord_leaves_the_seqs_arpeggio_alone(void) {
+    reset(); record_cde();
+    btn(A440, PRESS); btn(UNISON, PRESS); btn(UNISON, RELEASE); btn(AFTERTOUCH, PRESS); btn(AFTERTOUCH, RELEASE); btn(A440, RELEASE);
+    CHECK(q.style == SEQ_ARPEGGIATED && q.chord_beats == 8);           /* 2-bar chords, 8ths at 50 % */
+    tap_a440();
+    ticks(10);
+    set_patch(pv(1, ARP_UP, 1, N_QTR, 19));                            /* the program: Qtr, 100 % */
+    arpui_program_loaded(&u, &a, &q);
+    CHECK(q.playing && !a.enabled && rate_index(&u.rate) == N_QTR && u.gate == 19);   /* remembered ... */
+    CHECK(a.beats_num == 1 && a.beats_den == 2 && a.gate == 9);        /* ... the chord keeps the Seq's */
+    clear_log();
+    ticks(240);                                                        /* 250: the next 8th, still the Seq's */
+    CHECK(count_type(EV_VOFF) == 1 && count_type(EV_VON) == 1);
+    tap_a440();                                                        /* stop; the Arp as the Arp gets its own */
+    select_gen();
+    tap_a440();
+    CHECK(a.enabled && a.beats_num == 1 && a.beats_den == 1 && a.gate == 19);
+}
+
 static void test_amp_decay_is_stock_under_the_kill_switch(void) {
     arpui_init(&u); arp_init(&a); seq_init(&q); clear_log();
     fake_a440_down = 1;
@@ -1771,6 +1790,7 @@ int main(void) {
     test_amp_decay_edits_the_selected_generators_gate();
     test_the_seq_lends_its_gate_to_the_arp_and_the_arp_gets_its_own_back();
     test_a_seq_gate_change_reaches_the_arpeggiated_style_at_the_next_step();
+    test_a_program_load_mid_chord_leaves_the_seqs_arpeggio_alone();
     test_amp_decay_is_stock_under_the_kill_switch();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;
