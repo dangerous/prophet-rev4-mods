@@ -490,8 +490,8 @@ this engine deliberately differs it is marked **(change)** with the reason.
   / `0x20037FF7`, display restore `0x2003818D(ui = 0x20057390)`, Globals-open test: word
   `0x20057438 ≠ 0`, button-held table `0x20079B20` (kill switch), get_global `0x20037B21`.
   Glide Rate = pot id `0x16`; Amp Decay = pot id `0x11` (17; stock's pot→parameter table
-  `0x2004D190` maps it to parameter `0x2E`, the second of the amp envelope's four) `[HW: not
-  yet verified]`.
+  `0x2004D190` maps it to parameter `0x2E`, the second of the amp envelope's four) `[HW:
+  2026-10-10, Prophet-10 Rev4 — the knob sets the gate]`.
 - Task contexts: the tick, local notes, panel buttons/pots and realtime bytes run in the
   FreeRTOS Timer Service task; MIDI notes, CC and hold run in the Prophet5 active-object
   task. Only the latter are queued (a 64-entry single-producer ring drained by the tick);
@@ -589,7 +589,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
    remainder carried (swing: 2/3 and 1/3 of the pair, exact in integers), and the MIDI-clock
    step (pair) is `24 × beats` clocks (always integral, and a multiple of 3 for swing pairs).
 
-### Gate (note length) `[HW: not yet verified]`
+### Gate (note length) `[HW: 2026-10-10, Prophet-10 Rev4 — tried on the instrument with the 2.3.0 build (A440 + Amp Decay sets the gate, so the pot id holds); the checklist's items not recorded one by one]`
 
 1. The **gate** is how long a generated note sounds, as a share of its step: **5–100 % in
    5 % steps** (20 values, index 0 = 5 % … 19 = 100 %). There are **two gates**, as there are
@@ -768,7 +768,7 @@ keyboard octave shift) — shows that button's id on the display and is otherwis
 (its release is consumed too). An aid for mapping panel button ids when designing new
 combinations.
 
-**Knobs** `[HW: not yet verified]`: while A440 is held, turning any knob other than Glide
+**Knobs** `[HW: 2026-10-10, Prophet-10 Rev4 — tried with the 2.3.0 build]`: while A440 is held, turning any knob other than Glide
 Rate (tempo) and Amp Decay (gate) shows that knob's pot id as `P` and the id in decimal,
 right-aligned in three characters (`P 0` … `P27`, so it cannot be mistaken for a button id),
 a display message like any other, refreshed while the knob turns. The movement is consumed
