@@ -739,14 +739,16 @@ blank. **It only reads.**
    lives above 8 MB); **unknown** otherwise (no usable reference, or upper blocks that are
    neither identical nor blank).
 3. **Blank check**: area 1 = `0x511000–0x5FFFFF`; area 2 = `0x755000` to the end of the
-   chip — `0x7FFFFF` for 8 MB and unknown, `0xFFFFFE` for 16 MB (stock's read routine
-   cannot return the window's last byte). An area is *empty* when every byte read is `0xFF`,
-   otherwise *used*.
+   chip — `0x7FFFFF` for 8 MB and unknown, **`0xFEFFFF` for 16 MB**: the last 64 KB of the
+   16 MB window are not read `[HW: 2026-10-09, Prophet-10 Rev4 — a run that read into the
+   last 64 KB (readout 255) blocked the engine's task inside stock's read routine: display
+   frozen, keys and buttons dead until a power cycle; nothing was written]`. An area is
+   *empty* when every byte read is `0xFF`, otherwise *used*.
 4. **Display**: while the run is in progress, the **offset being read in 64 KB units**
    (`000`–`255`, the stock three-digit integer), updated whenever it changes and kept up for
    the whole run (like the BPM while the pot turns) — the reference blocks make it jump
    between 0, 128, 96 and 224 for the first pieces, then it climbs from 81 through area 1
-   and from 117 through area 2. When the run completes, the three readings in turn, each a
+   and from 117 through area 2 (to 127 on 8 MB, 254 on 16 MB). When the run completes, the three readings in turn, each a
    display message like any other (1.5 s, then the next): size `F 8`, `F16` or `F -`; area 1
    `1 E` (empty) or `1 U` (used); area 2 `2 E` or `2 U`; then the stock patch display. A
    message from any other source cancels the rest of the sequence. A recalled reading (rule
@@ -755,10 +757,9 @@ blank. **It only reads.**
    and pots behave as specified. A run reads one piece per 1 ms tick through stock's flash
    read routine (which takes stock's flash mutex, so a run never reads while stock is
    writing): 512-byte pieces for the reference blocks, 1 KB pieces for the areas — 1,672
-   pieces on 8 MB, 9,864 on 16 MB. At one piece per tick that is 1.7 s / 10 s; on the
-   instrument a memory-mapped read can take several milliseconds, so a run can take minutes
-   `[HW: 2026-10-09 — the first run was still going after minutes, keys playing throughout]`;
-   the progress readout shows it moving. The kill switch disables it like everything else.
+   pieces on 8 MB, 9,800 on 16 MB. At one piece per tick that is 1.7 s / 9.8 s `[HW:
+   2026-10-09, Prophet-10 Rev4 — a 16 MB run reached its last 64 KB in seconds]`; the
+   progress readout shows it moving. The kill switch disables it like everything else.
 6. **Never writes.** The engine contains no path to a flash write ("Safety invariants" 8).
 7. Realisation: a portable `flash.c` state machine (`flash_start`, `flash_tick`, result
    codes) driven from the UI's button combo and tick, reading through `plat_flash_read(off,

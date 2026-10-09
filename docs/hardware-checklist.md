@@ -275,7 +275,7 @@ Transport and generators:
 - [ ] Back up patches first anyway (Globals → Pgm Dump → ALL → RECORD): the run only reads,
       but this is the first time the engine touches the flash driver at all.
 - [ ] Hold A440, press Sync (Osc A Sync): a three-digit number appears (the offset being
-      read, in 64 KB units: 0, 128, 96, 224, then climbing from 81 and later from 117) and
+      read, in 64 KB units: 0, 128, 96, 224, then climbing from 81 and later from 117 to 254) and
       keeps moving — minutes on the instrument — then three readings of 1.5 s each —
       `F 8`/`F16`/`F -`, `1 E`/`1 U`, `2 E`/`2 U` — then the patch number. Note all three in
       `docs/re/flash.md` and the spec marker, and roughly how long the run took. If `026`

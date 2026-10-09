@@ -105,9 +105,9 @@ static void test_16m_part_with_blank_upper_half_reads_f16(void) {
     int n = run();
     CHECK(flash_take(&f) == 1);
     CHECK(f.size == FLASH_16M && f.area1 == FLASH_EMPTY && f.area2 == FLASH_EMPTY);
-    CHECK(n == TICKS_16M && n == 9864 && reads == n);      /* 10 s */
+    CHECK(n == TICKS_16M && n == 9800 && reads == n);      /* 9.8 s at one piece per tick */
     CHECK(bad_reads == 0 && max_len == FLASH_AREA_PIECE);
-    CHECK(last_off == 0xFFFC00u && last_len == 0x3FFu);    /* the last piece stops at 0xFFFFFE */
+    CHECK(last_off == 0xFEFC00u && last_len == 0x400u);    /* the last piece ends at 0xFEFFFF: the top 64 KB is never read */
 }
 
 static void test_upper_blocks_neither_identical_nor_blank_are_unknown(void) {
@@ -169,9 +169,9 @@ static void test_any_byte_other_than_ff_makes_an_area_used(void) {
     CHECK(flash_take(&f) == 1 && f.area1 == FLASH_USED && f.area2 == FLASH_USED);
 
     reset(0x1000000u); refs();
-    span(FLASH_END_16M, FLASH_END_16M, 5);                 /* the last readable byte of 16 MB */
+    span(FLASH_END_16M, FLASH_END_16M, 5);                 /* the last byte checked on 16 MB */
     flash_init(&f); run();
-    CHECK(flash_take(&f) == 1 && f.size == FLASH_16M && f.area2 == FLASH_USED);
+    CHECK(flash_take(&f) == 1 && f.size == FLASH_16M && f.area2 == FLASH_USED && FLASH_END_16M == 0xFEFFFFu);
 }
 
 static void test_bytes_outside_the_areas_do_not_count(void) {
@@ -183,9 +183,9 @@ static void test_bytes_outside_the_areas_do_not_count(void) {
     CHECK(flash_take(&f) == 1 && f.area1 == FLASH_EMPTY && f.area2 == FLASH_EMPTY);
 
     reset(0x1000000u); refs();
-    span(0xFFFFFFu, 0xFFFFFFu, 5);                         /* the window's last byte: not readable, not checked */
+    span(0xFF0000u, 0xFFFFFFu, 5);                         /* the top 64 KB: never read (it hangs the instrument) */
     flash_init(&f); run();
-    CHECK(flash_take(&f) == 1 && f.area2 == FLASH_EMPTY && bad_reads == 0);
+    CHECK(flash_take(&f) == 1 && f.area2 == FLASH_EMPTY && bad_reads == 0 && last_off + last_len <= 0xFF0000u);
 }
 
 /* ---- pacing and lifecycle ------------------------------------------------------------ */

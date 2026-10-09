@@ -134,6 +134,11 @@ The third caller, `0x2003704E`, is the load path initialising an erased record. 
   part aliases (identical bytes), a 16 MB part reads `0xFF` there — and scans both candidate
   areas for anything other than `0xFF`; results on the display. Nothing is written.
   **Readings: not yet taken.**
+- **Readings so far (2026-10-09, Prophet-10 Rev4):** the size test said **16 MB** and area 2
+  was scanned in seconds up to its last 64 KB, where a memory-mapped read of
+  `0xFF0000–0xFFFFFE` **blocked the calling task** (display frozen, keys dead, power cycle
+  needed). The diagnostic now stops at `0xFEFFFF`; treat the top 64 KB as unusable. The
+  blank-check results were lost with the power cycle — to be re-read.
 - Unknowns: what the bootloader touches beyond the headers and slots; whether a future
   Sequential OS claims `0x511000+` (it looks like growth room for programs/tunings); the chip
   part number (readable on the board).

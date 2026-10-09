@@ -19,7 +19,7 @@
 #define FLASH_AREA1_HI 0x5FFFFFu
 #define FLASH_AREA2_LO 0x755000u         /* above everything stock references */
 #define FLASH_END_8M 0x7FFFFFu
-#define FLASH_END_16M 0xFFFFFEu          /* stock's read routine cannot return the window's last byte */
+#define FLASH_END_16M 0xFEFFFFu          /* the top 64 KB is not read: a memory-mapped read there hangs the instrument (2026-10-09) */
 
 enum { FLASH_UNKNOWN = 0, FLASH_8M = 1, FLASH_16M = 2 };   /* size verdict */
 enum { FLASH_EMPTY = 0, FLASH_USED = 1 };                   /* area verdict */
