@@ -133,12 +133,16 @@ The third caller, `0x2003704E`, is the load path initialising an erased record. 
   A440 + Sync, in 2.1.0) compares two reference blocks with the blocks 8 MB higher — an 8 MB
   part aliases (identical bytes), a 16 MB part reads `0xFF` there — and scans both candidate
   areas for anything other than `0xFF`; results on the display. Nothing is written.
-  **Readings: not yet taken.**
-- **Readings so far (2026-10-09, Prophet-10 Rev4):** the size test said **16 MB** and area 2
-  was scanned in seconds up to its last 64 KB, where a memory-mapped read of
-  `0xFF0000–0xFFFFFE` **blocked the calling task** (display frozen, keys dead, power cycle
-  needed). The diagnostic now stops at `0xFEFFFF`; treat the top 64 KB as unusable. The
-  blank-check results were lost with the power cycle — to be re-read.
+  **Readings taken 2026-10-09: `F16` / `1 E` / `2 E`.**
+- **Readings (2026-10-09, Prophet-10 Rev4): `F16` / `1 E` / `2 E`** — a **16 MB** part;
+  `0x511000–0x5FFFFF` and `0x755000–0xFEFFFF` are blank. The scan ran in seconds (the
+  memory-mapped read is fast). The top 64 KB (`0xFF0000–0xFFFFFF`) is **unusable**: a
+  memory-mapped read there blocked the calling task (display frozen, keys dead, power cycle
+  needed) — the diagnostic stops at `0xFEFFFF`.
+- **Consequence for sequence storage:** the upper half of the chip is free — 8.6 MB above
+  `0x755000`. 200 user programs × 16 KB blocks = 3.2 MB covers every sequence the 512-step
+  sequencer can hold (worst case ~11 KB compact); e.g. `0x800000 + slot × 0x4000`, ending at
+  `0xC7FFFF`, far from everything stock touches.
 - Unknowns: what the bootloader touches beyond the headers and slots; whether a future
   Sequential OS claims `0x511000+` (it looks like growth room for programs/tunings); the chip
   part number (readable on the board).

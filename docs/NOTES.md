@@ -326,8 +326,9 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
   restarts a running sequence. (A first version re-set the chord on MIDI Continue; that
   contradicted rule 6 and went in 2.0.2 — the arp keeps its chord source and position across
   Stop/Continue by itself.)
-- **2.1.0 (flash diagnostic) is unverified on hardware**: run it (checklist "Flash
-  diagnostic") and record the three readings in `docs/re/flash.md` and the spec marker.
+- Flash diagnostic (2.2.0) run 2026-10-09: **16 MB, both free areas blank** (`docs/re/flash.md`).
+  The top 64 KB hangs a memory-mapped read (excluded). Next: the per-program sequence
+  storage spec (16 KB blocks in the upper half).
 - Per-program sequence storage (as the Prophet-6): needs its own flash area — `docs/re/flash.md`
   §5 (write through stock's verified writer from the program-store hook, read in the
   program-loaded hook). Gated on the read-only flash diagnostic (spec "Flash diagnostic":

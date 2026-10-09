@@ -717,7 +717,7 @@ keyboard octave shift) — shows that button's id on the display and is otherwis
 (its release is consumed too). An aid for mapping panel button ids when designing new
 combinations.
 
-### Flash diagnostic (read-only) `[HW: unverified]`
+### Flash diagnostic (read-only) `[HW: verified 2026-10-09, Prophet-10 Rev4 — readings F16 / 1 E / 2 E; progress readout, recall, Sync id 26; the hang at the top 64 KB found and excluded]`
 
 A developer aid for the "sequence saved per program" work (`docs/re/flash.md`): it finds out
 how big the serial flash is and whether the two areas the stock OS never references are
