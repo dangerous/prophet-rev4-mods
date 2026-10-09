@@ -558,7 +558,7 @@ static void test_arpeggiated_steps_use_the_seqs_gate(void) {
     seq_set_style(&q, &a, SEQ_ARPEGGIATED);
     arp_set_gate(&a, 14);                                              /* the Arp's own: 75 % */
     seq_set_gate(&q, 4);                                               /* the Seq's: 25 % */
-    play(); ticks(300);
+    play(); ticks(320);
     CHECK(off_at(C4, 63) && on_tick(1) == 250 && off_at(E4, 313));
     seq_stop(&q, &a);
 }

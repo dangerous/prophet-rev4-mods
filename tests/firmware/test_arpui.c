@@ -563,43 +563,43 @@ static void test_globals_menu_open_passes_everything(void) {
 /* ---- Glide Rate ---------------------------------------------------------------------- */
 static void test_glide_is_tempo_only_with_a440_held(void) {
     reset();
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 500) == 0);         /* arp off, no A440: stock glide */
-    CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0 && a.bpm == 120);
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 500) == 0);         /* arp off, no A440: stock glide */
+    CHECK(arpui_pot_change(&u, &a, &q, ARPUI_POT_GLIDE) == 0 && a.bpm == 120);
     btn(A440, PRESS);                                                  /* arp off + A440 held: tempo */
     clear_log();
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 0) == 1 && a.bpm == 40 && last_int() == 40);   /* from 500 (167) down through 120: caught */
-    CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 1);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 1023);
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 0) == 1 && a.bpm == 40 && last_int() == 40);   /* from 500 (167) down through 120: caught */
+    CHECK(arpui_pot_change(&u, &a, &q, ARPUI_POT_GLIDE) == 1);
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 1023);
     CHECK(a.bpm == 300 && last_int() == 300);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 512);
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 512);
     CHECK(a.bpm == 40 + (260 * 512 + 511) / 1023);
-    CHECK(arpui_pot_store(&u, &a, 0x15, 900) == 0);                    /* another pot: stock */
-    CHECK(arpui_pot_change(&u, &a, 0x15) == 0);
+    CHECK(arpui_pot_store(&u, &a, &q, 0x15, 900) == 0);                    /* another pot: stock */
+    CHECK(arpui_pot_change(&u, &a, &q, 0x15) == 0);
     CHECK(count_type(EV_PARAM) == 0);                                  /* BPM is not saved */
     btn(A440, RELEASE);
     CHECK(!a.enabled);                                                 /* the pot used the hold: no toggle */
     tap_a440();                                                        /* arp on, internal clock */
     int bpm = a.bpm;
-    CHECK(a.enabled && arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 1023) == 0);   /* no A440: glide */
-    CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0 && a.bpm == bpm);
+    CHECK(a.enabled && arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 1023) == 0);   /* no A440: glide */
+    CHECK(arpui_pot_change(&u, &a, &q, ARPUI_POT_GLIDE) == 0 && a.bpm == bpm);
     arp_set_ext(&a, 1);                                                /* under Syn, A440 held: consumed, inert */
     btn(A440, PRESS);
     clear_log();
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 100) == 1 && a.bpm == bpm);
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 100) == 1 && a.bpm == bpm);
     CHECK(last_d3_is(CH_S, CH_Y, CH_N) && count_type(EV_INT) == 0);   /* Syn as the hint */
-    CHECK(arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 1 && a.bpm == bpm);
+    CHECK(arpui_pot_change(&u, &a, &q, ARPUI_POT_GLIDE) == 1 && a.bpm == bpm);
     btn(A440, RELEASE);
     CHECK(a.enabled);                                                  /* no toggle */
     arp_set_ext(&a, 0);
     btn(A440, PRESS);                                                  /* int again: tempo (the knob sits at 100 = 65, the tempo is 170) */
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 600) == 1 && a.bpm == 40 + (260 * 600 + 511) / 1023);   /* 65 -> 192 crosses 170: caught */
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 600) == 1 && a.bpm == 40 + (260 * 600 + 511) / 1023);   /* 65 -> 192 crosses 170: caught */
     btn(A440, RELEASE);
     arp_set_ext(&a, 1);
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 600) == 0 && arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0);
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 600) == 0 && arpui_pot_change(&u, &a, &q, ARPUI_POT_GLIDE) == 0);
     btn(A440, PRESS);                                                  /* Globals opened mid-hold: stock */
     fake_globals_open = 1;
     btn(P2, PRESS);
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 600) == 0 && arpui_pot_change(&u, &a, ARPUI_POT_GLIDE) == 0);
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 600) == 0 && arpui_pot_change(&u, &a, &q, ARPUI_POT_GLIDE) == 0);
     fake_globals_open = 0;
 }
 
@@ -747,43 +747,43 @@ static int raw_bpm(int raw) { return 40 + (260 * raw + 511) / 1023; }
 
 static void test_glide_picks_the_tempo_up_instead_of_jumping(void) {
     reset();                                                           /* 120 BPM */
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 900);                     /* A440 up: glide — but the knob is known to sit at 900 (269) */
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 900);                     /* A440 up: glide — but the knob is known to sit at 900 (269) */
     btn(A440, PRESS);
     clear_log();
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 800) == 1 && a.bpm == 120 && last_int() == 120);   /* above the tempo: inert, the target shown */
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 400);                     /* 141: still above */
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 800) == 1 && a.bpm == 120 && last_int() == 120);   /* above the tempo: inert, the target shown */
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 400);                     /* 141: still above */
     CHECK(a.bpm == 120 && last_int() == 120);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 300);                     /* 116: crossed 120 on the way down */
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 300);                     /* 116: crossed 120 on the way down */
     CHECK(a.bpm == raw_bpm(300) && last_int() == a.bpm);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 600);                     /* caught: it follows */
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 600);                     /* caught: it follows */
     CHECK(a.bpm == raw_bpm(600));
     CHECK(btn(A440, RELEASE) == 1 && !a.enabled);                      /* used the hold */
     btn(A440, PRESS);                                                  /* a new hold with the knob where the tempo is: live at once */
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 700);
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 700);
     CHECK(a.bpm == raw_bpm(700));
     tap(); ticks(1000); tap();                                         /* a tap series sets 60: the knob (700 = 218) is far away again */
     CHECK(a.bpm == 60);
     clear_log();
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 650);                     /* 205: inert, re-armed by the tap */
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 650);                     /* 205: inert, re-armed by the tap */
     CHECK(a.bpm == 60 && last_int() == 60);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 80);                      /* exactly 60: reached */
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 80);                      /* exactly 60: reached */
     CHECK(a.bpm == 60);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 200);                     /* follows */
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 200);                     /* follows */
     CHECK(a.bpm == raw_bpm(200));
     btn(A440, RELEASE);
     arp_set_bpm(&a, 150);                                              /* the tempo changed elsewhere between holds */
     btn(A440, PRESS);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 250);                     /* 104, from 200 (90): below, inert */
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 250);                     /* 104, from 200 (90): below, inert */
     CHECK(a.bpm == 150);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 500);                     /* 167: crossed from below */
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 500);                     /* 167: crossed from below */
     CHECK(a.bpm == raw_bpm(500));
     btn(A440, RELEASE);
     arpui_init(&u); arp_init(&a); seq_init(&q); clear_log();           /* power-up: the knob's position is unknown ... */
     ticks(ARPUI_BOOT_TICKS);
     btn(A440, PRESS);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 700);                     /* ... so the first report alone decides: 218 is not 120 */
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 700);                     /* ... so the first report alone decides: 218 is not 120 */
     CHECK(a.bpm == 120);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 200);                     /* 90: crossed */
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 200);                     /* 90: crossed */
     CHECK(a.bpm == raw_bpm(200));
     btn(A440, RELEASE);
 }
@@ -827,7 +827,7 @@ static void test_a440_held_at_power_on_disables_everything(void) {
     ticks(ARPUI_BOOT_TICKS);
     CHECK(u.kill);
     CHECK(btn(A440, PRESS) == 0 && btn(A440, RELEASE) == 0 && !a.enabled);
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 1023) == 0);
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 1023) == 0);
     CHECK(count_type(EV_LED) == 0 && count_type(EV_D3) == 0 && count_type(EV_INT) == 0);
     arpui_init(&u); arp_init(&a); seq_init(&q); clear_log();
     ticks(ARPUI_BOOT_TICKS + 1);
@@ -860,7 +860,7 @@ static int pv(int on, int mode, int oct, int note, int g) { return on + 2 * mode
 static void set_patch(int v) { params[ARPUI_PARAM_PACK] = v % 128; params[ARPUI_PARAM_OCT] = 1 + v / 128; }
 static int patch(void) { return params[ARPUI_PARAM_OCT] ? (params[ARPUI_PARAM_OCT] - 1) * 128 + params[ARPUI_PARAM_PACK] : -1; }
 static int raw_gate(int raw) { return (19 * raw + 511) / 1023; }    /* Amp Decay's position as a gate index */
-static void decay(int raw) { arpui_pot_store(&u, &a, ARPUI_POT_DECAY, raw); arpui_pot_change(&u, &a, ARPUI_POT_DECAY); }
+static void decay(int raw) { arpui_pot_store(&u, &a, &q, ARPUI_POT_DECAY, raw); arpui_pot_change(&u, &a, &q, ARPUI_POT_DECAY); }
 
 static void test_settings_are_written_to_the_patch_slots(void) {
     reset();
@@ -887,9 +887,9 @@ static void test_settings_are_written_to_the_patch_slots(void) {
     int n = stores();
     btn(P5, PRESS); btn(P5, RELEASE);                                  /* clock source: not saved */
     btn(A440, RELEASE);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 900);                     /* BPM: not saved */
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 900);                     /* BPM: not saved */
     arp_set_ext(&a, 0);
-    arpui_pot_store(&u, &a, ARPUI_POT_GLIDE, 900);
+    arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 900);
     CHECK(stores() == n);
     tap_a440();                                                        /* off: remembered as off */
     CHECK(patch() == pv(0, ARP_ASSIGN, 3, N_4B, 19));
@@ -1561,11 +1561,11 @@ static void test_a_block_load_waits_for_a_running_diagnostic(void) {
 static void test_amp_decay_sets_the_gate_only_with_a440_held_and_picks_it_up(void) {
     reset();
     CHECK(ARPUI_POT_DECAY == 0x11 && u.gate == ARP_GATE_DEFAULT && a.gate == ARP_GATE_DEFAULT);
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_DECAY, 1000) == 0 && arpui_pot_change(&u, &a, ARPUI_POT_DECAY) == 0);   /* A440 up: stock amp decay */
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_DECAY, 1000) == 0 && arpui_pot_change(&u, &a, &q, ARPUI_POT_DECAY) == 0);   /* A440 up: stock amp decay */
     CHECK(u.gate == 9 && stores() == 0);
     btn(A440, PRESS);
     clear_log();
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_DECAY, 900) == 1 && arpui_pot_change(&u, &a, ARPUI_POT_DECAY) == 1);   /* from 19 to 17: inert */
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_DECAY, 900) == 1 && arpui_pot_change(&u, &a, &q, ARPUI_POT_DECAY) == 1);   /* from 19 to 17: inert */
     CHECK(u.gate == 9 && last_int() == 50);                            /* the target shown */
     decay(300);                                                        /* 6: crossed 50 % on the way down */
     CHECK(raw_gate(300) == 6 && u.gate == 6 && last_int() == 35);
@@ -1578,7 +1578,7 @@ static void test_amp_decay_sets_the_gate_only_with_a440_held_and_picks_it_up(voi
     decay(108);
     CHECK(u.gate == 2);                                                /* 15 % */
     btn(A440, RELEASE);
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_DECAY, 700) == 0 && u.gate == 2);   /* alone: stock again */
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_DECAY, 700) == 0 && u.gate == 2);   /* alone: stock again */
     arp_set_bpm(&a, 120);
     tap_a440();                                                        /* the arp plays at 15 %: 37.5 ms of 250 */
     note(48, 100); note(52, 100);
@@ -1632,12 +1632,30 @@ static void test_the_seq_lends_its_gate_to_the_arp_and_the_arp_gets_its_own_back
     CHECK(count_type(EV_VOFF) == 1);
 }
 
+static void test_a_seq_gate_change_reaches_the_arpeggiated_style_at_the_next_step(void) {
+    reset(); record_cde();
+    btn(A440, PRESS); btn(UNISON, PRESS); btn(UNISON, RELEASE); btn(A440, RELEASE);   /* Arpeggiated, the Seq's 50 % */
+    tap_a440();                                                        /* plays: a Whole chord of repeated steps */
+    ticks(10);
+    btn(A440, PRESS); decay(500); decay(100); btn(A440, RELEASE);      /* 15 %, during the first step */
+    CHECK(q.gate == 2 && q.playing);
+    clear_log();
+    ticks(115);                                                        /* the first step keeps its 50 %: 125 ms */
+    CHECK(count_type(EV_VOFF) == 1);
+    ticks(125);                                                        /* 250: the next step, inside the same chord ... */
+    clear_log();
+    ticks(37);
+    CHECK(count_type(EV_VOFF) == 0);
+    ticks(1);                                                          /* ... at 15 % */
+    CHECK(count_type(EV_VOFF) == 1);
+}
+
 static void test_amp_decay_is_stock_under_the_kill_switch(void) {
     arpui_init(&u); arp_init(&a); seq_init(&q); clear_log();
     fake_a440_down = 1;
     ticks(ARPUI_BOOT_TICKS);
     CHECK(u.kill);
-    CHECK(arpui_pot_store(&u, &a, ARPUI_POT_DECAY, 300) == 0 && arpui_pot_change(&u, &a, ARPUI_POT_DECAY) == 0);
+    CHECK(arpui_pot_store(&u, &a, &q, ARPUI_POT_DECAY, 300) == 0 && arpui_pot_change(&u, &a, &q, ARPUI_POT_DECAY) == 0);
     fake_a440_down = 0;
 }
 
@@ -1710,6 +1728,7 @@ int main(void) {
     test_amp_decay_sets_the_gate_only_with_a440_held_and_picks_it_up();
     test_amp_decay_edits_the_selected_generators_gate();
     test_the_seq_lends_its_gate_to_the_arp_and_the_arp_gets_its_own_back();
+    test_a_seq_gate_change_reaches_the_arpeggiated_style_at_the_next_step();
     test_amp_decay_is_stock_under_the_kill_switch();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;

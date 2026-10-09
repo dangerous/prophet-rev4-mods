@@ -36,6 +36,9 @@ typedef struct {
     int8_t   dir;                     /* Up/Down direction, +1 or -1 */
     uint8_t  gate_open;               /* step note not yet released by the gate */
     uint8_t  gate;                    /* the gate in use, index 0..ARP_GATES-1 (the Seq's while it borrows the arp) */
+    uint8_t  gate_cur;                /* the sounding step's gate, taken when it began */
+    uint16_t gate_ms;                 /* MIDI clock: ms until the sounding step's release, 0 = none due */
+    uint16_t syn_len;                 /* MIDI clock: the clocks of the step being started (0: the first of a pair) */
     uint8_t  at_start;                /* pattern position is "before the first step" */
     uint16_t bpm;
     uint8_t  beats_num, beats_den;    /* beats per step (per pair of steps with swing), e.g. 1/2 for an eighth */

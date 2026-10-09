@@ -55,7 +55,7 @@ uint32_t seqmem_encode(const seq_t *q, const seqmem_settings_t *s, int slot, uin
     uint32_t total = stream_len(q);
     for (uint32_t i = 0; i < out_len; i++)
         out[i] = 0;
-    put(&w, 'P'); put(&w, 'S'); put(&w, 'Q'); put(&w, '1');
+    put(&w, 'P'); put(&w, 'S'); put(&w, 'Q'); put(&w, '2');
     put16(&w, (uint16_t)total);
     put(&w, q->len ? FLAG_SEQUENCE : 0);
     put(&w, (uint8_t)slot);
@@ -66,6 +66,7 @@ uint32_t seqmem_encode(const seq_t *q, const seqmem_settings_t *s, int slot, uin
     put(&w, s->chord_beats);
     put(&w, (uint8_t)s->transpose);
     put(&w, s->gen);
+    put(&w, s->gate);
     for (int i = 0; i < q->len; i++) {
         const seq_ev_t *e = &q->ev[i];
         put16(&w, e->dur);
@@ -182,7 +183,7 @@ int seqmem_load(int slot, seq_t *q, seqmem_settings_t *s, uint8_t *piece_buf)
     r.buf = piece_buf;
     if (plat_flash_read(r.base, h, SEQMEM_HEADER) != 0)
         return SEQMEM_NONE;
-    if (h[0] != 'P' || h[1] != 'S' || h[2] != 'Q' || h[3] != '1')
+    if (h[0] != 'P' || h[1] != 'S' || h[2] != 'Q' || h[3] != '2')
         return SEQMEM_NONE;
     len = (uint32_t)h[4] | (uint32_t)h[5] << 8;
     if (len <= SEQMEM_HEADER || len > SEQMEM_BLOCK || h[7] != (uint8_t)slot)
@@ -191,12 +192,15 @@ int seqmem_load(int slot, seq_t *q, seqmem_settings_t *s, uint8_t *piece_buf)
         return SEQMEM_NONE;                                /* saved with another program's sound */
     if (!(h[6] & FLAG_SEQUENCE))
         return SEQMEM_NONE;                                /* "no sequence": the live one stays */
+    if (h[16] >= ARP_GATES)
+        return SEQMEM_NONE;
     s->rate_code = h[10];
     s->style = h[11];
     s->order = h[12];
     s->chord_beats = h[13];
     s->transpose = (int8_t)h[14];
     s->gen = h[15];
+    s->gate = h[16];
     r.len = len;
     if (walk_events(&r, 0) < 0)                            /* validate everything first */
         return SEQMEM_NONE;

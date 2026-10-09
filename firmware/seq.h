@@ -46,6 +46,8 @@ typedef struct {
     int8_t   dir;                     /* Pnd direction */
     uint8_t  gate_open;
     uint8_t  gate;                    /* the Seq's gate, index 0..ARP_GATES-1 (both styles) */
+    uint8_t  gate_cur;                /* Chords: the sounding event's gate, taken when it began */
+    uint16_t gate_ms;                 /* Chords, MIDI clock: ms until the release, 0 = none due */
     uint8_t  snd_n;
     uint8_t  snd[SEQ_CHORD];          /* Chords: the generated notes sounding */
     uint32_t acc;                     /* internal step clock, as the arp's; the MIDI step grid is the arp's clock count */

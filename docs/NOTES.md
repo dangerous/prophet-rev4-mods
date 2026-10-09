@@ -260,8 +260,11 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
   Stepped by index like the sequence; removing an entry before the position moves the
   position back with it, removing the current one sets `asg_stay` so the next step does not
   advance past its successor. A chord source, when set, wins as the base order.
-- Timing: internal `acc += bpm*den` per tick, step at `60000*num`, gate at half; MIDI clock
-  `24*num/den` per step counted from Start; 1 s loss releases and resets the count.
+- Timing: internal `acc += bpm*den` per tick, step at `60000*num`, gate at `(g + 1) / 20` of
+  the step (`acc * 20 >= units * (g + 1)`, no divide; g = 19 never fires, the step releases);
+  MIDI clock `24*num/den` per step counted from Start, the gate a ms countdown armed at the
+  step's clock, `(g + 1) * clocks * 125 / bpm` (= gate x clocks x 2500 / BPM); 1 s loss
+  releases and resets the count. The sounding step keeps the gate it began with (`gate_cur`).
 - Under `Syn` the BPM follows the clock: each accepted F8 samples `loss` (ticks since the
   previous clock) into a 24-entry ring; with a full ring BPM = round(60000 / sum). Start /
   Continue / Stop / loss / clock-source toggle empty the ring. Both tempo gestures (A440 +
@@ -338,5 +341,5 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
   §5 (write through stock's verified writer from the program-store hook, read in the
   program-loaded hook). Gated on the read-only flash diagnostic (spec "Flash diagnostic":
   chip size, blankness of the two free areas); the per-program block size follows from it.
-- Possible later features: arp to MIDI Out (for an external synth), gate length, arp
-  repeats, chord/trigger mode, probability, variable swing.
+- Possible later features: arp to MIDI Out (for an external synth), arp repeats,
+  chord/trigger mode, probability, variable swing.

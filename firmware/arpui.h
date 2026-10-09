@@ -37,14 +37,14 @@
 #define ARPUI_LED_FIX_MS 100        /* after a replayed A440 press: re-assert the LED (stock's late LED-off) */
 #define ARPUI_TAP_MAX_MS 2000       /* a longer gap starts a new tap series */
 #define ARPUI_TAP_IVS 4             /* intervals averaged */
-#define ARPUI_PARAM_PACK 93         /* patch slot: n * 10 + mode * 2 + on/off (n: Prophet-6 position, or long value 0..2) */
-#define ARPUI_PACK_MAX 99           /* larger values of 93 are not arp data (29 with the long flag) */
-#define ARPUI_PACK_MAX_LONG 29
-#define ARPUI_PARAM_OCT 94          /* patch slot: octaves 1..4 + 4 L (long note value); 1.2.0's 8 C + 40 M accepted and ignored; 0 = no arp data */
-#define ARPUI_OCT_MAX 80
+/* patch slots: V = on/off + 2 mode + 10 (octaves - 1) + 40 note value index + 520 gate index (0..10399),
+ * 93 = V mod 128, 94 = 1 + V div 128 (0 = no arp data) */
+#define ARPUI_PARAM_PACK 93
+#define ARPUI_PARAM_OCT 94
+#define ARPUI_PATCH_HI_MAX 82       /* 94 above this is not arp data */
 #define ARPUI_BOOT_TICKS 3000       /* kill-switch window after power-on (3 s; the panel link comes up late) */
 #define ARPUI_MIDDLE_C 60           /* the transposition command's zero (the key's number before the octave shift) */
-#define ARPUI_RAW_NONE 0xFFFF       /* the glide pot has not reported since power-on */
+#define ARPUI_RAW_NONE 0xFFFF       /* the pot has not reported since power-on */
 
 enum { ARPUI_GEN_ARP = 0, ARPUI_GEN_SEQ = 1 };
 
@@ -73,6 +73,9 @@ typedef struct {
     uint8_t  hold_arp, hold_stock;    /* the two HOLD latches: the one not in use is remembered here */
     uint8_t  tempo_caught;            /* this A440 hold: the glide knob has reached the tempo and sets it */
     uint8_t  gate;                    /* the Arp's gate, index 0..ARP_GATES-1 (saved with the program) */
+    uint8_t  gate_caught;             /* this A440 hold: the Amp Decay knob has reached the gate and sets it */
+    uint8_t  pad[3];
+    uint16_t decay_raw;               /* Amp Decay's last raw value, gate or decay (ARPUI_RAW_NONE: unknown) */
     uint16_t glide_raw;               /* the glide pot's last raw value, tempo or glide (ARPUI_RAW_NONE: unknown) */
     uint8_t  flash_msgs;              /* flash diagnostic readings still to show after the current message */
     uint8_t  flash_next;              /* the reading the next A440 + Sync recalls (0 size, 1 area 1, 2 area 2) */
@@ -102,9 +105,10 @@ void arpui_realtime(arpui_t *u, arp_t *a, seq_t *q, int byte, int port);
 /* The synth's own hold is suspended ("HOLD while the arp is on"): arp on, record mode, or
  * the sequencer running with SEq selected (the engine then sustains live notes itself). */
 int  arpui_suspended(const arpui_t *u, const arp_t *a, const seq_t *q);
-/* Pot hooks: raw store (pot, raw 0..1023) and change post. Return 1 if consumed. */
-int  arpui_pot_store(arpui_t *u, arp_t *a, int pot, int raw);
-int  arpui_pot_change(arpui_t *u, arp_t *a, int pot);
+/* Pot hooks: raw store (pot, raw 0..1023) and change post. Return 1 if consumed: Glide Rate
+ * (tempo) and Amp Decay (the selected generator's gate) while A440 is held. */
+int  arpui_pot_store(arpui_t *u, arp_t *a, seq_t *q, int pot, int raw);
+int  arpui_pot_change(arpui_t *u, arp_t *a, seq_t *q, int pot);
 /* Every 1 ms: display revert (to `r N` in record mode), LED (the selected generator;
  * blinking in record mode), kill-switch window, tap-tempo clock. */
 void arpui_tick(arpui_t *u, arp_t *a, seq_t *q);

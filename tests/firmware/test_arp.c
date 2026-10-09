@@ -350,6 +350,7 @@ static void test_notes_never_reset_the_grid_under_ext(void) {
 
 static void test_clock_loss_and_port_lock(void) {
     enabled_with_ceg(); arp_set_ext(&a, 1);
+    arp_set_gate(&a, 19);                                              /* 100 %: only the loss ends the note */
     arp_realtime(&a, 0xFA, 0);
     clocks(1, 0);
     clocks(5, 1);                                                      /* other port: ignored */
@@ -798,7 +799,7 @@ static void test_gate_on_swing_steps_is_each_steps_own(void) {
     arp_enable(&a, 1);
     chord_ceg();
     ticks(500);
-    CHECK(on_tick(1) == 334 && off_tick(0) == 42 && off_tick(1) == 355);
+    CHECK(on_tick(1) == 334 && off_tick(0) == 84 && off_tick(1) == 375);   /* 25 % of 333.3 ms; of 166.7 ms from 334 */
 }
 
 /* under MIDI clock the release is gate x step clocks x 2500 / BPM ms after the step's clock */
