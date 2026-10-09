@@ -173,7 +173,7 @@ Transport and generators:
 
 - [ ] With a recording, tap A440: the sequence plays from step 1 at the tempo (BPM shown,
       LED lit): single notes, the chord as a chord, the rest silent, the tied step held for
-      three steps and released half-way through its last one. Tap A440: `OFF`, silence.
+      three steps and released at the gate of its last one (half-way at the default). Tap A440: `OFF`, silence.
 - [ ] While it plays: play the keyboard — every key sounds polyphonically with its velocity
       and nothing changes in the sequence; HOLD / pedal sustain *your* notes only (rule 4a
       above); starting or stopping the sequence does not cut your notes.

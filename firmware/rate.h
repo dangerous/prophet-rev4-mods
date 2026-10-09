@@ -19,8 +19,8 @@ int  rate_index(const rate_t *r);
 int  rate_step(rate_t *r, int dir);
 /* select by index 0..RATE_COUNT-1; returns 1 if valid */
 int  rate_set_index(rate_t *r, int i);
-/* the code patch memory stores ("Patch memory"): the Prophet-6 position 0..9 for its ten
- * values (0 = Half), 10 = Whole, 11 = 2 bars, 12 = 4 bars */
+/* the code the sequence block stores ("Sequence memory"): the Prophet-6 position 0..9 for
+ * its ten values (0 = Half), 10 = Whole, 11 = 2 bars, 12 = 4 bars (patch memory stores the index) */
 int  rate_code(const rate_t *r);
 int  rate_set_code(rate_t *r, int code);                  /* returns 1 if valid */
 /* beats per step as a fraction (8th -> 1/2; for a swing value, per pair of steps);

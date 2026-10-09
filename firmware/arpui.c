@@ -742,13 +742,13 @@ static int pot_is_readout(const arpui_t *u, int pot)
 
 int arpui_pot_store(arpui_t *u, arp_t *a, seq_t *q, int pot, int raw)
 {
+    int prev = ARPUI_RAW_NONE, cur;
     if (pot_is_readout(u, pot)) {
         unsigned id = (unsigned)pot;                       /* unsigned: no signed-divide helper on the target */
         u->a440_used = 1;
         show3(u, UC_P, id >= 10u ? (int)(id / 10u) : UC_BLANK, (int)(id % 10u));
         return 1;
     }
-    int prev = ARPUI_RAW_NONE, cur;
     if (raw < 0) raw = 0;
     if (raw > 1023) raw = 1023;
     if (pot == ARPUI_POT_DECAY && !u->kill)

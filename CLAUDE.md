@@ -50,3 +50,8 @@ plus a Python CLI that unpacks, patches and re-packs the OS SysEx image.
   `cd dist && shasum -a 256 -c SHA256SUMS` there. Never delete dist files; superseded builds
   go to `dist/old/` with a hash suffix.
 - Flashing is a human step; the tools only produce files.
+- When a stored layout, format or formula changes (program parameters 93/94, the sequence
+  block, a timing rule), grep for the old wording beyond the spec: `docs/NOTES.md` carries a
+  running design summary, `docs/hardware-checklist.md` and `README.md` restate behaviour in
+  prose, and `firmware/*.h` comments name what each value is for. All of them go stale
+  silently; the tests do not catch prose.
