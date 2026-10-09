@@ -14,6 +14,8 @@
 #define ARP_LOSS_TICKS 1000           /* 1 s without a MIDI clock releases the sounding note */
 #define ARP_PPQN 24
 #define ARP_BEAT_IVS 24               /* clock intervals measured for the followed BPM */
+#define ARP_GATES 20                  /* gate index 0 = 5 % ... 19 = 100 % of the step */
+#define ARP_GATE_DEFAULT 9            /* 50 % */
 
 enum { ARP_UP = 0, ARP_DOWN = 1, ARP_UPDOWN = 2, ARP_RANDOM = 3, ARP_ASSIGN = 4, ARP_MODES = 5 };
 enum { ARP_SRC_LOCAL = 1, ARP_SRC_MIDI = 2 };
@@ -33,6 +35,7 @@ typedef struct {
     uint8_t  sounding_base;           /* base pitch of the sounding step note */
     int8_t   dir;                     /* Up/Down direction, +1 or -1 */
     uint8_t  gate_open;               /* step note not yet released by the gate */
+    uint8_t  gate;                    /* the gate in use, index 0..ARP_GATES-1 (the Seq's while it borrows the arp) */
     uint8_t  at_start;                /* pattern position is "before the first step" */
     uint16_t bpm;
     uint8_t  beats_num, beats_den;    /* beats per step (per pair of steps with swing), e.g. 1/2 for an eighth */
@@ -80,6 +83,7 @@ void arp_set_bpm(arp_t *a, int bpm);                     /* 40..300 */
 void arp_set_beats(arp_t *a, int num, int den);          /* beats per step */
 void arp_set_swing(arp_t *a, int on);                    /* 16S / 8S */
 void arp_set_ext(arp_t *a, int ext);                     /* clock source: 0 internal, 1 MIDI */
+void arp_set_gate(arp_t *a, int g);                      /* 0..ARP_GATES-1; from the next step */
 
 /* Chord source: the pattern runs over these n notes (n = 0: a rest — silence, the clock
  * runs) from now — the first note sounds at once, the step phase starts here, and under

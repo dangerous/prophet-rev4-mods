@@ -83,6 +83,7 @@ static void test_defaults_and_size(void) {
     CHECK(q.len == 0 && q.total == 0 && !q.playing && !q.rec);
     CHECK(q.style == SEQ_CHORDS && q.order == SEQ_FOR && q.chord_beats == 4 && q.transpose == 0);
     CHECK(q.beats_num == 1 && q.beats_den == 2 && !q.swing);         /* 8th */
+    CHECK(q.gate == ARP_GATE_DEFAULT);                                 /* 50 % */
     ticks(3000);
     CHECK(nlog == 0);
 }
@@ -352,14 +353,19 @@ static void test_midi_clock_arms_steps_stops_continues_and_disarms(void) {
     rt(0xFA);
     clocks(1);                                                         /* clock 0: event 1 */
     CHECK(n_on() == 1 && on_note(0) == C4 && q.playing);
-    clocks(6);
-    CHECK(n_sounding() == 0);                                          /* gate at clock 6 */
-    clocks(6);                                                         /* clock 12: the tied chord */
+    ticks(124);
+    CHECK(sounding[C4]);
+    ticks(1);
+    CHECK(n_sounding() == 0);                                          /* the gate: 50 % of 12 clocks at 120 BPM, 125 ms */
+    clocks(12);                                                        /* clock 12: the tied chord */
     CHECK(n_on() == 3 && sounding[E4]);
     clocks(12);                                                        /* clock 24: no retrigger */
     CHECK(n_on() == 3 && sounding[E4]);
-    clocks(6);                                                         /* clock 30: released, half-way through its last step */
+    ticks(124);
+    CHECK(sounding[E4]);
+    ticks(1);                                                          /* released 125 ms into its last step */
     CHECK(n_sounding() == 0);
+    clocks(6);                                                         /* clock 30 */
     rt(0xFC);                                                          /* MIDI Stop while the rest is due: pause */
     clocks(50);
     CHECK(n_on() == 3);
@@ -524,6 +530,68 @@ static void test_clear_and_all_notes_off(void) {
     roff(C4); seq_rec_end(&q);
 }
 
+/* ---- gate (spec "Gate") ---------------------------------------------------------------- */
+static void test_chords_release_at_the_seqs_gate_of_the_last_step(void) {
+    reset(); record_four();                                            /* C (1 step), E G (2 steps), rest, B */
+    seq_set_gate(&q, 4);                                               /* 25 % of 250 ms */
+    CHECK(q.gate == 4);
+    seq_set_gate(&q, 20); CHECK(q.gate == 4);                          /* invalid: ignored */
+    arp_set_gate(&a, 14);                                              /* the Arp's gate plays no part in Chords */
+    play(); ticks(1100);
+    CHECK(off_at(C4, 63) && on_tick(1) == 250);
+    CHECK(off_at(E4, 563) && off_at(G4, 563));                         /* one step plus the gate of the last */
+    CHECK(on_tick(3) == 1000 && off_at(B4, 1063));
+    seq_stop(&q, &a);
+    seq_set_gate(&q, 19);                                              /* 100 %: released at the boundary as the next event starts */
+    play(); ticks(260);
+    CHECK(nlog == 4 && !log_[1].on && log_[1].note == C4 && log_[1].t == 250 && log_[2].on && log_[2].t == 250);
+    seq_stop(&q, &a);
+    seq_set_gate(&q, 9);                                               /* a change waits for the next event */
+    play(); ticks(10);
+    seq_set_gate(&q, 0);
+    ticks(600);
+    CHECK(off_at(C4, 125) && off_at(E4, 513));                         /* 5 % of the chord's last step: 500 + 13 */
+}
+
+static void test_arpeggiated_steps_use_the_seqs_gate(void) {
+    reset(); record_two_chords();
+    seq_set_style(&q, &a, SEQ_ARPEGGIATED);
+    arp_set_gate(&a, 14);                                              /* the Arp's own: 75 % */
+    seq_set_gate(&q, 4);                                               /* the Seq's: 25 % */
+    play(); ticks(300);
+    CHECK(off_at(C4, 63) && on_tick(1) == 250 && off_at(E4, 313));
+    seq_stop(&q, &a);
+}
+
+static void test_chords_gate_under_midi_clock_is_timed_in_ms(void) {
+    reset(); record_four();
+    arp_set_ext(&a, 1);
+    seq_set_gate(&q, 4);                                               /* 25 % of 12 clocks at 120 BPM: 62 ms */
+    seq_start(&q, &a); rt(0xFA);
+    clocks(1);
+    ticks(61);
+    CHECK(sounding[C4]);
+    ticks(1);
+    CHECK(!sounding[C4]);
+    clocks(12);                                                        /* clock 12: E G, two steps */
+    ticks(100);
+    CHECK(sounding[E4]);                                               /* not its last step yet */
+    clocks(12);                                                        /* clock 24: the last step */
+    ticks(61);
+    CHECK(sounding[E4]);
+    ticks(1);
+    CHECK(n_sounding() == 0);
+    reset(); record_four();                                            /* 100 %: until the next event */
+    arp_set_ext(&a, 1);
+    seq_set_gate(&q, 19);
+    seq_start(&q, &a); rt(0xFA);
+    clocks(1);
+    ticks(500);
+    CHECK(sounding[C4]);
+    clocks(12);
+    CHECK(!sounding[C4] && sounding[E4]);
+}
+
 int main(void) {
     test_defaults_and_size();
     test_recording_counts_timing_steps();
@@ -547,6 +615,9 @@ int main(void) {
     test_arpeggiated_chord_boundaries_carry_the_remainder();
     test_recording_stops_playback_and_ends_stopped();
     test_clear_and_all_notes_off();
+    test_chords_release_at_the_seqs_gate_of_the_last_step();
+    test_arpeggiated_steps_use_the_seqs_gate();
+    test_chords_gate_under_midi_clock_is_timed_in_ms();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;
 }

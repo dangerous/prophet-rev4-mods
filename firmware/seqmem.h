@@ -36,6 +36,7 @@ typedef struct {
     uint8_t style, order, chord_beats;
     int8_t  transpose;
     uint8_t gen;                      /* generator selection: 0 ArP, 1 SEq */
+    uint8_t gate;                     /* the Seq's gate, index 0..ARP_GATES-1 */
 } seqmem_settings_t;
 
 /* The slot of a program location: 0..199 for a user program, -1 for factory or out of range. */

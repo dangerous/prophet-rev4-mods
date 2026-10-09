@@ -45,6 +45,7 @@ typedef struct {
     uint16_t remain;                  /* Chords: timing steps left of the event, the current one included */
     int8_t   dir;                     /* Pnd direction */
     uint8_t  gate_open;
+    uint8_t  gate;                    /* the Seq's gate, index 0..ARP_GATES-1 (both styles) */
     uint8_t  snd_n;
     uint8_t  snd[SEQ_CHORD];          /* Chords: the generated notes sounding */
     uint32_t acc;                     /* internal step clock, as the arp's; the MIDI step grid is the arp's clock count */
@@ -78,6 +79,7 @@ void seq_set_beats(seq_t *q, int num, int den);          /* the Seq's note value
 void seq_set_swing(seq_t *q, int on);
 void seq_set_chord_beats(seq_t *q, int beats);           /* Arpeggiated: 1..16 */
 void seq_set_transpose(seq_t *q, int semis);             /* from the next event / chord boundary */
+void seq_set_gate(seq_t *q, int g);                      /* 0..ARP_GATES-1; from the next step / event */
 
 /* Record mode. Notes sound through the arp's live path (the arp is off while recording) and
  * are recorded: held together, one chord; HOLD = rest or tie; Back undoes. Returns are the

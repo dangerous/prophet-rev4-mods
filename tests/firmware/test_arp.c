@@ -294,6 +294,11 @@ static void test_mode_and_octave_change_restart_at_next_step_keeping_phase(void)
 
 /* ---- MIDI clock ---------------------------------------------------------------------- */
 static void clocks(int n, int port) { while (n-- > 0) arp_realtime(&a, 0xF8, port); }
+/* clocks with time between them: 21, 21, 21, 21, 21, 20 ms ... = 120 BPM, any 24 in a row one beat */
+static void spaced_clocks(int n, int ms) {
+    static int k;
+    while (n-- > 0) { ticks(ms ? ms : (k++ % 6 == 5 ? 20 : 21)); arp_realtime(&a, 0xF8, 0); }
+}
 
 static void test_ext_silent_without_clocks_and_steps_every_12_clocks(void) {
     enabled_with_ceg();
@@ -305,11 +310,11 @@ static void test_ext_silent_without_clocks_and_steps_every_12_clocks(void) {
     arp_realtime(&a, 0xFA, 0);
     clocks(1, 0);                                                      /* first clock after Start steps */
     CHECK(n_on() == 1 && on_note(0) == C3);
-    clocks(5, 0);
+    ticks(124);
     CHECK(n_sounding() == 1);
-    clocks(1, 0);                                                      /* clock 6: gate off */
+    ticks(1);                                                          /* the gate: 50 % of 12 clocks at 120 BPM = 125 ms */
     CHECK(n_sounding() == 0);
-    clocks(6, 0);                                                      /* clock 12: next step */
+    clocks(12, 0);                                                     /* clock 12: next step */
     CHECK(n_on() == 2 && on_note(1) == D3);
     clocks(24, 0);
     CHECK(strcmp(ons(), "48 50 52 55 ") == 0);
@@ -447,7 +452,7 @@ static void test_swing_under_midi_clock(void) {
     numbered_clocks(0, 49);
     CHECK(on_tick(0) == 0 && on_tick(1) == 16 && on_tick(2) == 24 && on_tick(3) == 40 && on_tick(4) == 48);
     CHECK(n_on() == 5);
-    CHECK(off_tick(0) == 8 && off_tick(1) == 20 && off_tick(2) == 32 && off_tick(3) == 44);   /* half of 16, of 8 */
+    CHECK(off_tick(0) == 16 && off_tick(1) == 24 && off_tick(2) == 40 && off_tick(3) == 48);   /* no time between the clocks: the gate is in ms, the next step comes first */
     CHECK(strcmp(ons(), "48 52 55 48 52 ") == 0);
     enabled_with_ceg(); arp_set_ext(&a, 1);
     arp_set_beats(&a, 1, 2); arp_set_swing(&a, 1);                     /* 16S: 12-clock pairs, 8 + 4 */
@@ -456,7 +461,7 @@ static void test_swing_under_midi_clock(void) {
     numbered_clocks(0, 25);
     CHECK(on_tick(0) == 0 && on_tick(1) == 8 && on_tick(2) == 12 && on_tick(3) == 20 && on_tick(4) == 24);
     CHECK(n_on() == 5);
-    CHECK(off_tick(0) == 4 && off_tick(1) == 10 && off_tick(2) == 16 && off_tick(3) == 22);   /* half of 8, of 4 */
+    CHECK(off_tick(0) == 8 && off_tick(1) == 12 && off_tick(2) == 20 && off_tick(3) == 24);
     /* a mid-run change lands on the pair grid from Start */
     enabled_with_ceg(); arp_set_ext(&a, 1);
     arp_realtime(&a, 0xFA, 0);
@@ -484,13 +489,13 @@ static void test_four_bar_steps_internal_and_midi_clock(void) {
     arp_realtime(&a, 0xFA, 0);
     clocks(1, 0);
     CHECK(n_on() == 1);
-    clocks(191, 0);
+    spaced_clocks(191, 0);
     CHECK(n_sounding() == 1);
-    clocks(1, 0);                                                      /* clock 192: gate */
-    CHECK(n_sounding() == 0);
-    clocks(191, 0);
+    spaced_clocks(1, 0);                                               /* clock 192, 4 s in: the gate */
+    CHECK(n_sounding() == 0 && off_tick(0) - on_tick(0) == 4000);
+    spaced_clocks(191, 0);
     CHECK(n_on() == 1);
-    clocks(1, 0);                                                      /* clock 384: next step */
+    spaced_clocks(1, 0);                                               /* clock 384: next step */
     CHECK(n_on() == 2 && on_note(1) == E3);
 }
 
@@ -569,11 +574,11 @@ static void test_chord_source_under_midi_clock_counts_from_the_chord(void) {
     arp_chord_set(&a, notes, vels, 3);
     arp_rt_apply(&a, 0xF8);                                            /* ... and the clock is the chord's clock 0 */
     CHECK(n_on() == 1 && on_note(0) == C4);                            /* the chord's first note now, not at the grid */
-    clocks(5, 0);
+    ticks(124);
     CHECK(n_sounding() == 1);
-    clocks(1, 0);
-    CHECK(n_sounding() == 0);                                          /* gate 6 clocks later */
-    clocks(6, 0);
+    ticks(1);
+    CHECK(n_sounding() == 0);                                          /* the gate, 125 ms after the chord's clock */
+    clocks(12, 0);
     CHECK(n_on() == 2 && on_note(1) == E4);                            /* steps counted from the chord's clock */
 }
 
@@ -689,11 +694,6 @@ static void test_assign_list_holds_32_entries(void) {
 
 /* ---- BPM follows the MIDI clock ------------------------------------------------------ */
 /* n clocks, each after `ms` ticks; ms 0 = the 120 BPM pattern 21 21 21 21 21 20 (500 per 24) */
-static void spaced_clocks(int n, int ms) {
-    static int k;
-    while (n-- > 0) { ticks(ms ? ms : (k++ % 6 == 5 ? 20 : 21)); arp_realtime(&a, 0xF8, 0); }
-}
-
 static void test_bpm_follows_the_midi_clock_over_a_beat(void) {
     reset(); arp_set_bpm(&a, 77);
     arp_set_ext(&a, 1);
@@ -753,6 +753,119 @@ static void test_bpm_window_restarts_on_transport_and_loss(void) {
     CHECK(a.bpm == 40);
 }
 
+/* ---- gate (spec "Gate") ---------------------------------------------------------------- */
+static void test_gate_defaults_to_half_and_ignores_invalid_values(void) {
+    reset();
+    CHECK(a.gate == ARP_GATE_DEFAULT && ARP_GATE_DEFAULT == 9 && ARP_GATES == 20);
+    arp_set_gate(&a, 20); CHECK(a.gate == 9);
+    arp_set_gate(&a, -1); CHECK(a.gate == 9);
+    arp_set_gate(&a, 0); CHECK(a.gate == 0);
+    arp_set_gate(&a, 19); CHECK(a.gate == 19);
+}
+
+/* 120 BPM eighths: 250 ms steps; the release at gate x step on the 1 ms tick */
+static void test_gate_sets_the_release_point_under_the_internal_clock(void) {
+    static const struct { int g, off; } T[] = { { 0, 13 }, { 4, 63 }, { 9, 125 }, { 14, 188 }, { 18, 238 } };
+    for (int i = 0; i < 5; i++) {
+        reset(); arp_set_gate(&a, T[i].g); arp_enable(&a, 1);
+        on(C3); on(E3);
+        ticks(300);
+        CHECK(off_tick(0) == T[i].off && on_tick(1) == 250);
+    }
+    reset(); arp_set_gate(&a, 19); arp_enable(&a, 1);                  /* 100 %: released at the boundary, then the next note */
+    on(C3); on(E3);
+    ticks(260);
+    CHECK(nlog == 3 && !log_[1].on && log_[1].note == C3 && log_[1].t == 250 && log_[2].on && log_[2].note == E3 && log_[2].t == 250);
+    reset(); arp_set_gate(&a, 19); arp_enable(&a, 1);                  /* a single note at 100 %: struck again each step */
+    on(C3);
+    ticks(260);
+    CHECK(nlog == 3 && !log_[1].on && log_[1].note == C3 && log_[1].t == 250 && log_[2].on && log_[2].note == C3);
+}
+
+static void test_a_gate_change_applies_from_the_next_step(void) {
+    reset(); arp_enable(&a, 1);
+    on(C3); on(E3);
+    ticks(10);
+    arp_set_gate(&a, 0);                                               /* 5 %, while C sounds at 50 % */
+    ticks(300);
+    CHECK(off_tick(0) == 125 && on_tick(1) == 250 && off_tick(1) == 263);
+}
+
+static void test_gate_on_swing_steps_is_each_steps_own(void) {
+    reset();
+    arp_set_beats(&a, 1, 1); arp_set_swing(&a, 1);                     /* 8S: 334 + 166 ms */
+    arp_set_gate(&a, 4);                                               /* 25 % */
+    arp_enable(&a, 1);
+    chord_ceg();
+    ticks(500);
+    CHECK(on_tick(1) == 334 && off_tick(0) == 42 && off_tick(1) == 355);
+}
+
+/* under MIDI clock the release is gate x step clocks x 2500 / BPM ms after the step's clock */
+static void test_gate_under_midi_clock_is_timed_in_ms(void) {
+    reset(); arp_set_ext(&a, 1); arp_enable(&a, 1); on(C3); on(E3);
+    arp_set_gate(&a, 4);                                               /* 25 % of 12 clocks at 120 = 62.5 -> 62 ms */
+    arp_realtime(&a, 0xFA, 0);
+    clocks(1, 0);
+    CHECK(sounding[C3]);
+    ticks(61);
+    CHECK(sounding[C3]);
+    ticks(1);
+    CHECK(!sounding[C3] && off_tick(0) == 62);
+    reset(); arp_set_ext(&a, 1); arp_enable(&a, 1); on(C3); on(E3);   /* 50 % of a 32nd (3 clocks): 31 ms, not 1 clock */
+    arp_set_beats(&a, 1, 8);
+    arp_realtime(&a, 0xFA, 0);
+    clocks(1, 0);
+    CHECK(sounding[C3]);
+    ticks(30);
+    CHECK(sounding[C3]);
+    ticks(1);
+    CHECK(!sounding[C3]);
+    reset(); arp_set_bpm(&a, 100); arp_set_ext(&a, 1); arp_enable(&a, 1); on(C3); on(E3);   /* the BPM in force: 100 -> 150 ms */
+    arp_realtime(&a, 0xFA, 0);
+    clocks(1, 0);
+    ticks(149);
+    CHECK(sounding[C3]);
+    ticks(1);
+    CHECK(!sounding[C3]);
+}
+
+static void test_gate_under_midi_clock_yields_to_the_next_step(void) {
+    reset(); arp_set_ext(&a, 1); arp_enable(&a, 1); on(C3); on(E3);
+    arp_set_gate(&a, 18);                                              /* 95 %: 237 ms */
+    arp_realtime(&a, 0xFA, 0);
+    clocks(12, 0);                                                     /* a fast burst: the next step comes first */
+    CHECK(sounding[C3]);
+    clocks(1, 0);
+    CHECK(!sounding[C3] && sounding[E3]);
+    ticks(236);                                                        /* E's own countdown, from its clock */
+    CHECK(sounding[E3]);
+    ticks(1);
+    CHECK(!sounding[E3]);
+    reset(); arp_set_ext(&a, 1); arp_enable(&a, 1); on(C3); on(E3);   /* 100 %: no release before the next step */
+    arp_set_gate(&a, 19);
+    arp_realtime(&a, 0xFA, 0);
+    clocks(1, 0);
+    ticks(900);
+    CHECK(sounding[C3]);
+    clocks(11, 0);
+    CHECK(sounding[C3]);
+    clocks(1, 0);
+    CHECK(!sounding[C3] && sounding[E3]);
+}
+
+static void test_gate_under_midi_clock_on_swing_steps(void) {
+    enabled_with_ceg(); arp_set_ext(&a, 1);
+    arp_set_beats(&a, 1, 1); arp_set_swing(&a, 1);                     /* 8S: 16 + 8 clocks */
+    arp_realtime(&a, 0xFA, 0);
+    clear_log();
+    clocks(1, 0);
+    spaced_clocks(48, 0);
+    CHECK(n_on() == 5);
+    CHECK(off_tick(0) - on_tick(0) == 166 && off_tick(1) - on_tick(1) == 83);   /* 50 % of 333 ms, of 167 ms */
+    CHECK(off_tick(2) - on_tick(2) == 166 && off_tick(3) - on_tick(3) == 83);
+}
+
 int main(void) {
     test_defaults();
     test_disabled_passes_notes_straight_through();
@@ -794,6 +907,13 @@ int main(void) {
     test_assign_hold_off_drops_latched_entries();
     test_assign_octaves_per_pass_and_all_notes_off();
     test_assign_list_holds_32_entries();
+    test_gate_defaults_to_half_and_ignores_invalid_values();
+    test_gate_sets_the_release_point_under_the_internal_clock();
+    test_a_gate_change_applies_from_the_next_step();
+    test_gate_on_swing_steps_is_each_steps_own();
+    test_gate_under_midi_clock_is_timed_in_ms();
+    test_gate_under_midi_clock_yields_to_the_next_step();
+    test_gate_under_midi_clock_on_swing_steps();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;
 }

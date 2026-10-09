@@ -90,7 +90,7 @@ static int same_events(const seq_t *a, const seq_t *b)
     return 1;
 }
 
-static const seqmem_settings_t S1 = { 7, 1, 2, 8, -5, 1 };   /* rate code 7, ArP style, Pnd, 2 bars, -5, SEq */
+static const seqmem_settings_t S1 = { 7, 1, 2, 8, -5, 1, 16 };   /* rate code 7, ArP style, Pnd, 2 bars, -5, SEq, gate 85 % */
 
 /* ---- slots and checksum ---------------------------------------------------------------- */
 static void test_slot_mapping(void) {
@@ -124,20 +124,21 @@ static void test_save_then_load_restores_events_and_settings(void) {
     q.total = 2 + 2 + 3 + 2;
     CHECK(seqmem_save(5, &q, &S1, sector) == 0);
     CHECK(writes == 1 && bad_writes == 0 && write_off[0] == SEQMEM_BASE + 5 * SEQMEM_BLOCK && write_len[0] == SEQMEM_SECTOR);
-    CHECK(memcmp(blocks[5], "PSQ1", 4) == 0 && blocks[5][7] == 5 && (blocks[5][6] & 1) == 1);
+    CHECK(memcmp(blocks[5], "PSQ2", 4) == 0 && blocks[5][7] == 5 && (blocks[5][6] & 1) == 1);
+    CHECK(SEQMEM_HEADER == 17 && blocks[5][16] == 16);                  /* the gate, last of the settings */
     CHECK(blocks[5][8] == (uint8_t)(50) && blocks[5][9] == 0);          /* checksum 9 + 41 */
     seq_init(&q2);
     CHECK(seqmem_load(5, &q2, &s, piece) == SEQMEM_LOADED);
     CHECK(same_events(&q, &q2));
-    CHECK(s.rate_code == 7 && s.style == 1 && s.order == 2 && s.chord_beats == 8 && s.transpose == -5 && s.gen == 1);
+    CHECK(s.rate_code == 7 && s.style == 1 && s.order == 2 && s.chord_beats == 8 && s.transpose == -5 && s.gen == 1 && s.gate == 16);
     CHECK(max_read <= SEQMEM_PIECE);
 }
 
 static void test_the_largest_sequence_fits_and_takes_three_sectors(void) {
     seqmem_settings_t s = {0};
     reset();
-    fill(&q, 512, 10, 20, 1);                              /* 512 ten-note chords: 16 + 512 * 23 = 11,792 bytes */
-    CHECK(seqmem_encode(&q, &S1, 0, 0, sector, 0) == 16 + 512 * 23);
+    fill(&q, 512, 10, 20, 1);                              /* 512 ten-note chords: 17 + 512 * 23 = 11,793 bytes */
+    CHECK(seqmem_encode(&q, &S1, 0, 0, sector, 0) == 17 + 512 * 23);
     CHECK(seqmem_save(199, &q, &S1, sector) == 0);
     CHECK(writes == 3 && bad_writes == 0);                 /* one verified write per sector, three sectors */
     for (int k = 0; k < 3; k++)
@@ -152,7 +153,7 @@ static void test_no_sequence_is_saved_explicitly_and_leaves_the_live_one_alone(v
     reset();
     seq_init(&q);                                          /* nothing recorded */
     CHECK(seqmem_save(2, &q, &S1, sector) == 0 && writes == 1 && bad_writes == 0);
-    CHECK(memcmp(blocks[2], "PSQ1", 4) == 0 && (blocks[2][6] & 1) == 0);
+    CHECK(memcmp(blocks[2], "PSQ2", 4) == 0 && (blocks[2][6] & 1) == 0);
     fill(&q2, 3, 2, 50, 1);
     CHECK(seqmem_load(2, &q2, &s, piece) == SEQMEM_NONE);
     CHECK(q2.len == 3 && q2.ev[0].n == 2 && s.rate_code == 7);   /* untouched */
@@ -190,16 +191,22 @@ static void test_corrupt_blocks_are_rejected(void) {
     blocks[1][4] = 0xFF; blocks[1][5] = 0x7F;              /* length beyond the block */
     CHECK(seqmem_load(1, &q2, &s, piece) == SEQMEM_NONE && q2.len == 1);
     memcpy(blocks[1], good, SEQMEM_BLOCK);
-    blocks[1][18] = 11;                                    /* first event: eleven notes */
+    blocks[1][19] = 11;                                    /* first event: eleven notes */
     CHECK(seqmem_load(1, &q2, &s, piece) == SEQMEM_NONE && q2.len == 1);
     memcpy(blocks[1], good, SEQMEM_BLOCK);
-    blocks[1][19] = 128;                                   /* first note out of range */
+    blocks[1][20] = 128;                                   /* first note out of range */
     CHECK(seqmem_load(1, &q2, &s, piece) == SEQMEM_NONE && q2.len == 1);
     memcpy(blocks[1], good, SEQMEM_BLOCK);
-    blocks[1][16] = 0; blocks[1][17] = 0;                  /* a zero duration */
+    blocks[1][17] = 0; blocks[1][18] = 0;                  /* a zero duration */
     CHECK(seqmem_load(1, &q2, &s, piece) == SEQMEM_NONE && q2.len == 1);
     memcpy(blocks[1], good, SEQMEM_BLOCK);
-    blocks[1][4] = 16; blocks[1][5] = 0;                   /* header only, but the flag says a sequence */
+    blocks[1][4] = 17; blocks[1][5] = 0;                   /* header only, but the flag says a sequence */
+    CHECK(seqmem_load(1, &q2, &s, piece) == SEQMEM_NONE && q2.len == 1);
+    memcpy(blocks[1], good, SEQMEM_BLOCK);
+    blocks[1][16] = 20;                                    /* a gate beyond 100 % */
+    CHECK(seqmem_load(1, &q2, &s, piece) == SEQMEM_NONE && q2.len == 1);
+    memcpy(blocks[1], good, SEQMEM_BLOCK);
+    blocks[1][3] = '1';                                    /* a PSQ1 block, before the gate: no valid block */
     CHECK(seqmem_load(1, &q2, &s, piece) == SEQMEM_NONE && q2.len == 1);
     memcpy(blocks[1], good, SEQMEM_BLOCK);
     CHECK(seqmem_load(1, &q2, &s, piece) == SEQMEM_LOADED && q2.len == 3);

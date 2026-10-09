@@ -23,6 +23,7 @@
 #define ARPUI_BANK 0x28
 #define ARPUI_LED_A440 0x24
 #define ARPUI_POT_GLIDE 0x16
+#define ARPUI_POT_DECAY 0x11        /* A440 + Amp Decay = the selected generator's gate */
 #define ARPUI_KEYB 0x08             /* A440 + Keyboard (filter Keyboard Amount) = generator ArP / SEq */
 #define ARPUI_VELOCITY 0x0B         /* A440 + Velocity = tap tempo (beside A440: one hand) */
 #define ARPUI_AFTERTOUCH 0x0A       /* A440 + Aftertouch = the Seq's chord length (Arpeggiated style) */
@@ -71,7 +72,7 @@ typedef struct {
     uint8_t  led_fix;                 /* ms until the LED is asserted again after a replayed A440 press */
     uint8_t  hold_arp, hold_stock;    /* the two HOLD latches: the one not in use is remembered here */
     uint8_t  tempo_caught;            /* this A440 hold: the glide knob has reached the tempo and sets it */
-    uint8_t  pad;
+    uint8_t  gate;                    /* the Arp's gate, index 0..ARP_GATES-1 (saved with the program) */
     uint16_t glide_raw;               /* the glide pot's last raw value, tempo or glide (ARPUI_RAW_NONE: unknown) */
     uint8_t  flash_msgs;              /* flash diagnostic readings still to show after the current message */
     uint8_t  flash_next;              /* the reading the next A440 + Sync recalls (0 size, 1 area 1, 2 area 2) */

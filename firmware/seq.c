@@ -495,3 +495,8 @@ int seq_rec_back(seq_t *q)
     seq_zero(q->rec_down, sizeof q->rec_down);                 /* the open chord is closed */
     return 1;
 }
+
+void seq_set_gate(seq_t *q, int g)
+{
+    (void)q; (void)g;
+}

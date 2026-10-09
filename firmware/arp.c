@@ -636,3 +636,7 @@ void arp_tick(arp_t *a)
     }
 }
 
+void arp_set_gate(arp_t *a, int g)
+{
+    (void)a; (void)g;
+}
