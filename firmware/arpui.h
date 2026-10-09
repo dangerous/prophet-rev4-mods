@@ -29,7 +29,7 @@
 #define ARPUI_CHORDS 5              /* chord lengths: Qtr, Half, Whole, 2 bars, 4 bars */
 #define ARPUI_TUNE 0x0C             /* A440 + Tune = seq record mode on / off */
 #define ARPUI_HOLD 0x0E             /* A440 + HOLD = stock tuning tone (generator stopped); in record mode: rest / tie */
-#define ARPUI_SYNC 0x18             /* A440 + Sync (Osc A Sync) = the read-only flash diagnostic */
+#define ARPUI_SYNC 0x1A             /* A440 + Sync (Osc A Sync, panel id 26) = the read-only flash diagnostic */
 #define ARPUI_FLASH_RESULTS 3       /* its results shown in turn: size, area 1, area 2 */
 #define ARPUI_BLINK_MS 500          /* record mode: A440 LED on / off time */
 #define ARPUI_LED_FIX_MS 100        /* after a replayed A440 press: re-assert the LED (stock's late LED-off) */

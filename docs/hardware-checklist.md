@@ -277,7 +277,7 @@ Transport and generators:
 - [ ] Hold A440, press Sync (Osc A Sync): `FLA` appears and stays up for about 3 s (20 s on a 16 MB
       part), then three results of 1.5 s each — `F 8`/`F16`/`F -`, `1 E`/`1 U`, `2 E`/`2 U` —
       then the patch number. Note all three in `docs/re/flash.md` and the spec marker. If a
-      **number** shows instead of `FLA`, Sync's id is not 24: note the number, nothing else
+      **number** shows instead of `FLA`, Sync's id is not 26: note the number, nothing else
       happens. Releasing A440 does **not** toggle the generator.
 - [ ] While `FLA` is up: play keys (with the arp on and off), move a pot, press Bank with
       A440 held — everything behaves as usual; the display message interrupts the sequence.

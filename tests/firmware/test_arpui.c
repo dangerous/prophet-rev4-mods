@@ -1383,7 +1383,7 @@ static void test_generator_switch_hands_the_latch_over_with_the_arp(void) {
 }
 
 /* ---- flash diagnostic (A440 + Sync; spec "Flash diagnostic") ---------------------------- */
-enum { SYNC = ARPUI_SYNC, FLASH_RUN_TICKS = 3312 };   /* the 8 MB fake: 32 + 1912 + 1368 pieces */
+enum { SYNC = 26, FLASH_RUN_TICKS = 3312 };   /* Sync = 26, read on the instrument 2026-10-09; the 8 MB fake: 32 + 1912 + 1368 pieces */
 
 static void test_sync_combo_runs_the_flash_diagnostic_and_shows_the_results(void) {
     reset();

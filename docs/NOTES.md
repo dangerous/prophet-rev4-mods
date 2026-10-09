@@ -280,6 +280,9 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
 
 ## Lessons
 
+- Panel button ids come from the id readout on the instrument, not from the main state's
+  dispatch table (2026-10-09: the table suggested Sync = 0x18; the readout showed 26).
+
 - Hand-encoded instruction bytes in tests were wrong several times: decode with the helpers
   or copy from the disassembly (objdump prints halfwords big-endian; bytes are swapped).
 - Subagents given "report only" still wrote into the repo in one case, and a forked session

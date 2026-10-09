@@ -274,7 +274,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
   ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **HOLD** = stock tuning tone on/off
   (above) `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Keyboard** (filter Keyboard Amount, id 8) = generator `ArP` / `SEq` `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Unison** = sequence style
   `CHd` / `ArP` and **Aftertouch** = chord length ("Seq") `[HW: verified 2026-10-08,
-  Prophet-10 Rev4 as the style and chord-length combos]`; **a keyboard key** (with `SEq` selected, not recording) = sequence transposition ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Sync** (Osc A Sync, id 24 / `0x18`) = flash diagnostic
+  Prophet-10 Rev4 as the style and chord-length combos]`; **a keyboard key** (with `SEq` selected, not recording) = sequence transposition ("Seq") `[HW: verified 2026-10-08, Prophet-10 Rev4]`; **Sync** (Osc A Sync, id 26 / `0x1A` `[HW: 2026-10-09 — read by the id readout; the stock dispatch table had suggested 24]`) = flash diagnostic
   ("Flash diagnostic"); any other
   button = id readout. Any of these cancels the toggle on A440 release. Held-repeat events
   (value 3) are ignored. A combo button whose release arrives after A440 has been released
@@ -711,7 +711,7 @@ While A440 is held, pressing a panel button that the arp does not assign — any
 than Program 1–8, Bank, Group, Keyboard Amount (id 8, generator), Aftertouch (id 10 /
 `0x0A`, chord length), Velocity (id 11 / `0x0B`, tap tempo), Tune (id 12 / `0x0C`, seq record
 mode), HOLD (id 14 / `0x0E`: the tuning tone, or rest/tie in record mode), Unison (id 25 /
-`0x19`, sequence style), Sync (Osc A Sync, id 24 / `0x18`, flash diagnostic), GLOBALS
+`0x19`, sequence style), Sync (Osc A Sync, id 26 / `0x1A`, flash diagnostic), GLOBALS
 (id 13 / `0x0D`, which must still open its menu) and Lo Freq (id 37, consumed by the
 keyboard octave shift) — shows that button's id on the display and is otherwise ignored
 (its release is consumed too). An aid for mapping panel button ids when designing new
@@ -723,7 +723,8 @@ A developer aid for the "sequence saved per program" work (`docs/re/flash.md`): 
 how big the serial flash is and whether the two areas the stock OS never references are
 blank. **It only reads.**
 
-1. **Trigger**: while A440 is held, pressing **Sync** (Osc A Sync, button id 24 / `0x18`)
+1. **Trigger**: while A440 is held, pressing **Sync** (Osc A Sync, button id 26 / `0x1A` `[HW:
+   verified 2026-10-09, Prophet-10 Rev4 — the id readout showed 026 for the 24 first assumed]`)
    starts a run. The press counts as using the A440 hold (no toggle on release) and is
    consumed with its release, so stock's Osc A sync does not toggle. A press while a run is
    in progress is consumed and ignored. Sync without A440 is stock Osc A sync, as always.

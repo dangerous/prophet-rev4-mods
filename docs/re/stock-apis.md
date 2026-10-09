@@ -254,7 +254,7 @@ idx 6 → all notes off, idx 9 → hold off), `0x20037B2C()` MIDI channel. Globa
   voice-off `(0x81A+voice)<<16`. **M**
 - Button ids (main-state `tbh` at 0x20039856): 0-7 Program, 8 filter keyboard amount (param 0x13), 9 filter rev
   switch (param 0x14), 0x0A/0x0B velocity/aftertouch on-off (params 0x26/0x27, 0x29/0x2A; amounts 0x62/0x61) (M),
-  **0x0C TUNE, 0x0D GLOBALS, 0x0E HOLD, 0x0F A440**, 0x10-0x17 mod destinations, 0x18 OscA sync (param 5),
+  **0x0C TUNE, 0x0D GLOBALS, 0x0E HOLD, 0x0F A440**, 0x10-0x17 mod destinations, 0x18 param 5 (**not** the panel Sync button: the id readout gives Sync = 26 / 0x1A, 2026-10-09 — these indices are the main state's, not the panel's ids),
   **0x19 UNISON** (0x34), 0x1A-0x1C OscA/B shape, 0x1D-0x1F LFO shape, **0x20 GROUP**, 0x21 factory/user toggle +
   reload, 0x22 / 0x23 enter sub-states (0x23 toggles edit layer `ui+0x1A0`), 0x24 OscB keyboard (0x0C),
   0x25 OscB lo-freq (0x0B), 0x26/0x27 OscB saw/tri, **0x28 BANK**. **H** (names of 0x21-0x23 **L**)
