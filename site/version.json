@@ -1,9 +1,9 @@
 {
  "version": "2.2.0",
  "built": "2026-10-09",
- "commit": "a99dae5",
+ "commit": "a8320a3",
  "result": {
   "name": "prophet5_main_2.1.0_patched_2.2.0.syx",
-  "sha256": "2a1d20d19245db0ef8c6c0d7b065b59236e600860d082b660491d7d53087a46c"
+  "sha256": "8141676b1e74c48ce75f7be2755c16d7988431d60841af243da46722ebbd2303"
  }
 }
