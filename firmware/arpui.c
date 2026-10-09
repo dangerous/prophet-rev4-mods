@@ -743,8 +743,21 @@ static int pot_gate(arpui_t *u, arp_t *a, seq_t *q, int raw)
     return 1;
 }
 
+/* --- knob id readout ----------------------------------------------------------------------- */
+/* A440 + any knob the engine does not assign: P and its id, the movement consumed */
+static int pot_is_readout(const arpui_t *u, int pot)
+{
+    return !u->kill && u->a440_held && pot >= 0 && pot < ARPUI_POTS && pot != ARPUI_POT_GLIDE && pot != ARPUI_POT_DECAY;
+}
+
 int arpui_pot_store(arpui_t *u, arp_t *a, seq_t *q, int pot, int raw)
 {
+    if (pot_is_readout(u, pot)) {
+        unsigned id = (unsigned)pot;                       /* unsigned: no signed-divide helper on the target */
+        u->a440_used = 1;
+        show3(u, UC_P, id >= 10u ? (int)(id / 10u) : UC_BLANK, (int)(id % 10u));
+        return 1;
+    }
     int prev = ARPUI_RAW_NONE, cur;
     if (raw < 0) raw = 0;
     if (raw > 1023) raw = 1023;
@@ -776,7 +789,7 @@ int arpui_pot_store(arpui_t *u, arp_t *a, seq_t *q, int pot, int raw)
 int arpui_pot_change(arpui_t *u, arp_t *a, seq_t *q, int pot)
 {
     (void)a; (void)q;
-    if (!glide_is_tempo(u, pot) && !decay_is_gate(u, pot))
+    if (!glide_is_tempo(u, pot) && !decay_is_gate(u, pot) && !pot_is_readout(u, pot))
         return 0;
     u->a440_used = 1;
     return 1;

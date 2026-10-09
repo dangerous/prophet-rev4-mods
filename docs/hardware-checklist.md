@@ -288,11 +288,16 @@ Transport and generators:
       about a quarter of a second and return to `r N` instead of the patch number.
 - [ ] A new message within the 1.5 s restarts the timing (e.g. Bank, Bank, Bank).
 
-## Button id readout (spec "Button id readout")
+## Button and knob id readout (spec "Button and knob id readout")
 
 - [ ] Hold A440, press a button the arp doesn't use (Osc B Keyboard = 36;
       GLOBALS = 13 must still open the menu — it abandons the hold).
 - [ ] Release A440: the arp does not toggle.
+- [ ] Hold A440 and turn knobs one at a time: each shows `P` and its id, and its sound does
+      not change while A440 is held. Note the ids (the stock pot table suggests Volume 0,
+      Master Tune 1, cutoff 9, amp ADSR 16–19 with **Amp Decay 17**, Glide Rate 22) —
+      **Amp Decay must not show a readout** (it sets the gate); if it does, record its id.
+      Release A440: no toggle, and each knob works normally again.
 
 ## Flash diagnostic (spec "Flash diagnostic") — read-only
 

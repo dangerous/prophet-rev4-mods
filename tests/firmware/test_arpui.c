@@ -541,6 +541,39 @@ static void test_readout_of_unassigned_buttons(void) {
     CHECK(!a.enabled);
 }
 
+/* knobs: any but Glide Rate and Amp Decay shows P and its pot id while A440 is held, consumed */
+static int pot(int id, int raw) { int r = arpui_pot_store(&u, &a, &q, id, raw); return r + 2 * arpui_pot_change(&u, &a, &q, id); }
+static void test_readout_of_knobs(void) {
+    reset();
+    CHECK(pot(9, 400) == 0 && pot(0, 500) == 0 && pot(1, 500) == 0);  /* A440 up: every knob is stock */
+    CHECK(count_type(EV_D3) == 0 && count_type(EV_INT) == 0);
+    btn(A440, PRESS);
+    CHECK(pot(9, 400) == 3 && last_d3_is(CH_P, BLANK, 9));             /* cutoff: both hooks consumed, P  9 */
+    CHECK(pot(9, 420) == 3 && last_d3_is(CH_P, BLANK, 9));             /* refreshed while it turns */
+    CHECK(pot(16, 300) == 3 && last_d3_is(CH_P, 1, 6));            /* amp attack: P16 */
+    CHECK(pot(27, 0) == 3 && last_d3_is(CH_P, 2, 7));                  /* the last knob */
+    CHECK(pot(0, 800) == 3 && last_d3_is(CH_P, BLANK, 0));             /* Volume too */
+    CHECK(pot(1, 512) == 3 && last_d3_is(CH_P, BLANK, 1));             /* and Master Tune */
+    CHECK(count_type(EV_PARAM) == 0);                                  /* no setting changed */
+    CHECK(btn(A440, RELEASE) == 1 && !a.enabled);                      /* used the hold: no toggle */
+    CHECK(pot(9, 500) == 0);                                           /* stock again */
+    tap_a440();                                                        /* arp on: the readout is the same while it runs */
+    btn(A440, PRESS);
+    CHECK(pot(12, 100) == 3 && last_d3_is(CH_P, 1, 2) && a.enabled);
+    btn(A440, RELEASE);
+    CHECK(a.enabled);
+    fake_globals_open = 1;                                             /* Globals menu: A440 is stock's, knobs are stock */
+    btn(A440, PRESS);
+    CHECK(pot(9, 300) == 0);
+    btn(A440, RELEASE);
+    fake_globals_open = 0;
+    arpui_init(&u); arp_init(&a); seq_init(&q); clear_log();           /* the kill switch: stock */
+    fake_a440_down = 1;
+    ticks(ARPUI_BOOT_TICKS);
+    CHECK(u.kill && pot(9, 300) == 0);
+    fake_a440_down = 0;
+}
+
 static void test_globals_button_abandons_the_hold(void) {
     reset();
     btn(A440, PRESS);
@@ -573,8 +606,9 @@ static void test_glide_is_tempo_only_with_a440_held(void) {
     CHECK(a.bpm == 300 && last_int() == 300);
     arpui_pot_store(&u, &a, &q, ARPUI_POT_GLIDE, 512);
     CHECK(a.bpm == 40 + (260 * 512 + 511) / 1023);
-    CHECK(arpui_pot_store(&u, &a, &q, 0x15, 900) == 0);                    /* another pot: stock */
-    CHECK(arpui_pot_change(&u, &a, &q, 0x15) == 0);
+    int bpm0 = a.bpm;
+    CHECK(arpui_pot_store(&u, &a, &q, 0x15, 900) == 1 && a.bpm == bpm0);   /* another pot: its id readout, not the tempo */
+    CHECK(arpui_pot_change(&u, &a, &q, 0x15) == 1);
     CHECK(count_type(EV_PARAM) == 0);                                  /* BPM is not saved */
     btn(A440, RELEASE);
     CHECK(!a.enabled);                                                 /* the pot used the hold: no toggle */
@@ -1683,6 +1717,7 @@ int main(void) {
     test_suspended_is_arp_on_or_record_mode();
     test_orphan_release_is_consumed_and_other_buttons_pass();
     test_readout_of_unassigned_buttons();
+    test_readout_of_knobs();
     test_globals_button_abandons_the_hold();
     test_tap_tempo_steady_series();
     test_tap_tempo_averages_the_last_four_intervals();

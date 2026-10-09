@@ -24,6 +24,7 @@
 #define ARPUI_LED_A440 0x24
 #define ARPUI_POT_GLIDE 0x16
 #define ARPUI_POT_DECAY 0x11        /* A440 + Amp Decay = the selected generator's gate */
+#define ARPUI_POTS 28               /* pot ids 0..27; A440 + any other knob = its id readout (P N) */
 #define ARPUI_KEYB 0x08             /* A440 + Keyboard (filter Keyboard Amount) = generator ArP / SEq */
 #define ARPUI_VELOCITY 0x0B         /* A440 + Velocity = tap tempo (beside A440: one hand) */
 #define ARPUI_AFTERTOUCH 0x0A       /* A440 + Aftertouch = the Seq's chord length (Arpeggiated style) */
@@ -105,8 +106,9 @@ void arpui_realtime(arpui_t *u, arp_t *a, seq_t *q, int byte, int port);
 /* The synth's own hold is suspended ("HOLD while the arp is on"): arp on, record mode, or
  * the sequencer running with SEq selected (the engine then sustains live notes itself). */
 int  arpui_suspended(const arpui_t *u, const arp_t *a, const seq_t *q);
-/* Pot hooks: raw store (pot, raw 0..1023) and change post. Return 1 if consumed: Glide Rate
- * (tempo) and Amp Decay (the selected generator's gate) while A440 is held. */
+/* Pot hooks: raw store (pot, raw 0..1023) and change post. Return 1 if consumed: while A440
+ * is held every knob — Glide Rate (tempo), Amp Decay (the selected generator's gate), any
+ * other the knob id readout. */
 int  arpui_pot_store(arpui_t *u, arp_t *a, seq_t *q, int pot, int raw);
 int  arpui_pot_change(arpui_t *u, arp_t *a, seq_t *q, int pot);
 /* Every 1 ms: display revert (to `r N` in record mode), LED (the selected generator;

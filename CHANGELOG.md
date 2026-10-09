@@ -15,7 +15,12 @@ the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
   of its last step; in the Arpeggiated style every arp note inside a chord uses the Seq's
   gate. Amp Decay alone is always the amp decay.
 
+- **Knob id readout.** With A440 held, turning any knob other than Glide Rate and Amp Decay
+  shows `P` and its pot id (`P 0` … `P27`), as unassigned buttons show theirs; the turn is
+  consumed.
+
 ### Changed
+- **Knobs turned with A440 held no longer reach the stock OS** (they show their id instead).
 - **Under MIDI sync the gate is timed in ms** from each step's clock at the tempo measured
   from the clock, instead of counted in clocks (a 32nd at 50 % is now half its length, not
   one clock of three).

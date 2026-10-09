@@ -266,8 +266,10 @@ Tempo, clock source and keyboard shift remain global and are not saved.
   for that session — every hook passes straight through to the stock OS.
 - While the **Globals** menu is open every button is passed to the stock OS untouched.
   (Stock ignores A440 while its menu is open, which is why the tone has its own combo.)
-- **Button id readout.** Hold A440 and press a button the patch doesn't use: its panel id
-  is shown. Handy if you want to add controls of your own.
+- **Button and knob id readout.** Hold A440 and press a button the patch doesn't use: its
+  panel id is shown. Turn any knob other than Glide Rate and Amp Decay: `P` and the knob's
+  id (`P 9`, `P16` …), and the knob's own parameter doesn't move while A440 is held. Handy if
+  you want to add controls of your own.
 - **Flash diagnostic (read‑only).** Hold A440 and press **Sync** (Osc A): the patch reads
   the serial flash — a climbing number while it runs, then three readings of 1.5 s:
   `F16`/`F 8`/`F -` (chip size), `1 E`/`1 U` and `2 E`/`2 U` (whether the two areas the
