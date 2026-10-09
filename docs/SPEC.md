@@ -771,7 +771,7 @@ blank. **It only reads.**
    flash as a 16 MB window over a chip of configurable size (aliasing above its size),
    with settable contents for the reference blocks and the two areas.
 
-### Sequence memory (saved with the program) `[HW: unverified]`
+### Sequence memory (saved with the program) `[HW: verified 2026-10-09, Prophet-10 Rev4 — first save, reload with all settings and the transposition, power cycle, loads while playing (unchanged and switching at the next step), explicit "no sequence" after a clear; not yet exercised: Record into a factory slot, a load during record mode, SysEx staleness, PRESET off, the before/after full-dump comparison]`
 
 The sequence is part of a user program: Record saves it, loading brings it back — on the
 instrument, with no computer involved. It is **not** part of the stock program record (29
@@ -1024,7 +1024,7 @@ play over it." *Keys down* and *HOLD active* are as in "Re-latch under HOLD".
 
 #### Program loads
 
-22. A program load **never stops the sequencer** **(change 2026-10-09: it did until then)**.
+22. A program load **never stops the sequencer** **(change 2026-10-09: it did until then)** `[HW: verified 2026-10-09, Prophet-10 Rev4]`.
     It applies the saved arp settings and, when the program carries **sequence data**
     ("Sequence memory"), replaces the recording, its settings and the transposition with the
     saved ones: stopped, the next Start plays the new sequence; **playing, the new sequence

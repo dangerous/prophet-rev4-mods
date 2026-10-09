@@ -142,7 +142,8 @@ The third caller, `0x2003704E`, is the load path initialising an erased record. 
 - **Consequence for sequence storage:** the upper half of the chip is free — 8.6 MB above
   `0x755000`. 200 user programs × 16 KB blocks = 3.2 MB covers every sequence the 512-step
   sequencer can hold (worst case ~11 KB compact); `0x800000 + slot × 0x4000`, ending at
-  `0xB1FFFF`, far from everything stock touches (implemented as "Sequence memory").
+  `0xB1FFFF`, far from everything stock touches (implemented as "Sequence memory"; first writes
+  on the instrument 2026-10-09 — save, reload and power cycle all fine).
 - Unknowns: what the bootloader touches beyond the headers and slots; whether a future
   Sequential OS claims `0x511000+` (it looks like growth room for programs/tunings); the chip
   part number (readable on the board).
