@@ -290,6 +290,32 @@ Transport and generators:
 - [ ] Afterwards: load a few programs, save one, power cycle — everything intact (nothing was
       written, this just confirms it).
 
+## Sequence memory (spec "Sequence memory")
+
+- [ ] **Back up patches first** (Globals → Pgm Dump → ALL → RECORD): this is the first build
+      that writes flash. Then note the hash of the backup.
+- [ ] Record a short sequence (3 chords, a rest, a tie), set `bAC` and a chord length, and
+      Record it to a user program (e.g. U1-1-1). The save takes a moment longer; the display
+      behaves as stock.
+- [ ] Load another program (no sequence, e.g. a factory one): the sequence and `bAC` stay.
+      Load U1-1-1: the sequence, `bAC`, chord length, note value and generator selection
+      come back; tap A440: it plays. Transposition: set +5 before the save, reload: +5.
+- [ ] Start the sequencer on another program's sequence, then load U1-1-1 while it plays: it
+      keeps playing and switches to U1-1-1's sequence at the next step, in time. Load a
+      program without a sequence while it plays: nothing changes.
+- [ ] Power cycle on U1-1-1: the sequence is there.
+- [ ] Clear (A440 + Program 6), Record U1-1-1 again: reload → no sequence comes back; the
+      settings stay as they are.
+- [ ] Record to a **factory** program: saves as stock; nothing of ours.
+- [ ] Record mode: load U1-1-1 while recording: the recording stays; leave record mode.
+- [ ] SysEx: dump U1-1-1, load another program, send the dump back as a program to U1-1-1:
+      the program sounds the same and the sequence comes back (same bytes). Edit a knob,
+      Record it to U1-2-1 (gets its own block), send the *old* dump to U1-2-1: no sequence
+      for U1-2-1 (stale checksum).
+- [ ] PRESET off: loading U1-1-1 loads no sequence; PRESET on: it does.
+- [ ] After all that: `Globals → Pgm Dump → ALL` again and compare with the backup —
+      identical (the program records are untouched by us).
+
 ## If something is wrong
 
 - The engine only runs inside the hooked stock calls. The kill switch (A440 held from before

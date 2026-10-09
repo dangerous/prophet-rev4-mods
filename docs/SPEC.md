@@ -501,10 +501,12 @@ this engine deliberately differs it is marked **(change)** with the reason.
 
 ### Patch memory `[HW: verified 2026-10-07, Prophet-10 Rev4]`
 
-1. Saved with a program: the arp **on/off**, **direction mode**, **octaves** and **note
-   value**. Not saved: BPM, clock source, keyboard octave shift, the generator selection, the
-   sequence and its settings (style, order, note value, chord length, transposition).
-   **(change 2026-10-08: 1.2.0 saved the sequence's style and chord length too.)**
+1. Saved with a program in its own record: the arp **on/off**, **direction mode**,
+   **octaves** and **note value**. Saved with a *user* program in its sequence block
+   ("Sequence memory"): the sequence, its settings (style, order, note value, chord length,
+   transposition) and the generator selection. Not saved: BPM, clock source, keyboard octave
+   shift. **(change 2026-10-08: 1.2.0 saved the sequence's style and chord length in the
+   record; 2026-10-09: the sequence block.)**
 2. Loading a program — from the panel, a MIDI program change, a SysEx program or edit-buffer
    receive, the PRESET toggle or the power-on recall — applies the program's arp settings and
    switches the arp on or off accordingly (on with keys held starts the pattern as "Arp
@@ -769,6 +771,57 @@ blank. **It only reads.**
    flash as a 16 MB window over a chip of configurable size (aliasing above its size),
    with settable contents for the reference blocks and the two areas.
 
+### Sequence memory (saved with the program) `[HW: unverified]`
+
+The sequence is part of a user program: Record saves it, loading brings it back — on the
+instrument, with no computer involved. It is **not** part of the stock program record (29
+spare bytes) nor of SysEx program dumps; it lives in a **block of its own** in the otherwise
+unused upper half of the serial flash (`docs/re/flash.md`: 16 MB, blank above `0x755000`).
+
+1. **What is saved**: the recording (every event with its notes, velocities and duration),
+   **style**, **order**, the Seq's **note value**, **chord length**, **transposition** and the
+   **generator selection** (`ArP` / `SEq`). Nothing of the Arp's: its settings stay in the
+   program record ("Patch memory").
+2. **When**: every **Record** of a *user* program from the panel, after stock has written the
+   program itself. The block then holds the live recording and settings, or — with nothing
+   recorded — an explicit "no sequence", so an older sequence cannot come back later. A
+   Record takes a few hundred milliseconds longer. Factory programs have no block; a Record
+   into one saves the program as stock does and nothing else. Programs that arrive over
+   SysEx are stored by stock alone.
+3. **On a load** (any route — panel, MIDI program change, SysEx, PRESET, power-on recall) of
+   a user program whose block holds a sequence *for that program* (below), the recording,
+   its settings and the transposition are replaced by the saved ones — a playing sequencer
+   keeps playing and switches to the new sequence at the next step boundary, a stopped one
+   also takes the saved generator selection ("Program loads" 22); a load during record mode
+   keeps the recording and ignores the block. A program with "no sequence" or
+   no valid block leaves everything as it was (as "Patch memory" does for programs without
+   arp data). With PRESET off the program's stored parameters are not what sounds, and the
+   block does not match them either: no sequence is loaded.
+4. **Staleness**: the block records which program it belongs to (bank, group, program) and a
+   **checksum of the program's 99 stored parameters**. A load uses the block only if both
+   match the program just loaded — so a program overwritten by a SysEx dump or a bank copy
+   does not bring a sequence that was saved with a different sound.
+5. **Clear** (A440 + Program 6) and a new recording change only the live sequence; the block
+   changes at the next Record. Power-off loses nothing that was recorded with a Record.
+6. **Not in SysEx**: program dumps carry the record only. A sequence travels between
+   instruments by playing it in and recording it (a sequence dump is a possible later
+   feature).
+7. Realisation: blocks of **16 KB** at **`0x800000 + slot × 0x4000`**, slot = `(5·bank +
+   group)·8 + program` (0–199, user programs), so `0x800000–0xC7FFFF`. Block: a 16-byte
+   header (`PSQ1`, length, bank/group/program, the parameter checksum, the "no sequence"
+   flag) then the settings and the events as `duration (2), count (1), count × (note, vel)`
+   — 11.8 KB at most for 512 steps of ten-note chords. Written with stock's **verified
+   writer `0x20036E28`** (erase, program, read back, retry), only the 4 KB sectors the data
+   needs, from the **Prophet5 AO task**: `bl` hooks on the two program-store sites
+   `0x2003B946` and `0x2003B518` (expecting `0x20036F7D`) wrap stock's store — stock first,
+   then the block; the bytes are assembled in stock's own 4 KB sector buffer `0x20054352`,
+   which stock has finished with by then. Read in the **tick**: the program-loaded hook
+   queues the slot, and the tick reads the header and then the events in 1 KB pieces through
+   `0x2003E2F8` into the sequencer's storage **within that one tick** (the sequencer is not
+   ticking meanwhile; a playing one is told to restart at event 1 on the next boundary); the
+   diagnostic's buffer is shared, so a load waits for a running diagnostic to finish. An
+   erased block (`0xFF`) is "no valid block".
+
 ### Safety invariants
 
 Enforced by tests on every built image against stock:
@@ -787,9 +840,13 @@ Enforced by tests on every built image against stock:
    what the hook list says it holds (a `BL` to the named stock entry, or the named word).
 7. The engine's code references no RAM or MMR address outside its own record and the stock
    addresses listed in its interface table, which the tests compare word for word.
-8. The interface table holds no flash-writing entry — neither `0x2003E3E4` (erase +
-   program) nor `0x20036E28` (verified write), nor any other address of the stock flash
-   driver except the read routine `0x2003E2F8`: nothing in the engine can write flash.
+8. The interface table holds exactly two flash entries: the read routine `0x2003E2F8` and
+   the **verified writer `0x20036E28`** — never the raw erase + program routine `0x2003E3E4`
+   nor any other address of the stock flash driver. The engine calls the writer from one
+   place only, the program-store wrapper ("Sequence memory"), and every offset it writes
+   lies inside the sequence blocks `0x800000–0xC7FFFF` (the host harness asserts both on
+   every write it provokes). **(change 2026-10-09: no writer at all until the sequence
+   block.)**
 
 ### Re-latch under HOLD (the Arp generator) `[HW: verified 2026-10-06/07, Prophet-10 Rev4]`
 
@@ -830,8 +887,10 @@ play over it." *Keys down* and *HOLD active* are as in "Re-latch under HOLD".
    further chords, rests and ties are refused (the notes still sound; `r N` stays). **(change:
    64 events until 2026-10-08.)**
 2. The recording and its own settings — **style**, **order**, **note value**, **chord
-   length**, **transposition** — are global and volatile: not saved with programs, untouched
-   by program loads, gone at power-off. Defaults: `CHd`, `For`, 8th, Whole, 0.
+   length**, **transposition** — live in RAM as one global set, with defaults `CHd`, `For`,
+   8th, Whole, 0 at power-on. They are **saved with user programs and brought back by
+   loading them** ("Sequence memory"); a program without sequence data leaves them untouched.
+   **(change 2026-10-09: global and volatile until then.)**
 
 #### Generator selection
 
@@ -965,11 +1024,17 @@ play over it." *Keys down* and *HOLD active* are as in "Re-latch under HOLD".
 
 #### Program loads
 
-22. A program load keeps the sequence, its settings and the transposition, applies the
-    saved arp settings, and stops the sequencer if it was playing (outside recording). A
-    saved "arp on" starts the Arp only if `ArP` is selected at that moment; with `SEq`
-    selected the arp stays off, and selecting `ArP` later leaves it stopped as any switch
-    does.
+22. A program load **never stops the sequencer** **(change 2026-10-09: it did until then)**.
+    It applies the saved arp settings and, when the program carries **sequence data**
+    ("Sequence memory"), replaces the recording, its settings and the transposition with the
+    saved ones: stopped, the next Start plays the new sequence; **playing, the new sequence
+    takes over at the next step boundary from its event 1**, the step phase kept, exactly as
+    a style change does (generated notes released at the boundary). The saved generator
+    selection is applied only while the sequencer is stopped; while it plays, `SEq` stays
+    selected and the transport is untouched. A program without sequence data keeps the
+    recording, its settings and the transposition. A saved "arp on" starts the Arp only if
+    `ArP` is selected once the load has been applied; with `SEq` selected the arp stays off,
+    and selecting `ArP` later leaves it stopped as any switch does.
 
 #### Realisation
 
