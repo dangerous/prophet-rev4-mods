@@ -1098,7 +1098,12 @@ play over it." *Keys down* and *HOLD active* are as in "Re-latch under HOLD".
     selected and the transport is untouched. A program without sequence data keeps the
     recording, its settings and the transposition. A saved "arp on" starts the Arp only if
     `ArP` is selected once the load has been applied; with `SEq` selected the arp stays off,
-    and selecting `ArP` later leaves it stopped as any switch does.
+    and selecting `ArP` later leaves it stopped as any switch does. **While the Arpeggiated
+    style is playing a chord, the Arp's note value, swing and gate are only remembered**:
+    the chord in progress keeps the Seq's (the arp is the Seq's until the chord ends), and
+    the Arp's settings take effect when the arp next runs as the Arp **(change 2026-10-10:
+    until then a load mid-chord switched the arp steps to the Arp's note value and gate for
+    the rest of the chord)**.
 
 #### Realisation
 
