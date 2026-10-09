@@ -330,8 +330,8 @@ goes through stock's three-digit integer display (zero-padded, `-01` for negativ
   The top 64 KB hangs a memory-mapped read (excluded).
 - **Sequence memory (2.2.0) verified on hardware 2026-10-09** through checklist step 14: the
   first engine flash write, save/reload/power cycle, loads while playing, the switch at the
-  next step, explicit "no sequence". Still to do: factory-slot Record, a load during record
-  mode, the SysEx staleness case, PRESET off, and the full-dump comparison against the
+  next step, explicit "no sequence", a load during record mode. Still to do: factory-slot
+  Record, the SysEx staleness case, PRESET off, and the full-dump comparison against the
   pre-flash backup (the "nothing else touched" proof). A SysEx sequence dump is the
   natural next feature (the only backup today is the flash itself).
 - Per-program sequence storage (as the Prophet-6): needs its own flash area — `docs/re/flash.md`
