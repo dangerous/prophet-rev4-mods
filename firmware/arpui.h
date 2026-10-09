@@ -15,6 +15,7 @@
 #include "flash.h"
 #include "rate.h"
 #include "seq.h"
+#include "seqmem.h"
 
 #define ARPUI_A440 0x0F
 #define ARPUI_GLOBALS 0x0D
@@ -75,6 +76,7 @@ typedef struct {
     uint8_t  flash_msgs;              /* flash diagnostic readings still to show after the current message */
     uint8_t  flash_next;              /* the reading the next A440 + Sync recalls (0 size, 1 area 1, 2 area 2) */
     uint8_t  flash_prog;              /* the progress readout last shown (64 KB units) */
+    uint8_t  seqload;                 /* a sequence block to read once the diagnostic is idle: slot + 1, 0 = none */
     flash_t *flash;                   /* the diagnostic's state (set by the glue / harness) */
 } arpui_t;
 
@@ -105,8 +107,12 @@ int  arpui_pot_change(arpui_t *u, arp_t *a, int pot);
 /* Every 1 ms: display revert (to `r N` in record mode), LED (the selected generator;
  * blinking in record mode), kill-switch window, tap-tempo clock. */
 void arpui_tick(arpui_t *u, arp_t *a, seq_t *q);
-/* A program was loaded: apply its arp settings from the patch slots ("Patch memory"); the
- * sequencer keeps its recording and stops. */
+/* A program was loaded: apply its arp settings from the patch slots ("Patch memory") and,
+ * for a user program with a sequence block of its own, the saved sequence and its settings
+ * ("Sequence memory"); the sequencer is never stopped. */
 void arpui_program_loaded(arpui_t *u, arp_t *a, seq_t *q);
+/* Stock has just stored a program from the panel (Prophet5 AO task): a user program gets
+ * its sequence block written — the live sequence and settings, or "no sequence". */
+void arpui_program_stored(arpui_t *u, arp_t *a, seq_t *q, int factory, int bank, int group, int prog);
 
 #endif

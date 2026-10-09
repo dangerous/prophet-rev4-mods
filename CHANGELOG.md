@@ -7,6 +7,13 @@ the behaviour; the details are in [`docs/SPEC.md`](docs/SPEC.md).
 ## 2.2.0 — 2026-10-09
 
 ### Added
+- **Sequences are saved with programs.** Record on a user program also stores the sequence
+  and its settings (style, order, note value, chord length, transposition, generator
+  selection) in a 16 KB block of the flash's unused upper half; loading the program brings
+  them back, on the instrument alone. A program without a saved sequence leaves the live one
+  alone; a program overwritten by SysEx or a bank copy never brings a foreign sequence
+  (checksum). Program loads no longer stop the sequencer: with a saved sequence it switches
+  over at the next step. Not part of SysEx dumps.
 - **Flash diagnostic (read-only)**: A440 + Sync (Osc A Sync) reads the serial flash to
   find the chip's size and whether the two areas the stock OS never references are blank —
   the groundwork for saving sequences with programs. While it runs the display counts the

@@ -34,14 +34,35 @@ void plat_stock_hold_press(void) { push(EV_HOLD_STOCK, 0, 0, 0); fake_latch = !f
 static int params[99];
 int  plat_param_read(int p) { return params[p]; }
 void plat_param_store(int p, int v) { params[p] = v; push(EV_PARAM, p, v, 0); }
-/* an 8 MB flash: bootloader bytes at offset 0, blank otherwise, a 24-bit address wrapping */
+/* the flash: sequence blocks that were written read back; elsewhere an 8 MB part's view —
+ * bootloader bytes at offset 0, blank otherwise, a 24-bit address wrapping */
+static uint8_t blk[SEQMEM_SLOTS][SEQMEM_BLOCK], blk_written[SEQMEM_SLOTS], sector_buf[SEQMEM_SECTOR];
+static int writes, bad_writes;
+static uint32_t write_off[8], write_len[8];
+static int fake_factory, fake_bank, fake_group, fake_prog;
 int  plat_flash_read(uint32_t off, void *dst, uint32_t len) {
     for (uint32_t i = 0; i < len; i++) {
-        uint32_t p = (off + i) % 0x800000u;
-        ((uint8_t *)dst)[i] = p < 0x1000u ? (uint8_t)(p * 7u + 1u) : 0xFF;
+        uint32_t a = off + i, p = a % 0x800000u;
+        if (a >= SEQMEM_BASE && a < SEQMEM_END && blk_written[(a - SEQMEM_BASE) / SEQMEM_BLOCK])
+            ((uint8_t *)dst)[i] = blk[(a - SEQMEM_BASE) / SEQMEM_BLOCK][(a - SEQMEM_BASE) % SEQMEM_BLOCK];
+        else
+            ((uint8_t *)dst)[i] = p < 0x1000u ? (uint8_t)(p * 7u + 1u) : 0xFF;
     }
     return 0;
 }
+int  plat_flash_write(uint32_t off, const void *src, uint32_t len) {   /* stock's verified writer */
+    if (writes < 8) { write_off[writes] = off; write_len[writes] = len; }
+    writes++;
+    if (off % SEQMEM_SECTOR || len % SEQMEM_SECTOR || len == 0 || off < SEQMEM_BASE || off + len > SEQMEM_END) { bad_writes++; return 4; }
+    for (uint32_t i = 0; i < len; i++) {
+        uint32_t a = off + i - SEQMEM_BASE;
+        blk[a / SEQMEM_BLOCK][a % SEQMEM_BLOCK] = ((const uint8_t *)src)[i];
+        blk_written[a / SEQMEM_BLOCK] = 1;
+    }
+    return 0;
+}
+void *plat_sector_buffer(void) { return sector_buf; }
+void plat_program_slot(int *factory, int *bank, int *group, int *prog) { *factory = fake_factory; *bank = fake_bank; *group = fake_group; *prog = fake_prog; }
 
 static int count_type(int t) { int n = 0; for (int i = 0; i < nlog; i++) n += log_[i].type == t; return n; }
 static ev_t *last_of(int t) { for (int i = nlog - 1; i >= 0; i--) if (log_[i].type == t) return &log_[i]; return 0; }
@@ -69,6 +90,8 @@ static void reset(void) {
     arpui_init(&u); arp_init(&a); seq_init(&q); flash_init(&fl); u.flash = &fl;
     clear_log(); fake_globals_open = 0; fake_a440_down = 0; fake_tone_on = 0; fake_latch = 0;
     memset(params, 0, sizeof params);
+    memset(blk_written, 0, sizeof blk_written); writes = bad_writes = 0;
+    fake_factory = fake_bank = fake_group = fake_prog = 0;
     for (int i = 0; i < ARPUI_BOOT_TICKS; i++) arpui_tick(&u, &a, &q);   /* past the kill-switch window */
     clear_log();
 }
@@ -1305,17 +1328,17 @@ static void test_programs_saved_by_1_2_0_load_with_their_style_bits_ignored(void
     CHECK(!a.enabled && a.octaves == 2);
 }
 
-static void test_program_load_keeps_the_sequence_stops_it_and_starts_the_arp_only_if_selected(void) {
+static void test_program_load_keeps_the_sequence_playing_and_starts_the_arp_only_if_selected(void) {
     reset(); record_cde();
     btn(A440, PRESS); key(62, 100); key(62, 0); btn(A440, RELEASE);  /* transposed +2 */
     tap_a440(); ticks(1);
     CHECK(q.playing && q.transpose == 2 && last_led() == 1);
     params[ARPUI_PARAM_OCT] = 1; params[ARPUI_PARAM_PACK] = pack(N_8, ARP_UP, 1);   /* saved: arp on */
     arpui_program_loaded(&u, &a, &q);
-    CHECK(!q.playing && q.len == 3 && q.transpose == 2 && !a.enabled && u.gen == ARPUI_GEN_SEQ);   /* stopped, kept; the arp stays off */
+    CHECK(q.playing && q.len == 3 && q.transpose == 2 && !a.enabled && u.gen == ARPUI_GEN_SEQ);   /* keeps playing; the arp stays off */
     ticks(1);
-    CHECK(last_led() == 0);
-    select_gen();                                                      /* ArP: stopped, as any switch leaves it */
+    CHECK(last_led() == 1);
+    select_gen();                                                      /* ArP: the switch stops it, as any switch does */
     CHECK(!a.enabled);
     arpui_program_loaded(&u, &a, &q);
     CHECK(a.enabled && q.len == 3);                                    /* now the saved "on" acts */
@@ -1459,6 +1482,102 @@ static void test_kill_switch_disables_the_diagnostic(void) {
     CHECK(!fl.running && count_type(EV_D3) == 0 && count_type(EV_INT) == 0);
 }
 
+/* ---- sequence memory (spec "Sequence memory") -------------------------------------------- */
+static void fill_seq(int note, int events, int dur) {      /* events one-note chords of `note` */
+    seq_init(&q);
+    for (int i = 0; i < events; i++) { q.ev[i].n = 1; q.ev[i].note[0] = (uint8_t)note; q.ev[i].vel[0] = 100; q.ev[i].dur = (uint16_t)dur; }
+    q.len = (uint16_t)events; q.total = (uint16_t)(events * dur);
+}
+static void stored(int factory, int bank, int group, int prog) { arpui_program_stored(&u, &a, &q, factory, bank, group, prog); }
+static void loaded(int factory, int bank, int group, int prog) {
+    fake_factory = factory; fake_bank = bank; fake_group = group; fake_prog = prog;
+    arpui_program_loaded(&u, &a, &q);
+}
+
+static void test_record_writes_the_sequence_block_and_a_load_brings_it_back(void) {
+    int idx;
+    reset();
+    fill_seq(67, 2, 1);
+    seq_set_order(&q, SEQ_BACK); seq_set_chord_beats(&q, 8); seq_set_transpose(&q, 3);
+    rate_step(&u.seq_rate, 1); idx = rate_index(&u.seq_rate);
+    u.gen = ARPUI_GEN_SEQ;
+    stored(0, 1, 2, 3);                                                /* U 2-3-4: slot 59 */
+    CHECK(writes == 1 && bad_writes == 0 && write_off[0] == SEQMEM_BASE + 59 * SEQMEM_BLOCK && write_len[0] == SEQMEM_SECTOR);
+    seq_init(&q); u.gen = ARPUI_GEN_ARP; rate_init(&u.seq_rate);
+    loaded(0, 1, 2, 4);                                                /* another program, no block: untouched */
+    CHECK(q.len == 0 && u.gen == ARPUI_GEN_ARP);
+    loaded(0, 1, 2, 3);
+    CHECK(q.len == 2 && q.ev[0].note[0] == 67 && q.order == SEQ_BACK && q.chord_beats == 8 && q.transpose == 3);
+    CHECK(u.gen == ARPUI_GEN_SEQ && rate_index(&u.seq_rate) == idx && !a.enabled && !q.playing);
+    clear_log();
+    tap_a440();
+    CHECK(q.playing && last_of(EV_VON) && last_of(EV_VON)->b == 70);  /* the next Start plays it: 67 transposed +3 */
+}
+
+static void test_factory_programs_stale_blocks_and_no_sequence_leave_things_alone(void) {
+    reset();
+    fill_seq(60, 1, 1);
+    stored(1, 0, 0, 0);
+    CHECK(writes == 0);                                                /* factory: nothing of ours */
+    stored(0, 0, 0, 1);
+    CHECK(writes == 1);
+    params[10] = 5;                                                    /* the program was overwritten */
+    seq_init(&q);
+    loaded(0, 0, 0, 1);
+    CHECK(q.len == 0);                                                 /* stale: untouched */
+    params[10] = 0;
+    loaded(0, 0, 0, 1);
+    CHECK(q.len == 1 && q.ev[0].note[0] == 60);
+    seq_clear(&q, &a);
+    stored(0, 0, 0, 1);                                                /* nothing recorded: "no sequence" */
+    CHECK(writes == 2 && bad_writes == 0);
+    fill_seq(72, 2, 1);
+    loaded(0, 0, 0, 1);
+    CHECK(q.len == 2 && q.ev[0].note[0] == 72);                       /* the live one stays */
+}
+
+static void test_a_load_while_playing_switches_at_the_next_step_boundary(void) {
+    reset();
+    fill_seq(67, 1, 1); u.gen = ARPUI_GEN_ARP;
+    stored(0, 0, 0, 1);                                                /* G4, saved with ArP selected */
+    fill_seq(60, 2, 1); u.gen = ARPUI_GEN_SEQ;
+    tap_a440();
+    CHECK(q.playing && last_of(EV_VON)->b == 60);
+    ticks(100); clear_log();
+    loaded(0, 0, 0, 1);
+    CHECK(q.playing && q.len == 1 && q.ev[0].note[0] == 67 && count_type(EV_VON) == 0);   /* not yet */
+    CHECK(u.gen == ARPUI_GEN_SEQ);                                     /* the saved selection waits: it plays */
+    ticks(149);
+    CHECK(count_type(EV_VON) == 0);
+    ticks(1);                                                          /* the step boundary: 250 ticks at 120 BPM, 8th */
+    CHECK(q.playing && last_of(EV_VON) && last_of(EV_VON)->b == 67);
+}
+
+static void test_a_load_applies_the_saved_generator_only_when_stopped_and_not_in_record_mode(void) {
+    reset();
+    fill_seq(67, 1, 1); u.gen = ARPUI_GEN_ARP;
+    stored(0, 0, 0, 2);
+    fill_seq(60, 1, 1); u.gen = ARPUI_GEN_SEQ;
+    loaded(0, 0, 0, 2);
+    CHECK(u.gen == ARPUI_GEN_ARP && q.ev[0].note[0] == 67);           /* stopped: the selection follows */
+    enter_rec();
+    note(62, 100); note(62, 0);
+    loaded(0, 0, 0, 2);
+    CHECK(u.rec && q.len == 1 && q.ev[0].note[0] == 62);              /* recording: the block is ignored */
+}
+
+static void test_a_block_load_waits_for_a_running_diagnostic(void) {
+    reset();
+    fill_seq(67, 1, 1);
+    stored(0, 0, 0, 3);
+    seq_init(&q);
+    btn(A440, PRESS); btn(SYNC, PRESS); btn(SYNC, RELEASE); btn(A440, RELEASE);
+    loaded(0, 0, 0, 3);
+    CHECK(fl.running && q.len == 0);                                   /* deferred: the buffer is in use */
+    ticks(FLASH_RUN_TICKS + 1);
+    CHECK(!fl.running && q.len == 1 && q.ev[0].note[0] == 67);
+}
+
 int main(void) {
     test_tap_toggles_arp_with_status_and_led();
     test_repeats_are_ignored();
@@ -1513,7 +1632,7 @@ int main(void) {
     test_bank_group_are_the_order_in_chords_style_and_the_direction_otherwise();
     test_unison_and_aftertouch_set_style_and_chord_length_without_saving();
     test_programs_saved_by_1_2_0_load_with_their_style_bits_ignored();
-    test_program_load_keeps_the_sequence_stops_it_and_starts_the_arp_only_if_selected();
+    test_program_load_keeps_the_sequence_playing_and_starts_the_arp_only_if_selected();
     test_program6_outside_record_mode_clears_and_selects_arp();
     test_all_notes_off_stops_the_sequencer_and_empties_the_pool();
     test_generator_switch_hands_the_latch_over_with_the_arp();
@@ -1521,6 +1640,11 @@ int main(void) {
     test_sync_during_a_run_is_ignored_and_sync_alone_is_stock();
     test_another_message_cancels_the_remaining_results();
     test_kill_switch_disables_the_diagnostic();
+    test_record_writes_the_sequence_block_and_a_load_brings_it_back();
+    test_factory_programs_stale_blocks_and_no_sequence_leave_things_alone();
+    test_a_load_while_playing_switches_at_the_next_step_boundary();
+    test_a_load_applies_the_saved_generator_only_when_stopped_and_not_in_record_mode();
+    test_a_block_load_waits_for_a_running_diagnostic();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures ? 1 : 0;
 }

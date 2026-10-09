@@ -24,6 +24,10 @@ static int chord_index(const seq_t *q)                     /* the Seq's chord le
 }
 enum { P1 = 0, P4 = 3, P5 = 4, P6 = 5, P7 = 6, P8 = 7 };
 
+static int flash_running(const arpui_t *u);
+static void apply_seq_rate(arpui_t *u, seq_t *q);
+static void seq_block_load(arpui_t *u, arp_t *a, seq_t *q, int slot);
+
 static const uint8_t MODE_TEXT[ARP_MODES][3] = {
     { UC_U, UC_P, UC_BLANK },        /* UP  */
     { UC_D, UC_N, UC_BLANK },        /* dn  */
@@ -205,8 +209,17 @@ void arpui_program_loaded(arpui_t *u, arp_t *a, seq_t *q)
     if (u->kill)
         return;
     u->hold_arp = u->hold_stock = 0;                       /* a program load drops both HOLD latches */
-    if (!u->rec)
-        seq_stop(q, a);                                    /* the sequence, its settings and transposition are kept */
+    if (!u->rec) {                                         /* the sequencer is never stopped; a block may replace the sequence */
+        int factory, bank, group, prog, slot;
+        plat_program_slot(&factory, &bank, &group, &prog);
+        slot = seqmem_slot(factory, bank, group, prog);
+        if (slot >= 0) {
+            if (flash_running(u))
+                u->seqload = (uint8_t)(slot + 1);          /* the piece buffer is the diagnostic's: later */
+            else
+                seq_block_load(u, a, q, slot);
+        }
+    }
     if (v < 1 || v > ARPUI_OCT_MAX || pack < 0) {
         ui_enable(u, a, 0);                                /* no arp data: off, settings untouched */
         return;
@@ -228,6 +241,51 @@ void arpui_program_loaded(arpui_t *u, arp_t *a, seq_t *q)
     if (u->gen != ARPUI_GEN_ARP)
         on = 0;                                            /* a saved "on" starts the Arp only while ArP is selected */
     ui_enable(u, a, on);
+    update_sustain(u, a, q);
+}
+
+/* --- sequence memory --------------------------------------------------------------------- */
+static void seq_settings_now(const arpui_t *u, const seq_t *q, seqmem_settings_t *s)
+{
+    s->rate_code = (uint8_t)rate_code(&u->seq_rate);
+    s->style = q->style;
+    s->order = q->order;
+    s->chord_beats = q->chord_beats;
+    s->transpose = q->transpose;
+    s->gen = u->gen;
+}
+
+/* stock has stored a user program: its block gets the live sequence and settings, or "no sequence" */
+void arpui_program_stored(arpui_t *u, arp_t *a, seq_t *q, int factory, int bank, int group, int prog)
+{
+    seqmem_settings_t s;
+    int slot = seqmem_slot(factory, bank, group, prog);
+    (void)a;
+    if (u->kill || slot < 0)
+        return;
+    seq_settings_now(u, q, &s);
+    seqmem_save(slot, q, &s, (uint8_t *)plat_sector_buffer());
+}
+
+/* a user program's block: when it holds a sequence for this program, it replaces the live
+ * one — playing, from the next step boundary; stopped, the saved generator selection too */
+static void seq_block_load(arpui_t *u, arp_t *a, seq_t *q, int slot)
+{
+    seqmem_settings_t s;
+    if (!u->flash || seqmem_load(slot, q, &s, u->flash->buf) != SEQMEM_LOADED)
+        return;
+    seq_replaced(q, a);
+    if (rate_set_code(&u->seq_rate, s.rate_code))
+        apply_seq_rate(u, q);
+    seq_set_style(q, a, s.style);
+    seq_set_order(q, s.order);
+    seq_set_chord_beats(q, s.chord_beats);
+    seq_set_transpose(q, s.transpose);
+    if (!seq_running(q)) {
+        if (s.gen == ARPUI_GEN_SEQ)
+            ui_enable(u, a, 0);                            /* SEq: the arp is off */
+        u->gen = s.gen == ARPUI_GEN_SEQ ? ARPUI_GEN_SEQ : ARPUI_GEN_ARP;
+    }
     update_sustain(u, a, q);
 }
 
@@ -701,6 +759,12 @@ void arpui_tick(arpui_t *u, arp_t *a, seq_t *q)
             draw_rec(q);                                   /* a message over the readout: back to r N */
         else
             plat_display_restore();
+    }
+    if (u->seqload && !flash_running(u)) {                 /* a deferred block load */
+        int slot = u->seqload - 1;
+        u->seqload = 0;
+        if (!u->rec)
+            seq_block_load(u, a, q, slot);
     }
     if (u->flash) {                                        /* the diagnostic reads one piece per tick; a
                                                               reading shown here gets its full 1.5 s */

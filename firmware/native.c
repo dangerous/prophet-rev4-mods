@@ -16,6 +16,7 @@
 #include "rate.c"
 #include "disp.c"
 #include "flash.c"
+#include "seqmem.c"
 #include "oct.c"
 #include "vhold.c"
 
@@ -45,7 +46,10 @@ enum {
     NI_HOLD_OFF,         /* 0x2003B6B1 hold off (both sources): original callee at the program-loaded hook */
     NI_TONE_FLAG,        /* 0x200574FA ui + 0x16A: stock's A440 reference tone on (byte != 0) */
     NI_HOLD_LATCH,       /* 0x2005752C ui + 0x19C: stock's HOLD button latch (byte != 0) */
-    NI_FLASH_READ,       /* 0x2003E2F9 flash_read(off, dst, len): memcpy from the memory-mapped chip under its mutex; the only flash entry (docs/re/flash.md) */
+    NI_FLASH_READ,       /* 0x2003E2F9 flash_read(off, dst, len): memcpy from the memory-mapped chip under its mutex (docs/re/flash.md) */
+    NI_FLASH_WRITE,      /* 0x20036E29 flash_write_verified(off, src, len): whole 4 KB sectors, read back and retried; the sequence blocks only */
+    NI_STORE_PROGRAM,    /* 0x20036F7D store_program(layer, factory, bank, group, prog): the store wrapper's original callee */
+    NI_SECTOR_BUF,       /* 0x20054352 stock's 4 KB sector buffer, free once its store has returned */
     NI_COUNT
 };
 
@@ -75,6 +79,9 @@ const volatile uint32_t stock_iface[NI_COUNT] = {
     [NI_TONE_FLAG] = 0x200574FAu,
     [NI_HOLD_LATCH] = 0x2005752Cu,
     [NI_FLASH_READ] = 0x2003E2F9u,
+    [NI_FLASH_WRITE] = 0x20036E29u,
+    [NI_STORE_PROGRAM] = 0x20036F7Du,
+    [NI_SECTOR_BUF] = 0x20054352u,
 };
 
 #define SFN(i, type) ((type)(uintptr_t)stock_iface[i])
@@ -95,6 +102,8 @@ typedef void (*ptr_fn)(void *);
 typedef int (*param_read_fn)(int, int);
 typedef void (*param_store_fn)(int, int, int);
 typedef int (*flash_read_fn)(uint32_t, void *, uint32_t);
+typedef int (*flash_write_fn)(uint32_t, const void *, uint32_t);
+typedef void (*store5_fn)(int, int, int, int, int);
 
 #define DSP_HOLD_MSG 0x080D0000u          /* the hold handler's voice-engine message | state */
 
@@ -232,6 +241,16 @@ void plat_display_hold(void) { disp_touch(&UI->disp); UI->flash_msgs = 0; }   /*
 int  plat_param_read(int param) { return SFN(NI_PARAM_READ, param_read_fn)(0, param); }          /* layer A */
 void plat_param_store(int param, int value) { SFN(NI_PARAM_STORE, param_store_fn)(0, param, value); }
 int  plat_flash_read(uint32_t off, void *dst, uint32_t len) { return SFN(NI_FLASH_READ, flash_read_fn)(off, dst, len); }
+int  plat_flash_write(uint32_t off, const void *src, uint32_t len) { return SFN(NI_FLASH_WRITE, flash_write_fn)(off, src, len); }
+void *plat_sector_buffer(void) { return SPTR(NI_SECTOR_BUF, void *); }
+void plat_program_slot(int *factory, int *bank, int *group, int *prog)   /* the location stock stored at 0x200384C4 for a layer-A load */
+{
+    const volatile uint8_t *ui = SPTR(NI_UI, const volatile uint8_t *);
+    *factory = ui[0x88];
+    *bank = ui[0x8A] | ui[0x8B] << 8;
+    *group = ui[0x8C] | ui[0x8D] << 8;
+    *prog = ui[0x8E] | ui[0x8F] << 8;
+}
 int  plat_tone_on(void) { return *SPTR(NI_TONE_FLAG, volatile const uint8_t *) != 0; }
 void plat_stock_a440_press(void) { SFN(NI_BUTTON_POST, button_fn)(ARPUI_A440, 1); }   /* stock: tone toggle (HOLD up) */
 int  plat_hold_latch(void) { return *SPTR(NI_HOLD_LATCH, volatile const uint8_t *) != 0; }
@@ -420,6 +439,16 @@ void hook_program_loaded(void)
     SFN(NI_HOLD_OFF, void_fn)();
     if (!killed())
         q_push(Q_PROGRAM, 0, 0, 0);
+}
+
+/* stock 0x2003B946 / 0x2003B518: the panel's program store (Prophet5 AO task) — stock writes
+ * the program, then a user program's sequence block is written ("Sequence memory") */
+void hook_store_program(int layer, int factory, int bank, int group, int prog)
+{
+    ensure_init();
+    SFN(NI_STORE_PROGRAM, store5_fn)(layer, factory, bank, group, prog);
+    if (!killed())
+        arpui_program_stored(UI, ARP, SEQ, factory, bank, group, prog);
 }
 
 /* stock 0x2003EACE: note_off asks whether HOLD is active (both tasks) */

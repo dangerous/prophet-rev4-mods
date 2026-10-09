@@ -110,5 +110,17 @@
     "expect": "0x20034343",
     "symbol": "hook_rt_trampoline",
     "note": "stock MIDI byte-parser status table FC (stop)"
+  },
+  {
+    "site": "0x2003B946",
+    "expect": "0x20036F7D",
+    "symbol": "hook_store_program",
+    "note": "stock Record flow (Record + Program button): store_program(layer, factory, bank, group, prog) -> stock first, then the sequence block"
+  },
+  {
+    "site": "0x2003B518",
+    "expect": "0x20036F7D",
+    "symbol": "hook_store_program",
+    "note": "stock's second panel-side program store: the same wrapper"
   }
 ]

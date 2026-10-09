@@ -22,5 +22,8 @@ int  plat_hold_latch(void);                       /* stock's HOLD button latch (
 void plat_stock_hold_press(void);                 /* replay a HOLD press to stock: toggles its latch, LED and hold */
 void plat_param_store(int param, int value);      /* stock plain parameter store, layer A */
 int  plat_flash_read(uint32_t off, void *dst, uint32_t len);   /* stock flash read (memcpy from the memory-mapped chip under its mutex): 0 ok, 3 range */
+int  plat_flash_write(uint32_t off, const void *src, uint32_t len);   /* stock verified writer: whole 4 KB sectors, erase + program + read back; 0 ok */
+void *plat_sector_buffer(void);                   /* stock's 4 KB sector buffer, free once stock's program store has returned */
+void plat_program_slot(int *factory, int *bank, int *group, int *prog);   /* the location of the program last loaded (layer A) */
 
 #endif

@@ -807,7 +807,7 @@ unused upper half of the serial flash (`docs/re/flash.md`: 16 MB, blank above `0
    instruments by playing it in and recording it (a sequence dump is a possible later
    feature).
 7. Realisation: blocks of **16 KB** at **`0x800000 + slot × 0x4000`**, slot = `(5·bank +
-   group)·8 + program` (0–199, user programs), so `0x800000–0xC7FFFF`. Block: a 16-byte
+   group)·8 + program` (0–199, user programs), so `0x800000–0xB1FFFF`. Block: a 16-byte
    header (`PSQ1`, length, bank/group/program, the parameter checksum, the "no sequence"
    flag) then the settings and the events as `duration (2), count (1), count × (note, vel)`
    — 11.8 KB at most for 512 steps of ten-note chords. Written with stock's **verified
@@ -844,7 +844,7 @@ Enforced by tests on every built image against stock:
    the **verified writer `0x20036E28`** — never the raw erase + program routine `0x2003E3E4`
    nor any other address of the stock flash driver. The engine calls the writer from one
    place only, the program-store wrapper ("Sequence memory"), and every offset it writes
-   lies inside the sequence blocks `0x800000–0xC7FFFF` (the host harness asserts both on
+   lies inside the sequence blocks `0x800000–0xB1FFFF` (the host harness asserts both on
    every write it provokes). **(change 2026-10-09: no writer at all until the sequence
    block.)**
 

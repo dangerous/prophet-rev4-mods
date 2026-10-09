@@ -162,6 +162,18 @@ void seq_all_notes_off(seq_t *q, arp_t *a)
     seq_zero(q->rec_down, sizeof q->rec_down);                 /* the open chord is closed */
 }
 
+void seq_replaced(seq_t *q, arp_t *a)
+{
+    if (q->playing) {                                      /* as a style change: event 1 at the next step boundary */
+        silence(q, a);
+        q->restart = 1;
+    } else {
+        q->pos = 0;
+        q->remain = 0;
+    }
+    q->fresh = 0;
+}
+
 void seq_clear(seq_t *q, arp_t *a)
 {
     seq_stop(q, a);

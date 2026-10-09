@@ -33,6 +33,8 @@ BL_SITES = {
     0x2003C2A6: 0x2003BC6D,   # pot change post (pot, old, new)
     0x2003EACE: 0x2003B695,   # note_off's hold query
     0x2003D15C: 0x2003B6B1,   # end of program apply: hold off -> "program loaded"
+    0x2003B946: 0x20036F7D,   # Record flow: store_program(layer, factory, bank, group, prog)
+    0x2003B518: 0x20036F7D,   # the second panel-side program store
 }
 WORD_SITES = {0x200343D8: 0x20034343, 0x200343E0: 0x20034343,   # parser table F8 FA FB FC
               0x200343E4: 0x20034343, 0x200343E8: 0x20034343}
@@ -43,6 +45,7 @@ SYMBOLS = {
     0x2003B294: "hook_cc123", 0x2003B144: "hook_cc123", 0x200396CA: "hook_hold",
     0x2003C244: "hook_button", 0x2003C292: "hook_pot_store", 0x2003C2A6: "hook_pot_change",
     0x2003EACE: "hook_hold_query", 0x2003D15C: "hook_program_loaded",
+    0x2003B946: "hook_store_program", 0x2003B518: "hook_store_program",
 }
 
 # firmware/native.c stock_iface order: every stock address the native code touches
@@ -71,11 +74,14 @@ IFACE = [
     0x2003B6B1,   # hold off (both sources): the original callee at the program-loaded hook
     0x200574FA,   # ui + 0x16A: stock's A440 reference tone flag (byte)
     0x2005752C,   # ui + 0x19C: stock's HOLD button latch (byte)
-    0x2003E2F9,   # flash read(off, dst, len): the diagnostic's only flash access (docs/re/flash.md)
+    0x2003E2F9,   # flash read(off, dst, len) (docs/re/flash.md)
+    0x20036E29,   # flash write, verified (off, src, len): the sequence blocks only ("Sequence memory")
+    0x20036F7D,   # store live program(layer, factory, bank, group, prog): the store wrapper's original callee
+    0x20054352,   # stock's 4 KB sector buffer: the block is assembled there after stock's store
 ]
 
-# the stock flash driver's write side (docs/re/flash.md): never in the table ("Safety invariants" 8)
-FLASH_WRITE_SIDE = {0x2003E3E4, 0x20036E28, 0x2003E340, 0x2003DD44, 0x2003DBE4}
+# the stock flash driver's raw write side (docs/re/flash.md): never in the table ("Safety invariants" 8)
+FLASH_WRITE_SIDE = {0x2003E3E4, 0x2003E340, 0x2003DD44, 0x2003DBE4}
 
 
 def setUpModule():
@@ -179,6 +185,7 @@ class NativeImageTests(unittest.TestCase):
         for w in words:
             self.assertNotIn(w & ~1, FLASH_WRITE_SIDE, hex(w))
         self.assertIn(0x2003E2F9, words)
+        self.assertEqual([w for w in words if w in (0x20036E29, 0x2003E2F9)].count(0x20036E29), 1)   # the verified writer, once
 
     def test_code_materialises_no_unknown_addresses(self):
         layout = (OUT / "native.layout").read_text()

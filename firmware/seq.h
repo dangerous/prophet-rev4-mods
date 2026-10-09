@@ -66,6 +66,10 @@ int  seq_tick(seq_t *q, arp_t *a);
 void seq_realtime(seq_t *q, arp_t *a, int byte);         /* an accepted F8 / FA / FB / FC, before arp_rt_apply */
 void seq_all_notes_off(seq_t *q, arp_t *a);              /* CC 123-127: stop, disarm, keep the recording */
 void seq_clear(seq_t *q, arp_t *a);                      /* stop, empty the sequence, transposition 0 */
+/* The events were replaced from outside (sequence memory): playing, the new sequence takes
+ * over at the next step boundary from event 1 (generated notes released then); stopped or
+ * armed, the next start / grid step plays it. */
+void seq_replaced(seq_t *q, arp_t *a);
 
 /* Settings (session: not saved) */
 void seq_set_style(seq_t *q, arp_t *a, int style);
