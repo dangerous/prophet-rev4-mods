@@ -598,21 +598,16 @@ this engine deliberately differs it is marked **(change)** with the reason.
    Seq's styles. Each defaults to **50 %**, the fixed gate of every earlier version.
 2. **A440 + Amp Decay** (pot id `0x11`): while A440 is held, turning Amp Decay sets the
    **selected generator's** gate to `5 × (1 + round(19 · raw / 1023))` %, raw 0–1023 — the
-   knob's travel spread evenly over the 20 values. **It picks the gate up as Glide Rate picks
-   up the tempo**: at the start of each A440 hold the knob is inert until the gate its
-   position maps to reaches or crosses the current gate; from that movement on it sets the
-   gate for the rest of the hold. Selecting the other generator during the hold (A440 +
-   Keyboard) re-arms the pickup (the current gate is now the other one). While inert, a turn
-   still shows the current gate — the value to reach. The display shows the gate in percent,
+   knob's travel spread evenly over the 20 values. **The gate jumps to the knob**: every
+   movement sets the gate its position maps to at once, from the first movement of a hold
+   (no pickup, unlike the tempo — a gate jump is harmless) **(change 2026-10-10: the first
+   build picked the gate up as Glide Rate picks up the tempo)**. The display shows the gate in percent,
    right-aligned in three characters (`5`, `50`, `100`), a display message like any other.
    Turning the knob counts as using the A440 hold, so the release does not toggle. It works
    the same whether the generator runs or not, under `int` and `Syn`, and while recording.
    Both pot hooks (raw store and change post) are consumed for Amp Decay exactly while A440
    is held (and the kill switch is not engaged); the patch's amp decay is not touched.
    **Amp Decay alone is always the normal amp decay**, also while a generator runs.
-   Realisation: as for Glide Rate, the UI remembers Amp Decay's last raw value whether or
-   not A440 is held, so the first movement of a hold is judged against where the knob came
-   from.
 3. **Where it applies**: an **Arp** step note is released at the Arp's gate of its step;
    in the Seq's **Chords** style a chord is released at the Seq's gate of its **last** timing
    step (an event of duration L sounds for L − 1 steps plus the gate — a shorter chord is a
