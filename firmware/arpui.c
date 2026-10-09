@@ -256,17 +256,16 @@ static void show_rec(arpui_t *u, const seq_t *q)
 }
 
 /* --- flash diagnostic (A440 + Sync) ------------------------------------------------------ */
-static void show_fla(arpui_t *u)                           /* FLA: a run is in progress */
+static void show_flash_progress(arpui_t *u)                /* the offset being read, in 64 KB units */
 {
-    plat_display3(UC_F, UC_L, UC_A);
+    u->flash_prog = (uint8_t)(flash_pos(u->flash) >> 16);
+    plat_display_int(u->flash_prog);
     disp_touch(&u->disp);
 }
 
-static void show_flash_result(arpui_t *u)                  /* the next of the three results */
+static void show_flash_reading(arpui_t *u, int i)          /* reading i: 0 size, 1 area 1, 2 area 2 */
 {
     const flash_t *f = u->flash;
-    int i = ARPUI_FLASH_RESULTS - u->flash_msgs;           /* 0 size, 1 area 1, 2 area 2 */
-    u->flash_msgs--;
     if (i == 0) {
         if (f->size == FLASH_8M)
             plat_display3(UC_F, UC_BLANK, 8);
@@ -279,6 +278,19 @@ static void show_flash_result(arpui_t *u)                  /* the next of the th
         plat_display3(i, UC_BLANK, used == FLASH_USED ? UC_U : UC_E);
     }
     disp_touch(&u->disp);
+}
+
+static void show_flash_result(arpui_t *u)                  /* the next of the three, after a run */
+{
+    show_flash_reading(u, ARPUI_FLASH_RESULTS - u->flash_msgs);
+    u->flash_msgs--;
+}
+
+static void flash_recall(arpui_t *u)                       /* A440 + Sync with the readings in: the next one */
+{
+    u->flash_msgs = 0;
+    show_flash_reading(u, u->flash_next);
+    u->flash_next = (uint8_t)(u->flash_next + 1 < ARPUI_FLASH_RESULTS ? u->flash_next + 1 : 0);
 }
 
 static int flash_running(const arpui_t *u)
@@ -443,11 +455,13 @@ static void combo(arpui_t *u, arp_t *a, seq_t *q, int id)
         select_gen(u, a, q, !u->gen);
         break;
     case ARPUI_SYNC:                                       /* the read-only flash diagnostic */
-        if (u->flash && flash_start(u->flash)) {
-            u->flash_msgs = 0;                             /* an earlier run's results are dropped */
-            show_fla(u);
-        }
-        break;                                             /* a run in progress: ignored */
+        if (!u->flash || u->flash->running)
+            break;                                         /* a run in progress: ignored */
+        if (u->flash->have)
+            flash_recall(u);                               /* the readings are in: show the next one */
+        else if (flash_start(u->flash))
+            show_flash_progress(u);
+        break;
     default:
         show_int(u, id);                                   /* button id readout */
         break;
@@ -680,20 +694,22 @@ void arpui_tick(arpui_t *u, arp_t *a, seq_t *q)
     update_sustain(u, a, q);                               /* catches changes the clock made (loss, CC) */
     if (disp_tick(&u->disp)) {
         if (u->flash_msgs)
-            show_flash_result(u);                          /* the next result */
+            show_flash_result(u);                          /* the next reading */
         else if (flash_running(u))
-            show_fla(u);                                   /* FLA stays up for the whole run */
+            show_flash_progress(u);                        /* the readout stays up for the whole run */
         else if (u->rec)
             draw_rec(q);                                   /* a message over the readout: back to r N */
         else
             plat_display_restore();
     }
     if (u->flash) {                                        /* the diagnostic reads one piece per tick; a
-                                                              result shown here gets its full 1.5 s */
+                                                              reading shown here gets its full 1.5 s */
         flash_tick(u->flash);
         if (flash_take(u->flash)) {
             u->flash_msgs = ARPUI_FLASH_RESULTS;
             show_flash_result(u);
+        } else if (u->flash->running && (uint8_t)(flash_pos(u->flash) >> 16) != u->flash_prog) {
+            show_flash_progress(u);                        /* it moved into the next 64 KB */
         }
     }
     if (u->led_fix && --u->led_fix == 0 && gen_running(u, a, q) && !u->rec)

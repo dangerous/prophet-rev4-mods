@@ -692,7 +692,7 @@ this engine deliberately differs it is marked **(change)** with the reason.
    (`o N`), clock (`int`/`Syn`), `OFF`, BPM (while Glide Rate turns with A440 held, on a
    tempo tap, and when a generator is started), `tAP`, note value, `ArP`/`SEq`, `CHd`/`ArP`,
    `For`/`bAC`/`Pnd`, chord length, the transposition, `---`, keyboard shift, button id, the
-   flash diagnostic's `FLA` and its results —
+   flash diagnostic's progress readout and its readings —
    shows for 1.5 s after the last change and then the display returns to the stock
    patch display (bank, group and program). The record-mode flashes `rSt` and `tiE` are the
    one shorter message: 0.25 s ("Seq"). Nothing stays on the display permanently, with one
@@ -727,7 +727,10 @@ blank. **It only reads.**
    verified 2026-10-09, Prophet-10 Rev4 — the id readout showed 026 for the 24 first assumed]`)
    starts a run. The press counts as using the A440 hold (no toggle on release) and is
    consumed with its release, so stock's Osc A sync does not toggle. A press while a run is
-   in progress is consumed and ignored. Sync without A440 is stock Osc A sync, as always.
+   in progress is consumed and ignored. **Once a run has completed, its readings stay for the
+   session: each further A440 + Sync shows the next one — size, area 1, area 2, size again…
+   — without reading the flash; a new run needs a power cycle.** Sync without A440 is stock
+   Osc A sync, as always.
 2. **Chip size**: two 4 KB reference blocks, `R1` at flash offset `0x000000` (bootloader)
    and `R2` at `0x606000` (factory programs), are compared with the blocks 8 MB higher
    (`0x800000`, `0xE06000`). A reference block that reads all `0xFF` is unusable. Verdicts:
@@ -739,21 +742,29 @@ blank. **It only reads.**
    chip — `0x7FFFFF` for 8 MB and unknown, `0xFFFFFE` for 16 MB (stock's read routine
    cannot return the window's last byte). An area is *empty* when every byte read is `0xFF`,
    otherwise *used*.
-4. **Display**: `FLA` while the run is in progress (kept up for the whole run, like the BPM
-   while the pot turns). When it completes, three results in turn, each a display message
-   like any other (1.5 s, then the next): size `F 8`, `F16` or `F -`; area 1 `1 E` (empty) or
-   `1 U` (used); area 2 `2 E` or `2 U`; then the stock patch display. A message from any other
-   source cancels the rest of the sequence.
+4. **Display**: while the run is in progress, the **offset being read in 64 KB units**
+   (`000`–`255`, the stock three-digit integer), updated whenever it changes and kept up for
+   the whole run (like the BPM while the pot turns) — the reference blocks make it jump
+   between 0, 128, 96 and 224 for the first pieces, then it climbs from 81 through area 1
+   and from 117 through area 2. When the run completes, the three readings in turn, each a
+   display message like any other (1.5 s, then the next): size `F 8`, `F16` or `F -`; area 1
+   `1 E` (empty) or `1 U` (used); area 2 `2 E` or `2 U`; then the stock patch display. A
+   message from any other source cancels the rest of the sequence. A recalled reading (rule
+   1) is a display message like any other.
 5. **Everything else keeps working** during a run: the arp and seq play, keys, MIDI, buttons
-   and pots behave as specified. A run reads in 512-byte pieces, one per 1 ms tick, through
-   stock's flash read routine (which takes stock's flash mutex, so a run never reads while
-   stock is writing); a whole run takes about 3.3 s on 8 MB and 20 s on 16 MB. The kill
-   switch disables it like everything else.
+   and pots behave as specified. A run reads one piece per 1 ms tick through stock's flash
+   read routine (which takes stock's flash mutex, so a run never reads while stock is
+   writing): 512-byte pieces for the reference blocks, 1 KB pieces for the areas — 1,672
+   pieces on 8 MB, 9,864 on 16 MB. At one piece per tick that is 1.7 s / 10 s; on the
+   instrument a memory-mapped read can take several milliseconds, so a run can take minutes
+   `[HW: 2026-10-09 — the first run was still going after minutes, keys playing throughout]`;
+   the progress readout shows it moving. The kill switch disables it like everything else.
 6. **Never writes.** The engine contains no path to a flash write ("Safety invariants" 8).
 7. Realisation: a portable `flash.c` state machine (`flash_start`, `flash_tick`, result
    codes) driven from the UI's button combo and tick, reading through `plat_flash_read(off,
    dst, len)` = stock `0x2003E2F8(off, dst, len)` (`0` ok, `3` range) — the only new entry in
-   `stock_iface[]`. Two 512-byte buffers in the engine state area. The host harness fakes the
+   `stock_iface[]`. Two adjacent 512-byte buffers in the engine state area (one 1 KB piece
+   for the areas). The host harness fakes the
    flash as a 16 MB window over a chip of configurable size (aliasing above its size),
    with settable contents for the reference blocks and the two areas.
 

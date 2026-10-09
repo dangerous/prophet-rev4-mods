@@ -3,9 +3,10 @@
  * Phases: SIZE — two reference blocks (R1 the bootloader, R2 factory programs) compared piece
  * by piece with the blocks 8 MB higher: identical ⇒ the 24-bit address wrapped ⇒ an 8 MB
  * part; all 0xFF above ⇒ compatible with 16 MB (nothing of stock's lives above 8 MB);
- * anything else ⇒ unknown. Then AREA1 and AREA2: every byte 0xFF ⇒ empty. One read of at
- * most FLASH_PIECE bytes per tick; an unreadable piece counts as not blank and not identical
- * (conservative), so a run always completes. No divide: the piece counts are constants. */
+ * anything else ⇒ unknown. Then AREA1 and AREA2: every byte 0xFF ⇒ empty. One read per tick
+ * (FLASH_PIECE bytes for the blocks, FLASH_AREA_PIECE for the areas); an unreadable piece
+ * counts as not blank and not identical (conservative), so a run always completes, and one
+ * run per session: the readings are then final. No divide: the piece counts are constants. */
 #include "flash.h"
 #include "platform.h"
 
@@ -35,6 +36,20 @@ void flash_init(flash_t *f)
         p[i] = 0;
 }
 
+static uint32_t pair_off(const flash_t *f)                 /* the current reference piece's offset */
+{
+    return (f->pair ? FLASH_R2 : FLASH_R1) + (uint32_t)f->piece * FLASH_PIECE;
+}
+
+uint32_t flash_pos(const flash_t *f)
+{
+    if (!f->running)
+        return 0;
+    if (f->phase == PH_SIZE)
+        return pair_off(f) + (f->half ? FLASH_UPPER : 0);
+    return f->off;
+}
+
 static void begin_pair(flash_t *f)
 {
     f->piece = 0;
@@ -44,7 +59,7 @@ static void begin_pair(flash_t *f)
 
 int flash_start(flash_t *f)
 {
-    if (f->running)
+    if (f->running || f->have)                             /* one run per session: the readings are final */
         return 0;
     f->running = 1;
     f->done = 0;
@@ -72,21 +87,22 @@ static void begin_area(flash_t *f, int phase)
 
 static void size_tick(flash_t *f)
 {
-    uint32_t off = (f->pair ? FLASH_R2 : FLASH_R1) + (uint32_t)f->piece * FLASH_PIECE;
+    uint32_t off = pair_off(f);
+    uint8_t *ref = f->buf, *upper = f->buf + FLASH_PIECE;
     if (f->half == 0) {                                    /* the reference piece */
-        if (plat_flash_read(off, f->ref, FLASH_PIECE) != 0)
+        if (plat_flash_read(off, ref, FLASH_PIECE) != 0)
             f->ref_blank = f->identical = f->upper_blank = 0;
-        else if (!all_ff(f->ref, FLASH_PIECE))
+        else if (!all_ff(ref, FLASH_PIECE))
             f->ref_blank = 0;
         f->half = 1;
         return;
     }
-    if (plat_flash_read(off + FLASH_UPPER, f->upper, FLASH_PIECE) != 0) {   /* the piece 8 MB higher */
+    if (plat_flash_read(off + FLASH_UPPER, upper, FLASH_PIECE) != 0) {   /* the piece 8 MB higher */
         f->ref_blank = f->identical = f->upper_blank = 0;
     } else {
-        if (!all_ff(f->upper, FLASH_PIECE))
+        if (!all_ff(upper, FLASH_PIECE))
             f->upper_blank = 0;
-        if (!same(f->ref, f->upper, FLASH_PIECE))
+        if (!same(ref, upper, FLASH_PIECE))
             f->identical = 0;
     }
     f->half = 0;
@@ -115,9 +131,9 @@ static void size_tick(flash_t *f)
 static void area_tick(flash_t *f)
 {
     uint32_t len = f->end - f->off + 1;
-    if (len > FLASH_PIECE)
-        len = FLASH_PIECE;
-    if (plat_flash_read(f->off, f->upper, len) != 0 || !all_ff(f->upper, len))
+    if (len > FLASH_AREA_PIECE)
+        len = FLASH_AREA_PIECE;
+    if (plat_flash_read(f->off, f->buf, len) != 0 || !all_ff(f->buf, len))
         f->blank = 0;
     f->off += len;
     if (f->off <= f->end)
@@ -130,6 +146,7 @@ static void area_tick(flash_t *f)
         f->phase = PH_IDLE;
         f->running = 0;
         f->done = 1;
+        f->have = 1;
     }
 }
 

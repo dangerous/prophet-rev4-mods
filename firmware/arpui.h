@@ -72,7 +72,9 @@ typedef struct {
     uint8_t  tempo_caught;            /* this A440 hold: the glide knob has reached the tempo and sets it */
     uint8_t  pad;
     uint16_t glide_raw;               /* the glide pot's last raw value, tempo or glide (ARPUI_RAW_NONE: unknown) */
-    uint8_t  flash_msgs;              /* flash diagnostic results still to show after the current message */
+    uint8_t  flash_msgs;              /* flash diagnostic readings still to show after the current message */
+    uint8_t  flash_next;              /* the reading the next A440 + Sync recalls (0 size, 1 area 1, 2 area 2) */
+    uint8_t  flash_prog;              /* the progress readout last shown (64 KB units) */
     flash_t *flash;                   /* the diagnostic's state (set by the glue / harness) */
 } arpui_t;
 

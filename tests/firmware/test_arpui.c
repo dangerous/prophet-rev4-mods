@@ -1383,18 +1383,22 @@ static void test_generator_switch_hands_the_latch_over_with_the_arp(void) {
 }
 
 /* ---- flash diagnostic (A440 + Sync; spec "Flash diagnostic") ---------------------------- */
-enum { SYNC = 26, FLASH_RUN_TICKS = 3312 };   /* Sync = 26, read on the instrument 2026-10-09; the 8 MB fake: 32 + 1912 + 1368 pieces */
+enum { SYNC = 26, FLASH_RUN_TICKS = 1672 };   /* Sync = 26, read on the instrument 2026-10-09; the 8 MB fake: 32 + 956 + 684 pieces */
 
 static void test_sync_combo_runs_the_flash_diagnostic_and_shows_the_results(void) {
     reset();
     btn(A440, PRESS);
     CHECK(btn(SYNC, PRESS) == 1 && fl.running);
-    CHECK(last_d3_is(CH_F, CH_L, CH_A));                               /* FLA */
+    CHECK(last_int() == 0 && count_type(EV_D3) == 0);                  /* progress: reading at 0 */
     CHECK(btn(SYNC, RELEASE) == 1);
     btn(A440, RELEASE);
     CHECK(!a.enabled);                                                 /* used the hold: no toggle */
-    ticks(1600);
-    CHECK(fl.running && last_d3_is(CH_F, CH_L, CH_A) && count_type(EV_RESTORE) == 0);   /* kept up past 1.5 s */
+    ticks(1);
+    CHECK(last_int() == 128);                                          /* the piece 8 MB higher */
+    ticks(40);
+    CHECK(last_int() == 81 && fl.running);                             /* area 1: 0x510000 / 64 KB */
+    ticks(1559);
+    CHECK(fl.running && last_int() > 81 && count_type(EV_RESTORE) == 0);   /* climbing, kept up past 1.5 s */
     ticks(FLASH_RUN_TICKS - 1600);
     CHECK(!fl.running && last_d3_is(CH_F, BLANK, 8));                 /* F 8 as the run completes */
     ticks(1499);
@@ -1407,6 +1411,17 @@ static void test_sync_combo_runs_the_flash_diagnostic_and_shows_the_results(void
     CHECK(count_type(EV_RESTORE) == 1);                                /* then the patch display */
     ticks(3000);
     CHECK(count_type(EV_RESTORE) == 1 && last_d3_is(2, BLANK, CH_E));  /* and nothing more */
+    clear_log();
+    btn(A440, PRESS); btn(SYNC, PRESS); btn(SYNC, RELEASE); btn(A440, RELEASE);   /* recall: no new scan */
+    CHECK(!fl.running && last_d3_is(CH_F, BLANK, 8) && !a.enabled);
+    btn(A440, PRESS); btn(SYNC, PRESS); btn(SYNC, RELEASE); btn(A440, RELEASE);
+    CHECK(last_d3_is(1, BLANK, CH_E));
+    btn(A440, PRESS); btn(SYNC, PRESS); btn(SYNC, RELEASE); btn(A440, RELEASE);
+    CHECK(last_d3_is(2, BLANK, CH_E));
+    btn(A440, PRESS); btn(SYNC, PRESS); btn(SYNC, RELEASE); btn(A440, RELEASE);
+    CHECK(last_d3_is(CH_F, BLANK, 8) && !fl.running && count_type(EV_INT) == 0);   /* round again; no progress readout */
+    ticks(1500);
+    CHECK(count_type(EV_RESTORE) == 1);                                /* a recalled reading reverts like any message */
 }
 
 static void test_sync_during_a_run_is_ignored_and_sync_alone_is_stock(void) {
@@ -1441,7 +1456,7 @@ static void test_kill_switch_disables_the_diagnostic(void) {
     u.kill = 1;
     btn(A440, PRESS); btn(SYNC, PRESS); btn(SYNC, RELEASE); btn(A440, RELEASE);
     ticks(10);
-    CHECK(!fl.running && count_type(EV_D3) == 0);
+    CHECK(!fl.running && count_type(EV_D3) == 0 && count_type(EV_INT) == 0);
 }
 
 int main(void) {

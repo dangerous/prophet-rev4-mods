@@ -81,9 +81,9 @@ static int run(void)                                       /* start and tick to 
 }
 
 enum { TICKS_SIZE = 2 * 2 * (FLASH_BLOCK / FLASH_PIECE),               /* two pairs, ref + upper per piece */
-       TICKS_AREA1 = (FLASH_AREA1_HI + 1 - FLASH_AREA1_LO) / FLASH_PIECE,
-       TICKS_AREA2_8M = (FLASH_END_8M + 1 - FLASH_AREA2_LO) / FLASH_PIECE,
-       TICKS_AREA2_16M = (FLASH_END_16M + 1 - FLASH_AREA2_LO + FLASH_PIECE - 1) / FLASH_PIECE,
+       TICKS_AREA1 = (FLASH_AREA1_HI + 1 - FLASH_AREA1_LO) / FLASH_AREA_PIECE,
+       TICKS_AREA2_8M = (FLASH_END_8M + 1 - FLASH_AREA2_LO) / FLASH_AREA_PIECE,
+       TICKS_AREA2_16M = (FLASH_END_16M + 1 - FLASH_AREA2_LO + FLASH_AREA_PIECE - 1) / FLASH_AREA_PIECE,
        TICKS_8M = TICKS_SIZE + TICKS_AREA1 + TICKS_AREA2_8M,
        TICKS_16M = TICKS_SIZE + TICKS_AREA1 + TICKS_AREA2_16M };
 
@@ -94,8 +94,9 @@ static void test_8m_part_aliases_and_reads_f8(void) {
     int n = run();
     CHECK(flash_take(&f) == 1);
     CHECK(f.size == FLASH_8M && f.area1 == FLASH_EMPTY && f.area2 == FLASH_EMPTY);
-    CHECK(n == TICKS_8M && n == 3312 && reads == n);       /* 3.3 s: one piece per tick */
-    CHECK(max_len == FLASH_PIECE && bad_reads == 0);
+    CHECK(n == TICKS_8M && n == 1672 && reads == n);       /* 1.7 s at one piece per tick */
+    CHECK(max_len == FLASH_AREA_PIECE && bad_reads == 0);
+    CHECK(f.have);                                         /* the readings stay */
     CHECK(last_off + last_len - 1 == FLASH_END_8M);        /* area 2 scanned to the end of 8 MB */
 }
 
@@ -104,9 +105,9 @@ static void test_16m_part_with_blank_upper_half_reads_f16(void) {
     int n = run();
     CHECK(flash_take(&f) == 1);
     CHECK(f.size == FLASH_16M && f.area1 == FLASH_EMPTY && f.area2 == FLASH_EMPTY);
-    CHECK(n == TICKS_16M && n == 19696 && reads == n);     /* 20 s */
-    CHECK(bad_reads == 0 && max_len == FLASH_PIECE);
-    CHECK(last_off == 0xFFFE00u && last_len == 0x1FFu);    /* the last piece stops at 0xFFFFFE */
+    CHECK(n == TICKS_16M && n == 9864 && reads == n);      /* 10 s */
+    CHECK(bad_reads == 0 && max_len == FLASH_AREA_PIECE);
+    CHECK(last_off == 0xFFFC00u && last_len == 0x3FFu);    /* the last piece stops at 0xFFFFFE */
 }
 
 static void test_upper_blocks_neither_identical_nor_blank_are_unknown(void) {
@@ -203,7 +204,26 @@ static void test_one_piece_per_tick_only_while_running(void) {
     CHECK(flash_take(&f) == 0);                            /* taken once */
     flash_tick(&f); flash_tick(&f);
     CHECK(reads == n && !f.running);                       /* done: no more reads */
-    CHECK(flash_start(&f) == 1);                           /* a new run can start */
+    CHECK(flash_start(&f) == 0);                           /* no new run this session */
+}
+
+static void test_position_follows_the_read_and_a_run_cannot_restart_once_done(void) {
+    reset(0x800000u); refs(); flash_init(&f);
+    CHECK(flash_pos(&f) == 0 && !f.have);
+    flash_start(&f);
+    CHECK(flash_pos(&f) == FLASH_R1);                      /* the next read: R1's first piece */
+    flash_tick(&f);
+    CHECK(flash_pos(&f) == FLASH_R1 + FLASH_UPPER);        /* then the piece 8 MB higher */
+    flash_tick(&f);
+    CHECK(flash_pos(&f) == FLASH_R1 + FLASH_PIECE);
+    for (int i = 2; i < TICKS_SIZE; i++) flash_tick(&f);
+    CHECK(flash_pos(&f) == FLASH_AREA1_LO);                /* area 1 begins */
+    flash_tick(&f);
+    CHECK(flash_pos(&f) == FLASH_AREA1_LO + FLASH_AREA_PIECE);
+    while (f.running) flash_tick(&f);
+    CHECK(f.have && flash_take(&f) == 1);
+    CHECK(flash_start(&f) == 0 && !f.running);             /* the readings are final for the session */
+    CHECK(f.size == FLASH_8M && reads == TICKS_8M);
 }
 
 static void test_a_failed_read_does_not_stall_a_run(void) {
@@ -224,6 +244,7 @@ int main(void)
     test_any_byte_other_than_ff_makes_an_area_used();
     test_bytes_outside_the_areas_do_not_count();
     test_one_piece_per_tick_only_while_running();
+    test_position_follows_the_read_and_a_run_cannot_restart_once_done();
     test_a_failed_read_does_not_stall_a_run();
     printf("%s: %d checks, %d failures\n", __FILE__, checks, failures);
     return failures != 0;
